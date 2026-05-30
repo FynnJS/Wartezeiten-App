@@ -1,0 +1,149 @@
+name: Build Release APK and Update Website
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  id-token: write
+
+jobs:
+  build-and-publish:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - name: Build release APK
+        run: |
+          chmod +x gradlew
+          ./gradlew :app:assembleRelease
+
+      - name: Prepare release metadata and update website/release.json
+        id: metadata
+        run: |
+          python3 <<'PY'
+          import json
+          import os
+          import re
+          import subprocess
+          import pathlib
+
+          github_event = os.environ.get('GITHUB_EVENT_NAME', '')
+          github_repo = os.environ.get('GITHUB_REPOSITORY', '')
+          github_ref = os.environ.get('GITHUB_REF', '')
+          event_path = os.environ.get('GITHUB_EVENT_PATH', '')
+
+          tag_name = None
+          release_body = ''
+          release_title = ''
+
+          if github_event == 'release' and event_path:
+              with open(event_path, encoding='utf-8') as f:
+                  event = json.load(f)
+              tag_name = event['release']['tag_name']
+              release_body = event['release'].get('body', '').strip()
+              release_title = event['release'].get('name') or tag_name
+          elif github_ref.startswith('refs/tags/'):
+              tag_name = github_ref.split('/', 2)[-1]
+              release_title = tag_name
+          else:
+              tag_name = 'main'
+              release_title = 'main'
+
+          if tag_name.startswith('refs/tags/'):
+              tag_name = tag_name.split('/', 2)[-1]
+
+          def sanitize_tag(tag):
+              return tag if tag else 'main'
+
+          def determine_version_code(tag):
+              match = re.match(r'^v?(\d+)\.(\d+)\.(\d+)$', tag)
+              if match:
+                  major, minor, patch = map(int, match.groups())
+                  return major * 10000 + minor * 100 + patch
+              count = int(subprocess.check_output(['git', 'rev-list', '--count', 'HEAD']).decode().strip())
+              return count
+
+          version_name = sanitize_tag(tag_name)
+          version_code = determine_version_code(version_name)
+          apk_source = pathlib.Path('app/build/outputs/apk/release/app-release.apk')
+          if not apk_source.exists():
+              raise SystemExit('Release APK not found at app/build/outputs/apk/release/app-release.apk')
+
+          apk_file_name = f'wartezeiten-app-{version_name}.apk'
+          apk_url = f'https://github.com/{github_repo}/releases/download/{version_name}/{apk_file_name}'
+          sha256 = subprocess.check_output(['sha256sum', str(apk_source)], text=True).split()[0]
+          size_bytes = apk_source.stat().st_size
+          size_label = f'{size_bytes} bytes'
+          release_date = subprocess.check_output(['date', '-u', '+%Y-%m-%d'], text=True).strip()
+
+          release_notes = [line for line in release_body.splitlines() if line.strip()]
+          if not release_notes:
+              release_notes = [f'Automatisch generierter Release für {version_name}.']
+
+          release_json = {
+              'versionName': version_name,
+              'versionCode': version_code,
+              'releaseDate': release_date,
+              'apkUrl': apk_url,
+              'sha256': sha256,
+              'apkSize': size_label,
+              'releaseNotes': release_notes,
+              'showBanner': True,
+              'virusTotalUrl': ''
+          }
+
+          website_dir = pathlib.Path('website')
+          website_dir.mkdir(exist_ok=True)
+          with open(website_dir / 'release.json', 'w', encoding='utf-8') as f:
+              json.dump(release_json, f, indent=2, ensure_ascii=False)
+
+          print(f'release_file={website_dir / "release.json"}')
+          with open(os.environ['GITHUB_OUTPUT'], 'a') as output:
+              output.write(f"version_name={version_name}\n")
+              output.write(f"version_code={version_code}\n")
+              output.write(f"apk_file_name={apk_file_name}\n")
+              output.write(f"apk_url={apk_url}\n")
+              output.write(f"sha256={sha256}\n")
+              output.write(f"apk_size={size_label}\n")
+        shell: bash
+
+      - name: Upload APK to GitHub release
+        if: github.event_name == 'release'
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: ${{ github.event.release.tag_name }}
+          name: ${{ steps.metadata.outputs.apk_file_name }}
+          files: app/build/outputs/apk/release/app-release.apk
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Commit website/release.json to main
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add website/release.json
+          if ! git diff --cached --quiet; then
+            git commit -m "chore(release): update website release metadata for ${{ steps.metadata.outputs.version_name }}"
+            git push origin HEAD:main
+          else
+            echo "No changes to commit."
+          fi
+        shell: bash
+
+      - name: Upload release.json as artifact for review
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-json
+          path: website/release.json
