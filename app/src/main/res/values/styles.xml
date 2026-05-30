@@ -1,0 +1,3 @@
+<resources>
+    <style name="Theme.WartezeitenApp" parent="android:style/Theme.Material.Light.NoActionBar" />
+</resources>

@@ -1,0 +1,795 @@
+﻿package de.wartezeiten.app.ui.parks
+
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkVertically
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.togetherWith
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.Clear
+import androidx.compose.material.icons.filled.Favorite
+import androidx.compose.material.icons.filled.FavoriteBorder
+import androidx.compose.material.icons.filled.List
+import androidx.compose.material.icons.filled.Notifications
+import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.Sort
+import androidx.compose.material.icons.filled.Warning
+import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilterChip
+import androidx.compose.material3.FilterChipDefaults
+import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.LinearProgressIndicator
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedCard
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedTextFieldDefaults
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarData
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.TopAppBarDefaults
+import androidx.compose.material3.VerticalDivider
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextDecoration
+import androidx.compose.ui.unit.dp
+import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import de.wartezeiten.app.domain.model.Park
+import de.wartezeiten.app.ui.components.AttributionFooter
+import de.wartezeiten.app.ui.waitingtimes.AddWatchlistDialog
+import java.time.LocalTime
+import java.time.format.DateTimeFormatter
+
+@Composable
+fun ParkListRoute(
+    onParkClick: (Park) -> Unit,
+    onSettingsClick: () -> Unit,
+    onWatchlistClick: () -> Unit,
+    viewModel: ParkListViewModel = hiltViewModel(),
+) {
+    val state by viewModel.uiState.collectAsStateWithLifecycle()
+    ParkListScreen(
+        state = state,
+        onQueryChange = viewModel::onQueryChange,
+        onCountrySelected = viewModel::onCountrySelected,
+        onToggleOpenOnly = viewModel::onToggleOpenOnly,
+        onToggleFavoritesOnly = viewModel::onToggleFavoritesOnly,
+        onSortChange = viewModel::setSort,
+        onClearFilters = viewModel::clearFilters,
+        onToggleFavorite = viewModel::toggleFavorite,
+        onRefreshClick = { viewModel.refresh() },
+        onParkClick = onParkClick,
+        onSettingsClick = onSettingsClick,
+        onWatchlistClick = onWatchlistClick,
+    )
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun ParkListScreen(
+    state: ParkListUiState,
+    onQueryChange: (String) -> Unit,
+    onCountrySelected: (String?) -> Unit,
+    onToggleOpenOnly: () -> Unit,
+    onToggleFavoritesOnly: () -> Unit,
+    onSortChange: (ParkSort) -> Unit,
+    onClearFilters: () -> Unit,
+    onToggleFavorite: (Park) -> Unit,
+    onRefreshClick: () -> Unit,
+    onParkClick: (Park) -> Unit,
+    onSettingsClick: () -> Unit,
+    onWatchlistClick: () -> Unit,
+) {
+    val snackbarHostState = remember { SnackbarHostState() }
+    var showAddWatchlistDialog by remember { mutableStateOf(false) }
+    var selectedParkForWatchlist by remember { mutableStateOf<Park?>(null) }
+
+    LaunchedEffect(state.refreshTrigger) {
+        if (state.refreshTrigger > 0 && !state.isLoading) {
+            if (state.errorMessage == null) {
+                val updatedAt = LocalTime.now().format(DateTimeFormatter.ofPattern("HH:mm"))
+                snackbarHostState.showSnackbar(
+                    message = "${state.totalParkCount} Parks aktualisiert um $updatedAt",
+                    actionLabel = "OK",
+                    withDismissAction = true,
+                )
+            }
+        }
+    }
+
+    Scaffold(
+        snackbarHost = {
+            SnackbarHost(snackbarHostState) { data ->
+                RefreshSnackbar(data = data)
+            }
+        },
+        topBar = {
+            TopAppBar(
+                title = {
+                    Column {
+                        Text(
+                            "Wartezeiten",
+                            style = MaterialTheme.typography.headlineSmall,
+                            fontWeight = FontWeight.Bold,
+                        )
+                        Text(
+                            "Freizeitparks",
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                },
+                actions = {
+                    if (state.isLoading) {
+                        CircularProgressIndicator(
+                            modifier = Modifier
+                                .padding(end = 4.dp)
+                                .size(24.dp),
+                            strokeWidth = 2.5.dp,
+                        )
+                        Spacer(Modifier.width(8.dp))
+                    } else {
+                        IconButton(onClick = onRefreshClick) {
+                            Icon(Icons.Default.Refresh, contentDescription = "Aktualisieren")
+                        }
+                        IconButton(onClick = onSettingsClick) {
+                            Icon(Icons.Default.Settings, contentDescription = "Einstellungen")
+                        }
+                        IconButton(onClick = onWatchlistClick) {
+                            Icon(Icons.Default.List, contentDescription = "Watchlist")
+                        }
+                    }
+                },
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = MaterialTheme.colorScheme.background,
+                ),
+            )
+        },
+        bottomBar = {
+            AttributionFooter()
+        }
+    ) { padding ->
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(padding)
+        ) {
+            AnimatedVisibility(
+                visible = state.isLoading,
+                enter = expandVertically(),
+                exit = shrinkVertically()
+            ) {
+                LinearProgressIndicator(
+                    modifier = Modifier.fillMaxWidth(),
+                    color = MaterialTheme.colorScheme.primary,
+                    trackColor = MaterialTheme.colorScheme.surfaceVariant
+                )
+            }
+
+            AnimatedVisibility(
+                visible = state.errorMessage != null,
+                enter = expandVertically() + fadeIn(),
+                exit = shrinkVertically() + fadeOut()
+            ) {
+                state.errorMessage?.let { msg ->
+                    ErrorBanner(
+                        message = msg,
+                        onRetry = onRefreshClick,
+                    )
+                }
+            }
+
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(horizontal = 16.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                Spacer(Modifier.height(8.dp))
+
+                OutlinedTextField(
+                    value = state.query,
+                    onValueChange = onQueryChange,
+                    modifier = Modifier.fillMaxWidth(),
+                    leadingIcon = {
+                        Icon(
+                            Icons.Default.Search,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    },
+                    placeholder = {
+                        Text(
+                            "Park suchen…",
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    },
+                    singleLine = true,
+                    shape = RoundedCornerShape(16.dp),
+                    colors = OutlinedTextFieldDefaults.colors(
+                        unfocusedBorderColor = MaterialTheme.colorScheme.outline.copy(alpha = 0.4f),
+                        focusedBorderColor = MaterialTheme.colorScheme.primary
+                    )
+                )
+
+                if (state.availableCountries.isNotEmpty()) {
+                    CountryFilterRow(
+                        countries = state.availableCountries,
+                        selected = state.selectedCountry,
+                        showOpenOnly = state.showOpenOnly,
+                        showFavoritesOnly = state.showFavoritesOnly,
+                        sort = state.sort,
+                        onSelect = onCountrySelected,
+                        onToggleOpenOnly = onToggleOpenOnly,
+                        onToggleFavoritesOnly = onToggleFavoritesOnly,
+                        onSortChange = onSortChange,
+                    )
+                }
+
+                ParkOverviewStrip(
+                    state = state,
+                    onClearFilters = onClearFilters,
+                )
+
+                AnimatedContent(
+                    targetState = state.isLoading && state.parks.isEmpty(),
+                    transitionSpec = {
+                        fadeIn(tween(300)) togetherWith fadeOut(tween(150))
+                    },
+                    label = "park_list_content"
+                ) { showFullscreenLoading ->
+                    if (showFullscreenLoading) {
+                        Box(
+                            Modifier
+                                .fillMaxSize()
+                                .padding(bottom = 64.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Column(
+                                horizontalAlignment = Alignment.CenterHorizontally,
+                                verticalArrangement = Arrangement.spacedBy(16.dp)
+                            ) {
+                                CircularProgressIndicator(color = MaterialTheme.colorScheme.primary)
+                                Text(
+                                    "Parks werden geladen…",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        }
+                    } else {
+                        ParkList(
+                            parks = state.parks,
+                            favoriteParks = state.favoriteParks,
+                            isSearching = (state.query.isNotEmpty() || state.selectedCountry != null || state.showOpenOnly || state.showFavoritesOnly),
+                            onParkClick = onParkClick,
+                            onToggleFavorite = onToggleFavorite,
+                            onQuickAddWatchlist = { park ->
+                                selectedParkForWatchlist = park
+                                showAddWatchlistDialog = true
+                            }
+                        )
+                    }
+                }
+            }
+        }
+    }
+
+    selectedParkForWatchlist?.let { park ->
+        if (showAddWatchlistDialog) {
+            AddWatchlistDialog(
+                parkKey = park.id,
+                attractionId = null,
+                attractionName = null,
+                onDismiss = {
+                    showAddWatchlistDialog = false
+                    selectedParkForWatchlist = null
+                }
+            )
+        }
+    }
+}
+
+@Composable
+private fun CountryFilterRow(
+    countries: List<String>,
+    selected: String?,
+    showOpenOnly: Boolean,
+    showFavoritesOnly: Boolean,
+    sort: ParkSort,
+    onSelect: (String?) -> Unit,
+    onToggleOpenOnly: () -> Unit,
+    onToggleFavoritesOnly: () -> Unit,
+    onSortChange: (ParkSort) -> Unit,
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .horizontalScroll(rememberScrollState()),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        FilterChip(
+            selected = showFavoritesOnly,
+            onClick = onToggleFavoritesOnly,
+            label = { Text("Favoriten", style = MaterialTheme.typography.labelMedium) },
+            leadingIcon = if (showFavoritesOnly) {
+                { Icon(Icons.Default.Favorite, contentDescription = null, modifier = Modifier.size(16.dp)) }
+            } else {
+                { Icon(Icons.Default.FavoriteBorder, contentDescription = null, modifier = Modifier.size(16.dp)) }
+            },
+            shape = RoundedCornerShape(12.dp),
+            colors = FilterChipDefaults.filterChipColors(
+                selectedContainerColor = MaterialTheme.colorScheme.tertiaryContainer,
+                selectedLabelColor = MaterialTheme.colorScheme.onTertiaryContainer
+            )
+        )
+
+        FilterChip(
+            selected = showOpenOnly,
+            onClick = onToggleOpenOnly,
+            label = { Text("Nur offen", style = MaterialTheme.typography.labelMedium) },
+            leadingIcon = if (showOpenOnly) {
+                { Icon(Icons.Default.Check, contentDescription = null, modifier = Modifier.size(16.dp)) }
+            } else null,
+            shape = RoundedCornerShape(12.dp),
+            colors = FilterChipDefaults.filterChipColors(
+                selectedContainerColor = MaterialTheme.colorScheme.tertiaryContainer,
+                selectedLabelColor = MaterialTheme.colorScheme.onTertiaryContainer
+            )
+        )
+
+        VerticalDivider(modifier = Modifier.height(24.dp))
+
+        var sortExpanded by remember { mutableStateOf(false) }
+        Box {
+            FilterChip(
+                selected = sort != ParkSort.FavoritesFirst,
+                onClick = { sortExpanded = true },
+                label = { Text(sort.label(), style = MaterialTheme.typography.labelMedium) },
+                leadingIcon = {
+                    Icon(Icons.Default.Sort, contentDescription = null, modifier = Modifier.size(16.dp))
+                },
+                shape = RoundedCornerShape(12.dp),
+                colors = FilterChipDefaults.filterChipColors(
+                    selectedContainerColor = MaterialTheme.colorScheme.secondaryContainer,
+                    selectedLabelColor = MaterialTheme.colorScheme.onSecondaryContainer
+                )
+            )
+            DropdownMenu(
+                expanded = sortExpanded,
+                onDismissRequest = { sortExpanded = false },
+            ) {
+                ParkSort.entries.forEach { value ->
+                    DropdownMenuItem(
+                        text = { Text(value.label()) },
+                        onClick = {
+                            onSortChange(value)
+                            sortExpanded = false
+                        },
+                        trailingIcon = if (sort == value) {
+                            { Icon(Icons.Default.Check, contentDescription = null, modifier = Modifier.size(18.dp)) }
+                        } else null,
+                    )
+                }
+            }
+        }
+
+        FilterChip(
+            selected = selected == null,
+            onClick = { onSelect(null) },
+            label = { Text("Alle Länder", style = MaterialTheme.typography.labelMedium) },
+            shape = RoundedCornerShape(12.dp),
+            colors = FilterChipDefaults.filterChipColors(
+                selectedContainerColor = MaterialTheme.colorScheme.primaryContainer,
+                selectedLabelColor = MaterialTheme.colorScheme.onPrimaryContainer
+            )
+        )
+
+        countries.forEach { country ->
+            FilterChip(
+                selected = selected == country,
+                onClick = { onSelect(if (selected == country) null else country) },
+                label = {
+                    Text(
+                        "${countryToFlag(country)} $country",
+                        style = MaterialTheme.typography.labelMedium
+                    )
+                },
+                shape = RoundedCornerShape(12.dp),
+                colors = FilterChipDefaults.filterChipColors(
+                    selectedContainerColor = MaterialTheme.colorScheme.primaryContainer,
+                    selectedLabelColor = MaterialTheme.colorScheme.onPrimaryContainer
+                )
+            )
+        }
+    }
+}
+
+@Composable
+private fun ParkOverviewStrip(
+    state: ParkListUiState,
+    onClearFilters: () -> Unit,
+) {
+    val hasFilters = state.query.isNotBlank() ||
+            state.selectedCountry != null ||
+            state.showOpenOnly ||
+            state.showFavoritesOnly ||
+            state.sort != ParkSort.FavoritesFirst
+
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(12.dp),
+        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.7f),
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            OverviewMetric(
+                label = "Angezeigt",
+                value = "${state.parks.size}/${state.totalParkCount}",
+                modifier = Modifier.weight(1f),
+            )
+            OverviewMetric(
+                label = "Favoriten",
+                value = state.favoriteParks.size.toString(),
+                modifier = Modifier.weight(1f),
+            )
+            OverviewMetric(
+                label = "Länder",
+                value = state.visibleCountryCount.toString(),
+                modifier = Modifier.weight(1f),
+            )
+            if (hasFilters) {
+                IconButton(onClick = onClearFilters, modifier = Modifier.size(36.dp)) {
+                    Icon(
+                        imageVector = Icons.Default.Clear,
+                        contentDescription = "Filter zurücksetzen",
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun OverviewMetric(
+    label: String,
+    value: String,
+    modifier: Modifier = Modifier,
+) {
+    Column(modifier = modifier) {
+        Text(
+            text = value,
+            style = MaterialTheme.typography.titleMedium,
+            fontWeight = FontWeight.Bold,
+            color = MaterialTheme.colorScheme.onSurface,
+        )
+        Text(
+            text = label,
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            maxLines = 1,
+        )
+    }
+}
+
+@Composable
+private fun RefreshSnackbar(data: SnackbarData) {
+    Surface(
+        modifier = Modifier.padding(12.dp),
+        shape = RoundedCornerShape(12.dp),
+        color = MaterialTheme.colorScheme.inverseSurface,
+        tonalElevation = 6.dp,
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            Icon(
+                imageVector = Icons.Default.CheckCircle,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.inversePrimary,
+            )
+            Text(
+                text = data.visuals.message,
+                modifier = Modifier.weight(1f),
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.inverseOnSurface,
+            )
+            data.visuals.actionLabel?.let { action ->
+                TextButton(onClick = { data.performAction() }) {
+                    Text(action)
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun ErrorBanner(
+    message: String,
+    onRetry: () -> Unit,
+) {
+    Surface(
+        color = MaterialTheme.colorScheme.errorContainer,
+        tonalElevation = 2.dp
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 10.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            Icon(
+                Icons.Default.Warning,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.onErrorContainer,
+                modifier = Modifier.size(20.dp)
+            )
+            Text(
+                text = message,
+                modifier = Modifier.weight(1f),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onErrorContainer
+            )
+            TextButton(onClick = onRetry) {
+                Text(
+                    "Erneut",
+                    color = MaterialTheme.colorScheme.error,
+                    style = MaterialTheme.typography.labelMedium,
+                    fontWeight = FontWeight.SemiBold
+                )
+            }
+        }
+    }
+}
+
+private fun ParkSort.label() = when (this) {
+    ParkSort.FavoritesFirst -> "Favoriten zuerst"
+    ParkSort.Name -> "Name A-Z"
+    ParkSort.Country -> "Land"
+}
+
+@Composable
+private fun ParkList(
+    parks: List<Park>,
+    favoriteParks: List<Park>,
+    isSearching: Boolean,
+    onParkClick: (Park) -> Unit,
+    onToggleFavorite: (Park) -> Unit,
+    onQuickAddWatchlist: (Park) -> Unit
+) {
+    if (parks.isEmpty()) {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(bottom = 64.dp),
+            contentAlignment = Alignment.Center
+        ) {
+            Text(
+                "Keine Parks gefunden",
+                style = MaterialTheme.typography.bodyLarge,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+    } else {
+        LazyColumn(
+            modifier = Modifier.fillMaxSize(),
+            contentPadding = PaddingValues(bottom = 32.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            if (!isSearching && favoriteParks.isNotEmpty()) {
+                item {
+                    Text(
+                        "Deine Favoriten",
+                        style = MaterialTheme.typography.titleSmall,
+                        color = MaterialTheme.colorScheme.primary,
+                        fontWeight = FontWeight.Bold,
+                        modifier = Modifier.padding(top = 8.dp, bottom = 4.dp)
+                    )
+                }
+                itemsIndexed(favoriteParks, key = { _, park -> "fav_${park.id}" }) { _, park ->
+                    ParkCard(
+                        park = park,
+                        onClick = { onParkClick(park) },
+                        onQuickAddWatchlist = { onQuickAddWatchlist(park) }
+                    ) { onToggleFavorite(park) }
+                }
+                item {
+                    HorizontalDivider(
+                        modifier = Modifier.padding(vertical = 8.dp),
+                        thickness = 0.5.dp,
+                        color = MaterialTheme.colorScheme.outline.copy(alpha = 0.3f)
+                    )
+                    Text(
+                        "Alle Parks",
+                        style = MaterialTheme.typography.titleSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        fontWeight = FontWeight.Bold,
+                        modifier = Modifier.padding(bottom = 4.dp)
+                    )
+                }
+            }
+
+            itemsIndexed(parks, key = { _, park -> park.id }) { index, park ->
+                AnimatedVisibility(
+                    visible = true,
+                    enter = fadeIn(tween(200, delayMillis = index * 30)) +
+                            slideInVertically(tween(250, delayMillis = index * 30)) { it / 3 },
+                ) {
+                    ParkCard(
+                        park = park,
+                        onClick = { onParkClick(park) },
+                        onQuickAddWatchlist = { onQuickAddWatchlist(park) }
+                    ) { onToggleFavorite(park) }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun ParkCard(
+    park: Park,
+    onClick: () -> Unit,
+    onQuickAddWatchlist: () -> Unit,
+    onToggleFavorite: () -> Unit
+) {
+    OutlinedCard(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick),
+        shape = RoundedCornerShape(16.dp),
+        colors = CardDefaults.outlinedCardColors(
+            containerColor = MaterialTheme.colorScheme.surface,
+            contentColor = MaterialTheme.colorScheme.onSurface
+        ),
+        border = CardDefaults.outlinedCardBorder().copy(
+            brush = androidx.compose.ui.graphics.SolidColor(
+                if (park.isFavorite) MaterialTheme.colorScheme.primary.copy(alpha = 0.5f)
+                else MaterialTheme.colorScheme.outline.copy(alpha = 0.5f)
+            )
+        )
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 14.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(14.dp)
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = park.name,
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.SemiBold,
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+                Spacer(Modifier.height(2.dp))
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    val flag = countryToFlag(park.country)
+                    if (flag.isNotEmpty()) {
+                        Text(
+                            text = flag,
+                            style = MaterialTheme.typography.bodySmall,
+                            modifier = Modifier.padding(end = 4.dp)
+                        )
+                    }
+                    Text(
+                        text = park.country,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            }
+
+            IconButton(onClick = onToggleFavorite) {
+                Icon(
+                    imageVector = if (park.isFavorite) Icons.Default.Favorite else Icons.Default.FavoriteBorder,
+                    contentDescription = if (park.isFavorite) "Von Favoriten entfernen" else "Zu Favoriten hinzufügen",
+                    tint = if (park.isFavorite) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline
+                )
+            }
+
+            IconButton(onClick = onQuickAddWatchlist) {
+                Icon(Icons.Default.Notifications, contentDescription = "Parkweite Benachrichtigung hinzufügen")
+            }
+
+            Text(
+                "›",
+                style = MaterialTheme.typography.titleLarge,
+                color = MaterialTheme.colorScheme.primary,
+                fontWeight = FontWeight.Bold
+            )
+        }
+    }
+}
+
+internal fun countryToFlag(country: String): String {
+    return countryToIsoCode(country)?.let(::flagEmojiForCountryCode).orEmpty()
+}
+
+private fun countryToIsoCode(country: String): String? {
+    return when (country.lowercase().trim()) {
+        "deutschland", "germany", "de" -> "DE"
+        "österreich", "austria", "at" -> "AT"
+        "schweiz", "switzerland", "ch" -> "CH"
+        "frankreich", "france", "fr" -> "FR"
+        "niederlande", "netherlands", "nl" -> "NL"
+        "belgien", "belgium", "be" -> "BE"
+        "vereinigtes königreich", "united kingdom", "uk", "gb", "great britain", "großbritannien" -> "GB"
+        "usa", "us", "u.s.a.", "united states", "united states of america",
+        "vereinigte staaten", "vereinigte staaten von amerika" -> "US"
+        "spanien", "spain", "es" -> "ES"
+        "italien", "italy", "it" -> "IT"
+        "dänemark", "denmark", "dk" -> "DK"
+        "schweden", "sweden", "se" -> "SE"
+        "norwegen", "norway", "no" -> "NO"
+        "finnland", "finland", "fi" -> "FI"
+        "japan", "jp" -> "JP"
+        "tschechien", "czech republic", "cz" -> "CZ"
+        "polen", "poland", "pl" -> "PL"
+        "portugal", "pt" -> "PT"
+        "luxemburg", "luxembourg", "lu" -> "LU"
+        else -> null
+    }
+}
+
+private fun flagEmojiForCountryCode(countryCode: String): String {
+    return countryCode
+        .uppercase()
+        .map { letter -> Character.toChars(REGIONAL_INDICATOR_OFFSET + (letter - 'A')).concatToString() }
+        .joinToString(separator = "")
+}
+
+private const val REGIONAL_INDICATOR_OFFSET = 0x1F1E6

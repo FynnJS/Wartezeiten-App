@@ -1,0 +1,129 @@
+:root {
+  color-scheme: light;
+  font-family: Inter, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  background: #f3f6fb;
+  color: #1f2937;
+}
+* {
+  box-sizing: border-box;
+}
+body {
+  margin: 0;
+  min-height: 100vh;
+  line-height: 1.6;
+}
+.site-header {
+  background: linear-gradient(135deg, #0066ff 0%, #1e40af 100%);
+  color: white;
+  padding: 32px 24px;
+}
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+.logo {
+  display: grid;
+  place-items: center;
+  width: 64px;
+  height: 64px;
+  border-radius: 18px;
+  background: rgba(255,255,255,.18);
+  font-size: 32px;
+  font-weight: 700;
+}
+.page-content {
+  max-width: 960px;
+  margin: -36px auto 48px;
+  padding: 0 24px 48px;
+}
+.hero,
+.panel,
+.notice {
+  background: white;
+  border-radius: 24px;
+  padding: 28px;
+  box-shadow: 0 18px 50px rgba(15, 23, 42, 0.08);
+  margin-top: 24px;
+}
+.hero h2 {
+  margin-top: 0;
+  font-size: clamp(2rem, 2.6vw, 3rem);
+}
+.hero p {
+  max-width: 720px;
+  margin: 16px 0 0;
+}
+.button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 14px 22px;
+  border-radius: 999px;
+  font-weight: 600;
+  text-decoration: none;
+}
+.button.primary {
+  color: white;
+  background: #2563eb;
+}
+.button.secondary {
+  color: #1f2937;
+  background: #e2e8f0;
+}
+.release-summary {
+  display: grid;
+  gap: 18px;
+  grid-template-columns: 1fr 1fr;
+}
+.release-summary p,
+.release-notes li,
+.verification-grid p,
+.verification-grid li {
+  margin: 0.75rem 0;
+}
+.release-notes {
+  margin-top: 18px;
+}
+.release-notes ul {
+  padding-left: 1.25rem;
+}
+pre {
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  padding: 16px;
+  overflow-x: auto;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+}
+.notice {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  align-items: center;
+  background: #e0f2fe;
+  border: 1px solid #bae6fd;
+}
+.notice p {
+  margin: 8px 0 0;
+}
+.verification-grid {
+  display: grid;
+  gap: 22px;
+  grid-template-columns: 1fr 1fr;
+}
+.footer-panel {
+  text-align: center;
+  font-size: 0.95rem;
+  color: #475569;
+}
+@media (max-width: 720px) {
+  .page-content {
+    margin-top: 0;
+  }
+  .release-summary,
+  .verification-grid,
+  .notice {
+    grid-template-columns: 1fr;
+  }
+}

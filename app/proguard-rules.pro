@@ -1,0 +1,1 @@
+-keep class de.wartezeiten.app.data.remote.dto.** { *; }

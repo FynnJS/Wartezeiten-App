@@ -1,0 +1,22 @@
+# Built application files
+*.apk
+*.ap_
+*.dex
+*.class
+*.jar
+*.so
+
+# Gradle files
+.gradle/
+build/
+**/build/
+
+# IDE files
+.idea/
+*.iml
+.DS_Store
+
+# Logs and dumps
+*.log
+*.hprof
+*.zip

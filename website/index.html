@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Wartezeiten App – APK-Download & Update</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <header class="site-header">
+    <div class="brand">
+      <div class="logo">W</div>
+      <div>
+        <h1>Wartezeiten App</h1>
+        <p>Live-Wartezeiten für Freizeitparks – APK-Download, Update-Banner und Verifizierung.</p>
+      </div>
+    </div>
+  </header>
+
+  <main class="page-content">
+    <section class="hero">
+      <h2>Offizielle App-Distribution ohne Google Play</h2>
+      <p>Diese Seite liefert die aktuelle APK, Release-Infos und Sicherheitsnachweise.</p>
+      <a id="downloadButton" class="button primary" href="releases/wartezeiten-app-1.0.apk" target="_blank" rel="noopener">APK herunterladen</a>
+    </section>
+
+    <section class="panel" id="releasePanel">
+      <h3>Aktueller Release</h3>
+      <div class="release-summary">
+        <div>
+          <p><strong>Version:</strong> <span id="versionName">1.0</span></p>
+          <p><strong>Release-Datum:</strong> <span id="releaseDate">2026-05-30</span></p>
+          <p><strong>Version-Code:</strong> <span id="versionCode">1</span></p>
+        </div>
+        <div>
+          <p><strong>APK-Größe:</strong> <span id="apkSize">–</span></p>
+          <p><strong>SHA-256:</strong></p>
+          <pre id="apkHash">PLACEHOLDER_REPLACE_WITH_REAL_SHA256</pre>
+        </div>
+      </div>
+      <div class="release-notes">
+        <h4>Release Notes</h4>
+        <ul id="releaseNotes">
+          <li>Initialer Release.</li>
+          <li>Live-Wartezeiten, Offline-Caching, Deutsch/Englisch.</li>
+        </ul>
+      </div>
+    </section>
+
+    <section class="notice" id="updateBanner" hidden>
+      <div>
+        <strong>Neues Update verfügbar!</strong>
+        <p>Installiere die neueste Version direkt von dieser Seite.</p>
+      </div>
+      <a id="bannerButton" class="button secondary" href="releases/wartezeiten-app-1.0.apk" target="_blank" rel="noopener">Jetzt installieren</a>
+    </section>
+
+    <section class="panel">
+      <h3>Sicherheits-Verifizierung</h3>
+      <p>Diese APK ist nicht über Google Play veröffentlicht. Prüfe daher selbst die Signatur und den Hash.</p>
+      <div class="verification-grid">
+        <div>
+          <h4>SHA-256 prüfen</h4>
+          <p>Nutze diesen Hash, um die APK-Datei vor Installation zu verifizieren:</p>
+          <pre id="shaValue">PLACEHOLDER_REPLACE_WITH_REAL_SHA256</pre>
+          <p>Windows: <code>CertUtil -hashfile "path\to\wartezeiten-app-1.0.apk" SHA256</code></p>
+          <p>Linux/macOS: <code>sha256sum wartezeiten-app-1.0.apk</code></p>
+        </div>
+        <div>
+          <h4>Virenscan</h4>
+          <p>Empfohlen: Lade die APK nach dem Upload zu <a href="https://www.virustotal.com" target="_blank" rel="noopener">VirusTotal</a> hoch und teile den Scan-Link hier.</p>
+          <p>Optional: Ergänze den Scan-Link in der release.json für volle Transparenz.</p>
+          <p>Scan-Link: <a id="virusTotalLink" href="#" target="_blank" rel="noopener">Noch nicht gesetzt</a></p>
+        </div>
+      </div>
+    </section>
+
+    <section class="panel">
+      <h3>Wie funktioniert das Update?</h3>
+      <ol>
+        <li>Die App fragt <code>release.json</code> ab.</li>
+        <li>Sie vergleicht den <strong>remote versionCode</strong> mit der aktuellen installierten Version.</li>
+        <li>Bei neuem Release wird ein In-App-Banner angezeigt.</li>
+      </ol>
+      <p>So kannst du ein neues Update bereitstellen:</p>
+      <ol>
+        <li>Build & signiere die Release-APK in Android Studio oder per Gradle.</li>
+        <li>Lege die APK in <code>website/releases/</code> ab.</li>
+        <li>Berechne den SHA-256 Hash und aktualisiere <code>website/release.json</code>.</li>
+        <li>Push die Änderungen in dein Cloudflare Pages Repository.</li>
+      </ol>
+    </section>
+
+    <section class="panel footer-panel">
+      <p>Cloudflare Pages eignet sich ideal für diese statische Präsentation. Du kannst die Website aus dem Ordner <code>website/</code> deployen.</p>
+    </section>
+  </main>
+
+  <script src="script.js"></script>
+</body>
+</html>
