@@ -79,11 +79,12 @@ fun WartezeitenApp(notificationParkKey: String? = null) {
             }
         }
 
-        if (updateState.updateAvailable && updateState.showBanner && updateState.releaseInfo != null) {
+        val releaseInfo = updateState.releaseInfo
+        if (updateState.updateAvailable && updateState.showBanner && releaseInfo != null) {
             UpdateBanner(
-                releaseInfo = updateState.releaseInfo,
+                releaseInfo = releaseInfo,
                 onInstallClick = {
-                    val intent = Intent(Intent.ACTION_VIEW, Uri.parse(updateState.releaseInfo.apkUrl))
+                    val intent = Intent(Intent.ACTION_VIEW, Uri.parse(releaseInfo.apkUrl))
                     intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
                     context.startActivity(intent)
                 },
