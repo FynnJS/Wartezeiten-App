@@ -3,81 +3,155 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Wartezeiten App – Live-Wartezeiten für Freizeitparks</title>
+  <meta name="description" content="Freizeitpark Wartezeiten App – Live-Wartezeiten für Freizeitparks weltweit. Kostenlos, werbefrei, offline verfügbar. Inoffiziell." />
+  <title>Freizeitpark Wartezeiten App – Live-Wartezeiten für Parks</title>
   <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
   <header class="site-header">
-    <div class="brand">
-      <div class="logo">W</div>
-      <div>
-        <h1>Wartezeiten App</h1>
-        <p>Deine Freizeitparks, immer im Blick.</p>
+    <div class="header-container">
+      <div class="brand">
+        <div class="logo-circle">⏱️</div>
+        <div>
+          <h1>Freizeitpark Wartezeiten App</h1>
+          <p class="tagline">Deine Freizeitparks, immer im Blick.</p>
+        </div>
       </div>
     </div>
   </header>
 
   <main class="page-content">
     <section class="hero">
-      <h2>Live-Wartezeiten überall verfügbar.</h2>
-      <p>Entdecke die Wartezeiten deiner Lieblings-Freizeitparks in Echtzeit. Einfach, schnell und übersichtlich.</p>
-      <a id="downloadButton" class="button primary" href="releases/wartezeiten-app-1.0.apk">APK herunterladen (v1.0)</a>
-    </section>
-
-    <section class="panel">
-      <h3>Features</h3>
-      <div class="features-grid">
-        <div class="feature">
-          <h4>🕒 Echtzeit-Daten</h4>
-          <p>Aktuelle Wartezeiten direkt aus den Parks.</p>
-        </div>
-        <div class="feature">
-          <h4>🌍 Weltweit</h4>
-          <p>Freizeitparks auf dem ganzen Globus entdecken.</p>
-        </div>
-        <div class="feature">
-          <h4>⭐ Favoriten</h4>
-          <p>Behalte deine Lieblings-Attraktionen im Blick.</p>
-        </div>
-        <div class="feature">
-          <h4>🔔 Benachrichtigungen</h4>
-          <p>Lass dich informieren, wenn Wartezeiten sinken.</p>
-        </div>
+      <div class="hero-container">
+        <h2>Live-Wartezeiten überall verfügbar.</h2>
+        <p>Entdecke die Wartezeiten deiner Lieblings-Freizeitparks in Echtzeit. Kostenlos, werbefrei und mit Offline-Unterstützung.</p>
+        <a id="downloadButton" class="button button-primary" href="#releases">⬇️ APK herunterladen</a>
       </div>
     </section>
 
-    <section class="panel" id="faqSection">
-      <h3>Häufig gestellte Fragen (FAQ)</h3>
-      <div class="faq-item">
-        <h4>Ist die App kostenlos?</h4>
-        <p>Ja, die App ist vollständig kostenlos und werbefrei.</p>
-      </div>
-      <div class="faq-item">
-        <h4>Woher stammen die Daten?</h4>
-        <p>Die Daten werden durch die <a href="https://www.wartezeiten.app" target="_blank">Wartezeiten.APP API</a> bereitgestellt.</p>
-      </div>
-      <div class="faq-item">
-        <h4>Warum APK-Download?</h4>
-        <p>Wir bieten die App direkt zur Installation an, um Update-Zyklen zu beschleunigen und maximale Kontrolle zu haben.</p>
+    <section class="panel features-panel">
+      <div class="container">
+        <h3>Warum diese App?</h3>
+        <div class="features-grid">
+          <div class="feature">
+            <div class="feature-icon">🕒</div>
+            <h4>Echtzeit-Daten</h4>
+            <p>Aktuelle Wartezeiten direkt aus den Parks, aktualisiert jede Minute.</p>
+          </div>
+          <div class="feature">
+            <div class="feature-icon">🌍</div>
+            <h4>Weltweit verfügbar</h4>
+            <p>Freizeitparks auf dem ganzen Globus entdecken und vergleichen.</p>
+          </div>
+          <div class="feature">
+            <div class="feature-icon">⭐</div>
+            <h4>Favoriten & Offline</h4>
+            <p>Behalte Lieblings-Attraktionen im Blick – auch ohne Internet.</p>
+          </div>
+          <div class="feature">
+            <div class="feature-icon">📊</div>
+            <h4>Einfach & Übersichtlich</h4>
+            <p>Moderne Bedienoberfläche mit der gesamten benötigten Information.</p>
+          </div>
+        </div>
       </div>
     </section>
 
-    <section class="panel" id="releasePanel">
-      <h3>Release-Informationen</h3>
-      <div class="release-summary">
-        <div>
-          <p><strong>Version:</strong> <span id="versionName">1.0</span></p>
-          <p><strong>Datum:</strong> <span id="releaseDate">2026-05-30</span></p>
+    <section class="panel specs-panel">
+      <div class="container">
+        <h3>App-Spezifikationen</h3>
+        <div class="specs-grid">
+          <div class="spec">
+            <strong>Architektur:</strong>
+            <p>Kotlin + Jetpack Compose</p>
+          </div>
+          <div class="spec">
+            <strong>Größe:</strong>
+            <p><span id="apkSize">–</span> MB</p>
+          </div>
+          <div class="spec">
+            <strong>Android:</strong>
+            <p>API Level 24+</p>
+          </div>
+          <div class="spec">
+            <strong>Lizenz:</strong>
+            <p>Open Source</p>
+          </div>
         </div>
-        <div>
-          <p><strong>SHA-256 Hash:</strong></p>
-          <pre id="apkHash">PLACEHOLDER_REPLACE_WITH_REAL_SHA256</pre>
+      </div>
+    </section>
+
+    <section class="panel release-panel" id="releases">
+      <div class="container">
+        <h3>Aktuelle Version</h3>
+        <div class="release-card">
+          <div class="release-header">
+            <div>
+              <h4>Version <span id="versionName">–</span></h4>
+              <p class="release-date">Veröffentlicht: <span id="releaseDate">–</span></p>
+            </div>
+            <a id="downloadButton2" class="button button-primary" href="#releases">⬇️ Herunterladen</a>
+          </div>
+          
+          <div class="release-content">
+            <div class="release-notes">
+              <h5>🎯 Was ist neu?</h5>
+              <ul id="releaseNotes">
+                <li>Wird geladen...</li>
+              </ul>
+            </div>
+
+            <div class="release-security">
+              <h5>🔒 Sicherheit</h5>
+              <div class="hash-box">
+                <p class="hash-label">SHA-256 Hash:</p>
+                <code id="apkHash">–</code>
+                <button class="copy-button" onclick="copyToClipboard()">📋 Kopieren</button>
+              </div>
+              <p class="hash-verify">
+                Verifiziere deine APK mit: <code>sha256sum wartezeiten-app-1.0.apk</code>
+              </p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="panel faq-panel">
+      <div class="container">
+        <h3>Häufig gestellte Fragen</h3>
+        <div class="faq-list">
+          <details class="faq-item">
+            <summary>❓ Ist die App wirklich kostenlos?</summary>
+            <p>Ja, die App ist vollständig kostenlos, werbefrei und ohne Tracking. Die Entwicklung wird rein aus Leidenschaft betrieben.</p>
+          </details>
+          <details class="faq-item">
+            <summary>❓ Wie oft werden die Daten aktualisiert?</summary>
+            <p>Die App aktualisiert die Wartezeiten automatisch jede Minute. Du kannst auch manuell aktualisieren, indem du nach unten wischst.</p>
+          </details>
+          <details class="faq-item">
+            <summary>❓ Woher stammen die Daten?</summary>
+            <p>Die Daten werden durch die <a href="https://www.wartezeiten.app" target="_blank">Wartezeiten.APP API</a> bereitgestellt, eine Gemeinschaftsplattform für Wartezeiten.</p>
+          </details>
+          <details class="faq-item">
+            <summary>❓ Funktioniert die App offline?</summary>
+            <p>Ja! Die App speichert Daten lokal und zeigt zuletzt geladene Wartezeiten auch ohne Internet an.</p>
+          </details>
+          <details class="faq-item">
+            <summary>❓ Warum APK-Download statt Google Play Store?</summary>
+            <p>Direkter Download ermöglicht schnellere Updates und maximale Kontrolle über die App-Verteilung.</p>
+          </details>
         </div>
       </div>
     </section>
 
     <section class="panel footer-panel">
-      <p>Daten bereitgestellt von <a href="https://www.wartezeiten.app" target="_blank">wartezeiten.app</a>.</p>
+      <div class="container">
+        <p><strong>Daten bereitgestellt von</strong></p>
+        <a href="https://www.wartezeiten.app" target="_blank" class="attribution-link">wartezeiten.app</a>
+        <p class="footer-small">Diese App ist eine inoffizielle Drittanwendung und wird nicht von den Entwicklern von Wartezeiten.APP entwickelt.</p>
+        <p class="footer-small">© 2026 Freizeitpark Wartezeiten App. Alle Rechte vorbehalten.</p>
+      </div>
     </section>
   </main>
 

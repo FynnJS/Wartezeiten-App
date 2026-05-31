@@ -3,7 +3,9 @@
 Diese Datei dient als Grundlage für alle KIs, die an diesem Projekt arbeiten. Sie enthält die wichtigsten Fakten zur Architektur, den verwendeten Technologien und der API-Dokumentation.
 
 ## Projektübersicht
-Die **Wartezeiten App** ist eine Android-Anwendung zur Anzeige von Wartezeiten in Freizeitparks weltweit. Sie basiert auf der API von [Wartezeiten.APP](https://wartezeiten.app).
+Die **Freizeitpark Wartezeiten App** ist eine Android-Anwendung zur Anzeige von Wartezeiten in Freizeitparks weltweit. Sie basiert auf der API von [Wartezeiten.APP](https://wartezeiten.app).
+
+**Wichtig:** Diese App ist eine **inoffizielle Drittanwendung** und wird **nicht von den Entwicklern von Wartezeiten.APP** entwickelt. Sie nutzt nur deren öffentliche API.
 
 ### Tech-Stack
 - **Sprache:** Kotlin
@@ -80,10 +82,136 @@ Nach jeder Änderung am Programm **MUSS** geprüft werden, ob die Änderung erfo
 - Bei Logik-Änderungen müssen betroffene Funktionen (z.B. API-Calls, Datenbank-Operationen) durch Tests oder manuelle Ausführung bestätigt werden.
 - Misserfolge oder unerwartetes Verhalten müssen dokumentiert und behoben werden.
 
-## Status der App
-- Alle Build-Fehler wurden behoben.
-- `android.useAndroidX=true` ist in `gradle.properties` gesetzt.
-- Die API-Integration in `WartezeitenApiService` wurde auf Header-Parameter korrigiert.
+## Cloudflare Workers Deployment
+
+Die Website wird via Cloudflare Workers deployed: **https://wartezeiten-app.tutorialfynn.workers.dev**
+
+### Architektur
+- **Worker-Handler:** `src/index.ts` – Routet APK-Downloads zu GitHub Releases weiter
+- **Static Assets:** `website/` – HTML, CSS, JavaScript, Metadaten (release.json)
+- **APK-Speicherung:** GitHub Releases (privates Repo `FynnJS/Wartezeiten-App`)
+- **TypeScript:** Wrangler-Projekt mit TypeScript-Support
+
+### Download-Flow
+1. Benutzer klickt auf "APK herunterladen" Button
+2. JavaScript aktualisiert Links basierend auf `release.json`
+3. Request geht zu `/releases/freizeitpark-wartezeiten-<VERSION>.apk`
+4. Cloudflare Worker leitet um zu GitHub Releases:
+   ```
+   https://github.com/FynnJS/Wartezeiten-App/releases/download/wartezeiten-app-1.0/freizeitpark-wartezeiten-1.0.apk
+   ```
+5. GitHub liefert die APK aus dem Release
+
+### Website Features
+- **Professionelles Design:** Moderne UI mit Gradient-Header, Feature-Cards, expandable FAQ
+- **SHA-256 Verifizierung:** Benutzer können den APK-Hash kopieren und lokal verifizieren
+- **Responsive Layout:** Mobile-first Design, optimiert für alle Geräte
+- **Release-Verwaltung:** Dynamisches Laden aus `release.json`
+- **Error-Handling:** Graceful fallbacks wenn Daten nicht verfügbar
+- **Disclaimer:** Deutliche Kennzeichnung, dass die App inoffiziell ist
+
+### Deployment
+```bash
+npm install           # Dependencies installieren
+npx wrangler deploy   # Zu Cloudflare deployen
+```
+
+### Wichtige Dateien
+- `wrangler.jsonc` – Wrangler-Konfiguration mit `main: "src/index.ts"`
+- `src/index.ts` – Worker-Handler für GitHub-Umleitungen
+- `website/index.html` – Hauptseite mit modernem Layout
+- `website/styles.css` – Umfassendes CSS mit CSS-Variablen
+- `website/script.js` – JavaScript für Release-Daten-Laden und SHA-256-Anzeige
+- `website/release.json` – Release-Metadaten (versionName, releaseDate, sha256, etc.)
+- `package.json` – npm-Projekt-Konfiguration
+
+### Release-Verwaltung
+1. Neue APK bauen und auf GitHub Releases unter Tag `wartezeiten-app-X.Y` hochladen
+2. `release.json` aktualisieren mit:
+   - `versionName` – Version (z.B. "1.0")
+   - `releaseDate` – ISO-Datum (z.B. "2026-05-31")
+   - `apkUrl` – Pfad zur APK (z.B. "./releases/freizeitpark-wartezeiten-1.0.apk")
+   - `sha256` – SHA-256 Hash der APK
+   - `apkSize` – Größe in MB (optional)
+   - `releaseNotes` – Array mit Release-Notes
+3. `npx wrangler deploy` ausführen
+
+## Git Workflow & Commits
+
+**Wichtig:** Commits und Pushes dürfen **NUR nach Verifikation und Tests** durchgeführt werden!
+
+### Verifikations-Checkliste vor jedem Commit:
+- ✅ Website funktioniert: Download-Button funktioniert, SHA-256 wird angezeigt
+- ✅ Website responsive: Auf Handy und Desktop getestet
+- ✅ App-Name überall aktualisiert: Website, App (strings.xml), Agents.md
+- ✅ Inoffiziell-Disclaimer prominent sichtbar
+- ✅ GitHub Release-Tag korrekt und APK verfügbar
+- ✅ Lokale Tests bestanden (wenn vorhanden)
+
+### Commit-Prozess
+1. **Alle Änderungen verifizieren** (siehe Checkliste oben)
+2. **Git-Status prüfen:**
+   ```bash
+   git status
+   ```
+3. **Änderungen stagen:**
+   ```bash
+   git add .
+   ```
+4. **Mit aussagekräftiger Commit-Message committen:**
+   ```bash
+   git commit -m "Feat: App-Name zu 'Freizeitpark Wartezeiten' & Website-Redesign
+
+   - Rename: 'Wartezeiten App' → 'Freizeitpark Wartezeiten App' (Website & App)
+   - Website: Modernes professionelles Design mit Gradient-Header
+   - Website: SHA-256 Hash-Anzeige mit Kopier-Funktion
+   - Website: Disclaimer für inoffizielle Drittanwendung
+   - Cloudflare: Fixed GitHub Release-URL (wartezeiten-app-1.0)
+   - Cloudflare: Error-Handling für Worker-Handler"
+   ```
+5. **Push zu Remote:**
+   ```bash
+   git push
+   ```
+
+### Branching-Strategie
+- **main:** Produktiv, nur getestete Releases
+- **Feature-Branches:** Für Entwicklung, z.B. `fix/download-button`, `feat/app-rename`
+- **Current Session Branch:** `agents-fix-download-button-issue-cloudflare`
+
+### Beispiel-Workflow für eine Session
+```bash
+# Feature-Branch erstellen
+git checkout -b feat/app-rename
+
+# Änderungen machen, testen, verifizieren...
+
+# Lokal committen (mehrere Commits möglich)
+git add .
+git commit -m "Update app name in website"
+git add .
+git commit -m "Update app name in Android strings"
+
+# Nach Verifikation: Push
+git push origin feat/app-rename
+
+# Pull Request erstellen und mergen
+```
+
+## Naming & Branding
+
+### App-Name-Änderung: "Wartezeiten App" → "Freizeitpark Wartezeiten App"
+- **Grund:** Klarstellung, dass die App inoffiziell ist und nicht von Wartezeiten.APP entwickelt wurde
+- **Orte, wo aktualisiert werden muss:**
+  - Website: `website/index.html` (Title, Header, Footer)
+  - App: `app/src/main/res/values/strings.xml` (app_name)
+  - Agents.md: Überall wo der App-Name erwähnt wird
+  - Release-Assets: APK-Dateiname (z.B. freizeitpark-wartezeiten-1.0.apk)
+
+### Inoffizielle Kennzeichnung
+- **Website:** Footer mit deutlichem Disclaimer
+- **App:** Kann in About-Screen oder Settings hinzugefügt werden (optional)
+- **Agents.md:** Klar dokumentiert dass es inoffiziell ist
 
 ## API-Nutzungsbedingungen & Attribution (PFLICHT)
 
