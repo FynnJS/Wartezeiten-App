@@ -27,3 +27,8 @@ build/
 !.dev.vars.example
 .env*
 !.env.example
+
+# Node modules
+node_modules/
+package-lock.json
+
