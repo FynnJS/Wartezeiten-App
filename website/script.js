@@ -7,6 +7,8 @@ const apkSizeEl = document.getElementById('apkSize');
 const apkHashEl = document.getElementById('apkHash');
 const releaseNotesEl = document.getElementById('releaseNotes');
 
+let apkDownloadUrl = null;
+
 async function loadRelease() {
   try {
     const response = await fetch(releaseUrl, { cache: 'no-store' });
@@ -33,10 +35,14 @@ async function loadRelease() {
       apkHashEl.style.color = '#999';
     }
 
-    // Download-Links
+    // Download-URL speichern und Handler setzen
     if (data.apkUrl) {
-      downloadButton.href = data.apkUrl;
-      downloadButton2.href = data.apkUrl;
+      apkDownloadUrl = data.apkUrl;
+      downloadButton.onclick = startDownload;
+      downloadButton2.onclick = startDownload;
+      // Nicht .href setzen, damit Download-Handler aktiv wird
+      downloadButton.href = '#';
+      downloadButton2.href = '#';
     }
 
     // Release Notes
@@ -50,6 +56,21 @@ async function loadRelease() {
     apkHashEl.textContent = 'Fehler beim Laden';
     apkHashEl.style.color = '#d32f2f';
   }
+}
+
+function startDownload(e) {
+  e.preventDefault();
+  if (!apkDownloadUrl) {
+    alert('Download-Link nicht verfügbar');
+    return;
+  }
+  // Öffne Download in neuem Tab/Fenster und lade herunter
+  const link = document.createElement('a');
+  link.href = apkDownloadUrl;
+  link.download = 'wartezeiten-app-1.0.0.apk';
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
 }
 
 function copyToClipboard() {
