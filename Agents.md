@@ -85,6 +85,32 @@ Nach jeder Änderung am Programm **MUSS** geprüft werden, ob die Änderung erfo
 - `android.useAndroidX=true` ist in `gradle.properties` gesetzt.
 - Die API-Integration in `WartezeitenApiService` wurde auf Header-Parameter korrigiert.
 
+## Website & Release-Deployment
+
+### Live Website
+- **URL:** https://wartezeiten-app.tutorialfynn.workers.dev/
+- **Hosting:** Cloudflare Workers
+- **Sync:** Website wird automatisch von GitHub `main`-Branch deployed
+
+### GitHub Release Integration
+- **Download-Automation:** `website/download-from-github.ps1` (PowerShell)
+- **Dokumentation:** `website/GITHUB-DOWNLOAD.md`
+- **Funktionalität:**
+  - Lädt neueste APK-Release von GitHub herunter
+  - Berechnet SHA-256 Hash automatisch
+  - Aktualisiert `release.json` mit Versionsinformationen
+  - Funktioniert mit öffentlichen Repositories (kein Token nötig)
+  - Unterstützt optionalen Token für private Repos (aktuell nicht nötig)
+- **Repository:** FynnJS/Wartezeiten-App (public)
+- **Status:** ✅ Seit 2026-06-01 integriert und getestet
+
+### Website-Updates (2026-06-01)
+- Website synchronisiert mit Live-Version
+- Modernere HTML/CSS-Struktur
+- Verbesserte Release-Info-Anzeige
+- Copy-to-Clipboard für SHA-256 Hash
+- GitHub Actions CI/CD vorbereitet (optional)
+
 ## API-Nutzungsbedingungen & Attribution (PFLICHT)
 
 Die Nutzung der Wartezeiten.APP API setzt voraus, dass ein **sichtbarer und anklickbarer Link** zur Webseite [https://www.wartezeiten.app](https://www.wartezeiten.app) an einer **prominenten Stelle** in der App platziert wird.
