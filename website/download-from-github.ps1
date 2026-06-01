@@ -13,20 +13,13 @@ param(
     [string]$OutputDir = "./releases",
     
     [Parameter(Mandatory = $false)]
-    [string]$GitHubToken = ""  # Optional: Für private Repos
+    [string]$GitHubToken = ""
 )
-
-# Farben für Ausgabe
-$colors = @{
-    Success = "Green"
-    Error   = "Red"
-    Info    = "Cyan"
-    Warning = "Yellow"
-}
 
 function Write-Status {
     param([string]$Message, [string]$Type = "Info")
-    $color = $colors[$Type] ?? $colors.Info
+    $colors = @{"Success" = "Green"; "Error" = "Red"; "Info" = "Cyan"; "Warning" = "Yellow"}
+    $color = if ($colors.ContainsKey($Type)) { $colors[$Type] } else { $colors.Info }
     Write-Host "[$Type] $Message" -ForegroundColor $color
 }
 
@@ -40,7 +33,7 @@ try {
     # Setze die GitHub API URL
     $apiUrl = "https://api.github.com/repos/$Owner/$Repo/releases/latest"
 
-    # Füge Token hinzu, wenn vorhanden (für private Repos)
+    # Füge Token hinzu, wenn vorhanden
     $headers = @{}
     if ($GitHubToken) {
         $headers["Authorization"] = "token $GitHubToken"
@@ -56,14 +49,15 @@ try {
         throw "Keine Release gefunden"
     }
 
-    $releaseName = $response.name ?? $response.tag_name
+    # Bestimme Release-Name
+    $releaseName = if ($response.name) { $response.name } else { $response.tag_name }
     Write-Status "Aktuelle Version: $releaseName" "Success"
 
     # Suche nach APK-Datei
     $apkAsset = $response.assets | Where-Object { $_.name -match "\.apk$" } | Select-Object -First 1
 
     if (-not $apkAsset) {
-        throw "Keine APK-Datei in der neuesten Release gefunden"
+        throw "Keine APK-Datei in der neuesten Release gefunden. Verfügbare Dateien: $($response.assets.name -join ', ')"
     }
 
     $apkUrl = $apkAsset.browser_download_url
@@ -98,7 +92,16 @@ try {
         $releaseJson | Add-Member -NotePropertyName "sha256" -NotePropertyValue $sha256 -Force
         $releaseJson | Add-Member -NotePropertyName "apkSize" -NotePropertyValue "$([Math]::Round($fileSize, 2))" -Force
         $releaseJson | Add-Member -NotePropertyName "releaseDate" -NotePropertyValue ($response.published_at -split "T")[0] -Force
-        $releaseJson | Add-Member -NotePropertyName "releaseNotes" -NotePropertyValue @($response.body -split "`n" | Where-Object { $_ -match "^-" } | ForEach-Object { $_ -replace "^-\s*", "" }) -Force
+        
+        # Parse Release Notes
+        $notes = @()
+        if ($response.body) {
+            $notes = $response.body -split "`n" | Where-Object { $_.Trim() -match "^-\s*" } | ForEach-Object { $_.Trim() -replace "^-\s*", "" } | Where-Object { $_ -ne "" }
+        }
+        if ($notes.Count -eq 0) {
+            $notes = @("Neuer Release veröffentlicht")
+        }
+        $releaseJson | Add-Member -NotePropertyName "releaseNotes" -NotePropertyValue $notes -Force
 
         # Speichere release.json
         $releaseJson | ConvertTo-Json | Set-Content $releaseJsonPath
@@ -112,3 +115,4 @@ try {
     Write-Status "Fehler: $_" "Error"
     exit 1
 }
+
