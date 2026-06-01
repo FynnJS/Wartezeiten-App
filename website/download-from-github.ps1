@@ -88,7 +88,9 @@ try {
 
         # Aktualisiere Release-Metadaten
         $releaseJson | Add-Member -NotePropertyName "versionName" -NotePropertyValue ($response.tag_name -replace "^v", "") -Force
-        $releaseJson | Add-Member -NotePropertyName "apkUrl" -NotePropertyValue "./releases/$apkName" -Force
+        # Download direkt von GitHub (funktioniert zuverlässig)
+        $gitHubDownloadUrl = "https://github.com/$Owner/$Repo/releases/download/$($response.tag_name)/$apkName"
+        $releaseJson | Add-Member -NotePropertyName "apkUrl" -NotePropertyValue $gitHubDownloadUrl -Force
         $releaseJson | Add-Member -NotePropertyName "sha256" -NotePropertyValue $sha256 -Force
         $releaseJson | Add-Member -NotePropertyName "apkSize" -NotePropertyValue "$([Math]::Round($fileSize, 2))" -Force
         $releaseJson | Add-Member -NotePropertyName "releaseDate" -NotePropertyValue ($response.published_at -split "T")[0] -Force

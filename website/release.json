@@ -2,7 +2,7 @@
   "versionName": "1.0",
   "versionCode": 1,
   "releaseDate": "2026-05-30",
-  "apkUrl": "./releases/wartezeiten-app-1.0.0.apk",
+  "apkUrl": "https://github.com/FynnJS/Wartezeiten-App/releases/download/v1.0/wartezeiten-app-1.0.0.apk",
   "sha256": "299e995ab87c88b7f6e6721a2ab19691b76ea5a1c283ed786d84d0c35c4fa36a",
   "apkSize": "19.33",
   "releaseNotes": [
