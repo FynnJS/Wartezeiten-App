@@ -75,12 +75,11 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import de.wartezeiten.app.domain.model.Park
-import de.wartezeiten.app.ui.components.AttributionFooter
+import de.wartezeiten.app.ui.components.AttributionBanner
 import de.wartezeiten.app.ui.waitingtimes.AddWatchlistDialog
 import java.time.LocalTime
 import java.time.format.DateTimeFormatter
@@ -189,9 +188,6 @@ fun ParkListScreen(
                     containerColor = MaterialTheme.colorScheme.background,
                 ),
             )
-        },
-        bottomBar = {
-            AttributionFooter()
         }
     ) { padding ->
         Column(
@@ -224,96 +220,172 @@ fun ParkListScreen(
                 }
             }
 
-            Column(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(horizontal = 16.dp),
-                verticalArrangement = Arrangement.spacedBy(10.dp)
-            ) {
-                Spacer(Modifier.height(8.dp))
+            val isSearching = state.query.isNotEmpty() ||
+                    state.selectedCountry != null ||
+                    state.showOpenOnly ||
+                    state.showFavoritesOnly
 
-                OutlinedTextField(
-                    value = state.query,
-                    onValueChange = onQueryChange,
-                    modifier = Modifier.fillMaxWidth(),
-                    leadingIcon = {
-                        Icon(
-                            Icons.Default.Search,
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    },
-                    placeholder = {
-                        Text(
-                            "Park suchen…",
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    },
-                    singleLine = true,
-                    shape = RoundedCornerShape(16.dp),
-                    colors = OutlinedTextFieldDefaults.colors(
-                        unfocusedBorderColor = MaterialTheme.colorScheme.outline.copy(alpha = 0.4f),
-                        focusedBorderColor = MaterialTheme.colorScheme.primary
-                    )
-                )
-
-                if (state.availableCountries.isNotEmpty()) {
-                    CountryFilterRow(
-                        countries = state.availableCountries,
-                        selected = state.selectedCountry,
-                        showOpenOnly = state.showOpenOnly,
-                        showFavoritesOnly = state.showFavoritesOnly,
-                        sort = state.sort,
-                        onSelect = onCountrySelected,
-                        onToggleOpenOnly = onToggleOpenOnly,
-                        onToggleFavoritesOnly = onToggleFavoritesOnly,
-                        onSortChange = onSortChange,
-                    )
-                }
-
-                ParkOverviewStrip(
-                    state = state,
-                    onClearFilters = onClearFilters,
-                )
-
-                AnimatedContent(
-                    targetState = state.isLoading && state.parks.isEmpty(),
-                    transitionSpec = {
-                        fadeIn(tween(300)) togetherWith fadeOut(tween(150))
-                    },
-                    label = "park_list_content"
-                ) { showFullscreenLoading ->
-                    if (showFullscreenLoading) {
-                        Box(
-                            Modifier
-                                .fillMaxSize()
-                                .padding(bottom = 64.dp),
-                            contentAlignment = Alignment.Center
+            AnimatedContent(
+                targetState = state.isLoading && state.parks.isEmpty(),
+                transitionSpec = {
+                    fadeIn(tween(300)) togetherWith fadeOut(tween(150))
+                },
+                label = "park_list_content",
+                modifier = Modifier.fillMaxSize(),
+            ) { showFullscreenLoading ->
+                if (showFullscreenLoading) {
+                    Box(
+                        Modifier
+                            .fillMaxSize()
+                            .padding(bottom = 64.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Column(
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.spacedBy(16.dp)
                         ) {
-                            Column(
-                                horizontalAlignment = Alignment.CenterHorizontally,
-                                verticalArrangement = Arrangement.spacedBy(16.dp)
-                            ) {
-                                CircularProgressIndicator(color = MaterialTheme.colorScheme.primary)
-                                Text(
-                                    "Parks werden geladen…",
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                            CircularProgressIndicator(color = MaterialTheme.colorScheme.primary)
+                            Text(
+                                "Parks werden geladen…",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
+                } else {
+                    LazyColumn(
+                        modifier = Modifier.fillMaxSize(),
+                        contentPadding = PaddingValues(
+                            start = 16.dp,
+                            top = 8.dp,
+                            end = 16.dp,
+                            bottom = 32.dp,
+                        ),
+                        verticalArrangement = Arrangement.spacedBy(10.dp),
+                    ) {
+                        item {
+                            AttributionBanner()
+                        }
+
+                        item {
+                            OutlinedTextField(
+                                value = state.query,
+                                onValueChange = onQueryChange,
+                                modifier = Modifier.fillMaxWidth(),
+                                leadingIcon = {
+                                    Icon(
+                                        Icons.Default.Search,
+                                        contentDescription = null,
+                                        tint = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                },
+                                placeholder = {
+                                    Text(
+                                        "Park suchen…",
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                },
+                                singleLine = true,
+                                shape = RoundedCornerShape(16.dp),
+                                colors = OutlinedTextFieldDefaults.colors(
+                                    unfocusedBorderColor = MaterialTheme.colorScheme.outline.copy(alpha = 0.4f),
+                                    focusedBorderColor = MaterialTheme.colorScheme.primary
+                                )
+                            )
+                        }
+
+                        if (state.availableCountries.isNotEmpty()) {
+                            item {
+                                CountryFilterRow(
+                                    countries = state.availableCountries,
+                                    selected = state.selectedCountry,
+                                    showOpenOnly = state.showOpenOnly,
+                                    showFavoritesOnly = state.showFavoritesOnly,
+                                    sort = state.sort,
+                                    onSelect = onCountrySelected,
+                                    onToggleOpenOnly = onToggleOpenOnly,
+                                    onToggleFavoritesOnly = onToggleFavoritesOnly,
+                                    onSortChange = onSortChange,
                                 )
                             }
                         }
-                    } else {
-                        ParkList(
-                            parks = state.parks,
-                            favoriteParks = state.favoriteParks,
-                            isSearching = (state.query.isNotEmpty() || state.selectedCountry != null || state.showOpenOnly || state.showFavoritesOnly),
-                            onParkClick = onParkClick,
-                            onToggleFavorite = onToggleFavorite,
-                            onQuickAddWatchlist = { park ->
-                                selectedParkForWatchlist = park
-                                showAddWatchlistDialog = true
+
+                        item {
+                            ParkOverviewStrip(
+                                state = state,
+                                onClearFilters = onClearFilters,
+                            )
+                        }
+
+                        if (state.parks.isEmpty()) {
+                            item {
+                                Box(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(top = 96.dp, bottom = 64.dp),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Text(
+                                        "Keine Parks gefunden",
+                                        style = MaterialTheme.typography.bodyLarge,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
                             }
-                        )
+                        } else {
+                            if (!isSearching && state.favoriteParks.isNotEmpty()) {
+                                item {
+                                    Text(
+                                        "Deine Favoriten",
+                                        style = MaterialTheme.typography.titleSmall,
+                                        color = MaterialTheme.colorScheme.primary,
+                                        fontWeight = FontWeight.Bold,
+                                        modifier = Modifier.padding(top = 8.dp, bottom = 4.dp)
+                                    )
+                                }
+                                itemsIndexed(state.favoriteParks, key = { _, park -> "fav_${park.id}" }) { _, park ->
+                                    ParkCard(
+                                        park = park,
+                                        onClick = { onParkClick(park) },
+                                        onQuickAddWatchlist = {
+                                            selectedParkForWatchlist = park
+                                            showAddWatchlistDialog = true
+                                        }
+                                    ) { onToggleFavorite(park) }
+                                }
+                                item {
+                                    HorizontalDivider(
+                                        modifier = Modifier.padding(vertical = 8.dp),
+                                        thickness = 0.5.dp,
+                                        color = MaterialTheme.colorScheme.outline.copy(alpha = 0.3f)
+                                    )
+                                    Text(
+                                        "Alle Parks",
+                                        style = MaterialTheme.typography.titleSmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        fontWeight = FontWeight.Bold,
+                                        modifier = Modifier.padding(bottom = 4.dp)
+                                    )
+                                }
+                            }
+
+                            itemsIndexed(state.parks, key = { _, park -> park.id }) { index, park ->
+                                AnimatedVisibility(
+                                    visible = true,
+                                    enter = fadeIn(tween(200, delayMillis = index * 30)) +
+                                            slideInVertically(tween(250, delayMillis = index * 30)) { it / 3 },
+                                ) {
+                                    ParkCard(
+                                        park = park,
+                                        onClick = { onParkClick(park) },
+                                        onQuickAddWatchlist = {
+                                            selectedParkForWatchlist = park
+                                            showAddWatchlistDialog = true
+                                        }
+                                    ) { onToggleFavorite(park) }
+                                }
+                            }
+                        }
                     }
                 }
             }
@@ -598,84 +670,6 @@ private fun ParkSort.label() = when (this) {
     ParkSort.FavoritesFirst -> "Favoriten zuerst"
     ParkSort.Name -> "Name A-Z"
     ParkSort.Country -> "Land"
-}
-
-@Composable
-private fun ParkList(
-    parks: List<Park>,
-    favoriteParks: List<Park>,
-    isSearching: Boolean,
-    onParkClick: (Park) -> Unit,
-    onToggleFavorite: (Park) -> Unit,
-    onQuickAddWatchlist: (Park) -> Unit
-) {
-    if (parks.isEmpty()) {
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(bottom = 64.dp),
-            contentAlignment = Alignment.Center
-        ) {
-            Text(
-                "Keine Parks gefunden",
-                style = MaterialTheme.typography.bodyLarge,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-        }
-    } else {
-        LazyColumn(
-            modifier = Modifier.fillMaxSize(),
-            contentPadding = PaddingValues(bottom = 32.dp),
-            verticalArrangement = Arrangement.spacedBy(10.dp)
-        ) {
-            if (!isSearching && favoriteParks.isNotEmpty()) {
-                item {
-                    Text(
-                        "Deine Favoriten",
-                        style = MaterialTheme.typography.titleSmall,
-                        color = MaterialTheme.colorScheme.primary,
-                        fontWeight = FontWeight.Bold,
-                        modifier = Modifier.padding(top = 8.dp, bottom = 4.dp)
-                    )
-                }
-                itemsIndexed(favoriteParks, key = { _, park -> "fav_${park.id}" }) { _, park ->
-                    ParkCard(
-                        park = park,
-                        onClick = { onParkClick(park) },
-                        onQuickAddWatchlist = { onQuickAddWatchlist(park) }
-                    ) { onToggleFavorite(park) }
-                }
-                item {
-                    HorizontalDivider(
-                        modifier = Modifier.padding(vertical = 8.dp),
-                        thickness = 0.5.dp,
-                        color = MaterialTheme.colorScheme.outline.copy(alpha = 0.3f)
-                    )
-                    Text(
-                        "Alle Parks",
-                        style = MaterialTheme.typography.titleSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        fontWeight = FontWeight.Bold,
-                        modifier = Modifier.padding(bottom = 4.dp)
-                    )
-                }
-            }
-
-            itemsIndexed(parks, key = { _, park -> park.id }) { index, park ->
-                AnimatedVisibility(
-                    visible = true,
-                    enter = fadeIn(tween(200, delayMillis = index * 30)) +
-                            slideInVertically(tween(250, delayMillis = index * 30)) { it / 3 },
-                ) {
-                    ParkCard(
-                        park = park,
-                        onClick = { onParkClick(park) },
-                        onQuickAddWatchlist = { onQuickAddWatchlist(park) }
-                    ) { onToggleFavorite(park) }
-                }
-            }
-        }
-    }
 }
 
 @Composable

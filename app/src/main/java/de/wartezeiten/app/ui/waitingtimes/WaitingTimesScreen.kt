@@ -24,7 +24,6 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.List
 import androidx.compose.material.icons.filled.Check
@@ -73,16 +72,11 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import de.wartezeiten.app.domain.model.AttractionStatus
 import de.wartezeiten.app.domain.model.CrowdLevel
-import de.wartezeiten.app.domain.model.DataFreshness
-import de.wartezeiten.app.domain.model.DataQuality
 import de.wartezeiten.app.domain.model.HolidayInfo
-import de.wartezeiten.app.domain.model.CrowdLevelSource
-import de.wartezeiten.app.domain.model.CrowdLevelEstimate
 import de.wartezeiten.app.domain.model.OpeningTimes
 import de.wartezeiten.app.domain.model.Park
 import de.wartezeiten.app.domain.model.WaitingTime
 import de.wartezeiten.app.domain.model.WeatherInfo
-import de.wartezeiten.app.ui.components.AttributionFooter
 import java.time.Instant
 import java.time.LocalDate
 import java.time.LocalTime
@@ -193,9 +187,6 @@ fun WaitingTimesScreen(
                     containerColor = MaterialTheme.colorScheme.background
                 )
             )
-        },
-        bottomBar = {
-            AttributionFooter()
         }
     ) { padding ->
         Column(
@@ -316,10 +307,8 @@ private fun WaitingTimesContent(
                 currentTime = state.currentLocalTime,
                 openingTimes = state.openingTimes,
                 crowdLevel = state.crowdLevel,
-                crowdEstimate = state.crowdEstimate,
                 waitingTimes = state.allWaitingTimes,
                 localTimeOffsetSeconds = state.localTimeOffsetSeconds,
-                dataQuality = state.dataQuality,
                 weather = state.weather,
                 holidays = state.holidays
             )
@@ -493,10 +482,8 @@ private fun ParkHeaderSection(
     currentTime: Long,
     openingTimes: OpeningTimes?,
     crowdLevel: CrowdLevel?,
-    crowdEstimate: CrowdLevelEstimate?,
     waitingTimes: List<WaitingTime>,
     localTimeOffsetSeconds: Int?,
-    dataQuality: DataQuality?,
     weather: WeatherInfo?,
     holidays: List<HolidayInfo>
 ) {
@@ -575,15 +562,6 @@ private fun ParkHeaderSection(
                 )
             }
             
-            dataQuality?.let { quality ->
-                val minutesAgo = ((currentZonedDateTime.toInstant().toEpochMilli() - quality.lastUpdated) / 60000).toInt().coerceAtLeast(0)
-                Text(
-                    text = "Letzte Aktualisierung vor ${minutesAgo} Minuten",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = contentColor.copy(alpha = 0.8f)
-                )
-            }
-
             // Kompakte Wetter-Anzeige innerhalb des Headers
             weather?.let {
                 Column(modifier = Modifier.padding(top = 8.dp)) {

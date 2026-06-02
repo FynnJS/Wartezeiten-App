@@ -1,6 +1,7 @@
 package de.wartezeiten.app.ui.waitingtimes
 
 import de.wartezeiten.app.domain.model.CrowdLevel
+import de.wartezeiten.app.domain.model.AttractionStatus
 import de.wartezeiten.app.domain.model.OpeningTimes
 import de.wartezeiten.app.domain.model.WaitingTime
 import de.wartezeiten.app.domain.model.estimateCrowdLevel
@@ -64,15 +65,16 @@ internal fun parkOpeningDisplayState(
         )
         else -> true
     }
+    val hasOpenAttraction = waitingTimes.any { it.status == AttractionStatus.Opened }
+    val canShowCrowdLevel = isCurrentlyOpen || hasOpenAttraction
 
-    val estimate = estimateCrowdLevel(
-        waitingTimes = waitingTimes,
-        apiCrowdLevel = crowdLevel?.level,
-    )
-
-    return if (isCurrentlyOpen) {
+    return if (canShowCrowdLevel) {
+        val estimate = estimateCrowdLevel(
+            waitingTimes = waitingTimes,
+            apiCrowdLevel = crowdLevel?.level,
+        )
         ParkOpeningDisplayState(
-            tone = ParkOpeningTone.Open,
+            tone = if (isCurrentlyOpen) ParkOpeningTone.Open else ParkOpeningTone.OpenOtherTimeToday,
             statusText = buildOpeningWindowStatusText(openTime, closeTime),
             crowdText = buildCrowdText(level = estimate.level),
         )

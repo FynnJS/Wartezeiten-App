@@ -9,6 +9,7 @@ import de.wartezeiten.app.core.network.toUserMessage
 import de.wartezeiten.app.domain.model.AttractionStatus
 import de.wartezeiten.app.domain.model.CrowdLevel
 import de.wartezeiten.app.domain.model.CrowdLevelEstimate
+import de.wartezeiten.app.domain.model.CrowdLevelSource
 import de.wartezeiten.app.domain.model.DataFreshness
 import de.wartezeiten.app.domain.model.DataQuality
 import de.wartezeiten.app.domain.model.HolidayInfo
@@ -132,10 +133,16 @@ class WaitingTimesViewModel @Inject constructor(
                 trendSummary = trendSummary,
             )
         } else {
-            val crowdEstimate = estimateCrowdLevel(
-                waitingTimes = detail.waitingTimes,
-                apiCrowdLevel = detail.crowdLevel?.level
-            )
+            val hasOpenAttraction = detail.waitingTimes.any { it.status == AttractionStatus.Opened }
+            val canCalculateCrowdLevel = detail.openingTimes?.opened == true && hasOpenAttraction
+            val crowdEstimate = if (canCalculateCrowdLevel) {
+                estimateCrowdLevel(
+                    waitingTimes = detail.waitingTimes,
+                    apiCrowdLevel = detail.crowdLevel?.level
+                )
+            } else {
+                CrowdLevelEstimate(level = null, source = CrowdLevelSource.None)
+            }
             WaitingTimesUiState(
                 park = detail.park,
                 openingTimes = detail.openingTimes,
@@ -159,7 +166,7 @@ class WaitingTimesViewModel @Inject constructor(
                     freshness = if (System.currentTimeMillis() - status.lastRefreshed < 300_000) DataFreshness.Fresh else DataFreshness.Stale,
                     confidenceScore = if (detail.crowdLevel != null) 0.9f else 0.7f
                 ),
-                trendSummary = trendSummary,
+                trendSummary = if (canCalculateCrowdLevel) trendSummary else ParkTrendSummary.Empty,
             )
         }
     }.stateIn(

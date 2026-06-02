@@ -23,16 +23,22 @@ import androidx.compose.ui.unit.dp
 
 @Composable
 fun AttributionFooter() {
+    AttributionBanner(modifier = Modifier.navigationBarsPadding())
+}
+
+@Composable
+fun AttributionBanner(
+    modifier: Modifier = Modifier,
+) {
     val context = LocalContext.current
     Surface(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = modifier.fillMaxWidth(),
         tonalElevation = 2.dp,
         color = MaterialTheme.colorScheme.surface,
     ) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .navigationBarsPadding()
                 .padding(horizontal = 16.dp, vertical = 8.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
@@ -48,7 +54,7 @@ fun AttributionFooter() {
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
             Text(
-                text = "wartezeiten.app",
+                text = "Wartezeiten.app",
                 style = MaterialTheme.typography.labelSmall.copy(
                     textDecoration = TextDecoration.Underline,
                     fontWeight = FontWeight.SemiBold,

@@ -72,6 +72,29 @@ class ParkOpeningDisplayStateTest {
     }
 
     @Test
+    fun openAttractionBeforeOfficialOpeningShowsCrowdLevel() {
+        val state = parkOpeningDisplayState(
+            openingTimes = OpeningTimes(
+                opened = true,
+                from = "2026-05-28T10:00:00+02:00",
+                to = "2026-05-28T18:00:00+02:00",
+            ),
+            crowdLevel = CrowdLevel(level = 24f, timestamp = "2026-05-28T09:00:00+02:00"),
+            waitingTimes = listOf(
+                waitingTime("a", 5),
+                waitingTime("b", 10),
+                waitingTime("c", 15),
+            ),
+            currentTimeMillis = millis("2026-05-28T09:00:00+02:00"),
+            localTimeOffsetSeconds = 7200,
+        )
+
+        assertEquals(ParkOpeningTone.OpenOtherTimeToday, state.tone)
+        assertEquals("Heute ge\u00f6ffnet von 10:00 Uhr bis 18:00 Uhr", state.statusText)
+        assertEquals("Auslastung: ca. 15% (Wenig los)", state.crowdText)
+    }
+
+    @Test
     fun closedAfterOpeningIsOrangeAndShowsOpeningWindow() {
         val state = parkOpeningDisplayState(
             openingTimes = OpeningTimes(

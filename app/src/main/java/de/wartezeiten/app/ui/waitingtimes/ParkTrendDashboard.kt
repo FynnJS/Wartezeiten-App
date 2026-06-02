@@ -25,7 +25,13 @@ fun ParkTrendDashboard(
     modifier: Modifier = Modifier
 ) {
     var showDialog by remember { mutableStateOf(false) }
-    if (summary == ParkTrendSummary.Empty || summary.latestSnapshotAtMillis == null) return
+    if (
+        summary == ParkTrendSummary.Empty ||
+        summary.latestSnapshotAtMillis == null ||
+        summary.displayCrowdLevel == null
+    ) {
+        return
+    }
 
     val ageMinutes = TimeUnit.MILLISECONDS.toMinutes(System.currentTimeMillis() - summary.latestSnapshotAtMillis)
     val trend = when {
