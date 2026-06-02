@@ -6,6 +6,7 @@ import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
 import de.wartezeiten.app.core.network.ApiResult
 import de.wartezeiten.app.core.network.toUserMessage
+import de.wartezeiten.app.data.local.PreferencesDataSource
 import de.wartezeiten.app.domain.model.AttractionStatus
 import de.wartezeiten.app.domain.model.CrowdLevel
 import de.wartezeiten.app.domain.model.CrowdLevelEstimate
@@ -27,6 +28,7 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.flow.take
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import java.time.OffsetDateTime
@@ -52,9 +54,12 @@ data class WaitingTimesUiState(
     val crowdEstimate: CrowdLevelEstimate? = null,
     val allWaitingTimes: List<WaitingTime> = emptyList(),
     val waitingTimes: List<WaitingTime> = emptyList(),
+    val plannedWaitingTimes: List<WaitingTime> = emptyList(),
     val sort: WaitingTimesSort = WaitingTimesSort.WaitDescending,
     val filter: AttractionFilter = AttractionFilter.All,
+    val attractionQuery: String = "",
     val maxWaitMinutes: Int? = null,
+    val plannedAttractionIds: Set<String> = emptySet(),
     val isLoading: Boolean = false,
     val errorMessage: String? = null,
     val lastRefreshed: Long = 0L,
@@ -71,12 +76,15 @@ data class WaitingTimesUiState(
 class WaitingTimesViewModel @Inject constructor(
     savedStateHandle: SavedStateHandle,
     private val repository: WartezeitenRepository,
-    private val refreshParkDetail: RefreshParkDetailUseCase
+    private val refreshParkDetail: RefreshParkDetailUseCase,
+    private val preferences: PreferencesDataSource,
 ) : ViewModel() {
     private val parkKey: String = checkNotNull(savedStateHandle["parkKey"])
     private val sort = MutableStateFlow(WaitingTimesSort.WaitDescending)
     private val filter = MutableStateFlow(AttractionFilter.All)
+    private val attractionQuery = MutableStateFlow("")
     private val maxWaitMinutes = MutableStateFlow<Int?>(null)
+    private val plannedAttractionIds = MutableStateFlow<Set<String>>(emptySet())
     private val isLoading = MutableStateFlow(false)
     private val errorMessage = MutableStateFlow<String?>(null)
     private val lastRefreshed = MutableStateFlow(0L)
@@ -91,8 +99,8 @@ class WaitingTimesViewModel @Inject constructor(
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), System.currentTimeMillis())
 
     // Combine in zwei Stufen (Flow.combine unterstützt max. 5 Parameter direkt)
-    private val filterState = combine(sort, filter, maxWaitMinutes) { s, f, maxWait ->
-        Triple(s, f, maxWait)
+    private val filterState = combine(sort, filter, attractionQuery, maxWaitMinutes, plannedAttractionIds) { s, f, query, maxWait, plan ->
+        FilterState(s, f, query, maxWait, plan)
     }
 
     private val loadState = combine(isLoading, errorMessage, lastRefreshed, refreshTrigger, currentLocalTime) { l, e, r, t, c ->
@@ -110,7 +118,9 @@ class WaitingTimesViewModel @Inject constructor(
         filterState,
         loadState,
         repository.getParkTrendSummary(parkKey)
-    ) { detail, (sort, filter, maxWait), status, trendSummary ->
+    ) { detail, filterState, status, trendSummary ->
+        val (sort, filter, query, maxWait, plannedIds) = filterState
+        val normalizedQuery = query.normalizedSearchText()
         val filtered = detail.waitingTimes
             .filter { wt ->
                 when (filter) {
@@ -121,7 +131,15 @@ class WaitingTimesViewModel @Inject constructor(
                             wt.status == AttractionStatus.ClosedWeather
                 }
             }
+            .filter { wt -> normalizedQuery.isBlank() || wt.name.normalizedSearchText().contains(normalizedQuery) }
             .filter { wt -> maxWait == null || (wt.waitingTime ?: Int.MAX_VALUE) <= maxWait }
+        val plannedAttractions = detail.waitingTimes
+            .filter { it.attractionId in plannedIds }
+            .sortedWith(
+                compareBy<WaitingTime> { it.status != AttractionStatus.Opened }
+                    .thenBy { it.waitingTime ?: Int.MAX_VALUE }
+                    .thenBy { it.name.lowercase() }
+            )
 
         if (detail.park == null) {
             WaitingTimesUiState(
@@ -150,11 +168,14 @@ class WaitingTimesViewModel @Inject constructor(
                 crowdEstimate = crowdEstimate,
                 allWaitingTimes = detail.waitingTimes,
                 waitingTimes = filtered.sortedBy(sort),
+                plannedWaitingTimes = plannedAttractions,
                 weather = detail.weather,
                 holidays = detail.holidays,
                 sort = sort,
                 filter = filter,
+                attractionQuery = query,
                 maxWaitMinutes = maxWait,
+                plannedAttractionIds = plannedIds,
                 isLoading = status.isLoading,
                 errorMessage = status.errorMessage,
                 lastRefreshed = status.lastRefreshed,
@@ -176,6 +197,7 @@ class WaitingTimesViewModel @Inject constructor(
     )
 
     init {
+        restoreSavedFilters()
         refresh(showFeedback = false)
         startAutoRefresh()
     }
@@ -190,9 +212,32 @@ class WaitingTimesViewModel @Inject constructor(
         }
     }
 
-    fun setSort(value: WaitingTimesSort) { sort.value = value }
-    fun setFilter(value: AttractionFilter) { filter.value = value }
-    fun setMaxWait(value: Int?) { maxWaitMinutes.value = value }
+    fun setSort(value: WaitingTimesSort) {
+        sort.value = value
+        viewModelScope.launch { preferences.setWaitingTimesSort(value.name) }
+    }
+
+    fun setFilter(value: AttractionFilter) {
+        filter.value = value
+        viewModelScope.launch { preferences.setWaitingTimesFilter(value.name) }
+    }
+
+    fun setAttractionQuery(value: String) {
+        attractionQuery.value = value
+    }
+
+    fun setMaxWait(value: Int?) {
+        maxWaitMinutes.value = value
+        viewModelScope.launch { preferences.setWaitingTimesMaxWait(value) }
+    }
+
+    fun togglePlannedAttraction(attractionId: String) {
+        plannedAttractionIds.value = if (attractionId in plannedAttractionIds.value) {
+            plannedAttractionIds.value - attractionId
+        } else {
+            plannedAttractionIds.value + attractionId
+        }
+    }
 
     fun dismissError() {
         errorMessage.value = null
@@ -240,6 +285,28 @@ class WaitingTimesViewModel @Inject constructor(
         }
     }
 
+    private fun restoreSavedFilters() {
+        viewModelScope.launch {
+            combine(
+                preferences.waitingTimesSort,
+                preferences.waitingTimesFilter,
+                preferences.waitingTimesMaxWait,
+            ) { savedSort, savedFilter, savedMaxWait ->
+                SavedFilterState(savedSort, savedFilter, savedMaxWait)
+            }
+                .take(1)
+                .collect { saved ->
+                    saved.sort?.let { value ->
+                        sort.value = WaitingTimesSort.entries.firstOrNull { it.name == value } ?: WaitingTimesSort.WaitDescending
+                    }
+                    saved.filter?.let { value ->
+                        filter.value = AttractionFilter.entries.firstOrNull { it.name == value } ?: AttractionFilter.All
+                    }
+                    maxWaitMinutes.value = saved.maxWait
+                }
+        }
+    }
+
     private fun de.wartezeiten.app.domain.model.ParkDetail.localTimeOffsetSeconds(): Int? {
         val candidates = listOfNotNull(
             openingTimes?.from,
@@ -250,4 +317,22 @@ class WaitingTimesViewModel @Inject constructor(
             runCatching { OffsetDateTime.parse(value).offset.totalSeconds }.getOrNull()
         }
     }
+}
+
+private data class FilterState(
+    val sort: WaitingTimesSort,
+    val filter: AttractionFilter,
+    val query: String,
+    val maxWait: Int?,
+    val plannedAttractionIds: Set<String>,
+)
+
+private data class SavedFilterState(
+    val sort: String?,
+    val filter: String?,
+    val maxWait: Int?,
+)
+
+private fun String.normalizedSearchText(): String {
+    return lowercase().filter { it.isLetterOrDigit() }
 }

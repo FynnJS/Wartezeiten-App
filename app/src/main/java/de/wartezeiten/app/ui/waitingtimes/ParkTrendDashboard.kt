@@ -101,6 +101,66 @@ fun ParkTrendDashboard(
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                TrendMetric(
+                    label = "Heute min.",
+                    value = summary.minCrowdLevel.percentText(),
+                    modifier = Modifier.weight(1f),
+                )
+                TrendMetric(
+                    label = "Median",
+                    value = summary.medianCrowdLevel.percentText(),
+                    modifier = Modifier.weight(1f),
+                )
+                TrendMetric(
+                    label = "Peak",
+                    value = summary.maxCrowdLevel.percentText(),
+                    modifier = Modifier.weight(1f),
+                )
+            }
+
+            summary.displayCrowdLevel?.let { current ->
+                LinearProgressIndicator(
+                    progress = { (current / 100f).coerceIn(0f, 1f) },
+                    modifier = Modifier.fillMaxWidth(),
+                    color = crowdStatus.color,
+                    trackColor = MaterialTheme.colorScheme.surface,
+                )
+            }
+
+            Text(
+                text = "${summary.sampleCount} Messpunkte im lokalen Verlauf",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
         }
     }
+}
+
+@Composable
+private fun TrendMetric(
+    label: String,
+    value: String,
+    modifier: Modifier = Modifier,
+) {
+    Column(modifier = modifier) {
+        Text(
+            text = value,
+            style = MaterialTheme.typography.titleSmall,
+            fontWeight = FontWeight.Bold,
+        )
+        Text(
+            text = label,
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+    }
+}
+
+private fun Float?.percentText(): String {
+    return this?.let { "${String.format(Locale.GERMAN, "%.0f", it.coerceIn(0f, 100f))}%" } ?: "-"
 }

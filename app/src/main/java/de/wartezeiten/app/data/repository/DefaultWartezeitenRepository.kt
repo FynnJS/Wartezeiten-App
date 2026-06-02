@@ -18,6 +18,7 @@ import de.wartezeiten.app.data.remote.WartezeitenApiService
 import de.wartezeiten.app.data.remote.WeatherApiService
 import de.wartezeiten.app.domain.model.Park
 import de.wartezeiten.app.domain.model.ParkDetail
+import de.wartezeiten.app.domain.model.ParkRecommendation
 import de.wartezeiten.app.domain.repository.WartezeitenRepository
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.async
@@ -54,6 +55,45 @@ class DefaultWartezeitenRepository @Inject constructor(
             .flowOn(ioDispatcher)
     }
 
+    override fun observeBestParkRecommendation(): Flow<ParkRecommendation?> {
+        return combine(
+            parkDao.observeParks(null),
+            parkSnapshotDao.observeLatestSnapshots(),
+        ) { parks, snapshots ->
+            val parksByKey = parks
+                .flatMap { park -> listOf(park.id to park, park.uuid to park) }
+                .toMap()
+
+            snapshots
+                .asSequence()
+                .filter { it.openedToday == true && it.openAttractions > 0 }
+                .mapNotNull { snapshot ->
+                    val park = parksByKey[snapshot.parkKey] ?: return@mapNotNull null
+                    val crowd = snapshot.displayCrowdLevel
+                    val openRatio = if (snapshot.totalAttractions > 0) {
+                        snapshot.openAttractions.toFloat() / snapshot.totalAttractions
+                    } else {
+                        0f
+                    }
+                    val crowdScore = (100 - (crowd ?: 65f)).coerceIn(0f, 100f)
+                    val attractionScore = (openRatio * 100).coerceIn(0f, 100f)
+                    val favoriteBonus = if (park.isFavorite) 8 else 0
+                    val score = ((crowdScore * 0.55f) + (attractionScore * 0.45f) + favoriteBonus)
+                        .toInt()
+                        .coerceIn(0, 100)
+                    ParkRecommendation(
+                        park = park.toDomain(),
+                        score = score,
+                        crowdLevel = crowd,
+                        openAttractions = snapshot.openAttractions,
+                        totalAttractions = snapshot.totalAttractions,
+                        reason = buildRecommendationReason(crowd, snapshot.openAttractions, snapshot.totalAttractions),
+                    )
+                }
+                .maxByOrNull { it.score }
+        }.flowOn(ioDispatcher)
+    }
+
     override suspend fun refreshParks(language: String): ApiResult<Unit> = withContext(ioDispatcher) {
         when (val result = safeApiCall { api.getParks(language) }) {
             is ApiResult.Success -> {
@@ -69,6 +109,81 @@ class DefaultWartezeitenRepository @Inject constructor(
             }
             is ApiResult.Error -> result
         }
+    }
+
+    override suspend fun refreshParkRecommendationSnapshots(language: String): ApiResult<Unit> = withContext(ioDispatcher) {
+        val parks = parkDao.observeParks(null).first()
+        if (parks.isEmpty()) return@withContext ApiResult.Success(Unit)
+
+        var firstError: ApiResult.Error? = null
+        parks.forEach { park ->
+            when (val result = refreshParkRecommendationSnapshot(park.id, language)) {
+                is ApiResult.Success -> Unit
+                is ApiResult.Error -> if (firstError == null) firstError = result
+            }
+        }
+
+        firstError ?: ApiResult.Success(Unit)
+    }
+
+    private suspend fun refreshParkRecommendationSnapshot(
+        parkKey: String,
+        language: String,
+    ): ApiResult<Unit> = coroutineScope {
+        val openingTimes = async { safeApiCall { api.getOpeningTimes(parkKey) } }
+        val waitingTimes = async { safeApiCall { api.getWaitingTimes(parkKey, language) } }
+        val crowdLevel = async { safeApiCall { api.getCrowdLevel(parkKey) } }
+
+        val now = System.currentTimeMillis()
+        val openingResult = openingTimes.await()
+        val waitingResult = waitingTimes.await()
+        val crowdResult = crowdLevel.await()
+
+        val openedToday = (openingResult as? ApiResult.Success)
+            ?.data
+            ?.firstOrNull()
+            ?.openedToday
+        val openFrom = (openingResult as? ApiResult.Success)
+            ?.data
+            ?.firstOrNull()
+            ?.opening
+        val closedFrom = (openingResult as? ApiResult.Success)
+            ?.data
+            ?.firstOrNull()
+            ?.closing
+        val waitingData = (waitingResult as? ApiResult.Success)?.data.orEmpty()
+        val openAttractions = waitingData.count { it.status.equals("opened", ignoreCase = true) }
+        val totalAttractions = waitingData.size
+        val apiCrowdLevel = (crowdResult as? ApiResult.Success)
+            ?.data
+            ?.crowdLevel
+            ?.replace(",", ".")
+            ?.toFloatOrNull()
+        val canDisplayCrowdLevel = openedToday != false && openAttractions > 0
+
+        if (openingResult is ApiResult.Success || waitingResult is ApiResult.Success || crowdResult is ApiResult.Success) {
+            parkSnapshotDao.insert(
+                ParkSnapshotEntity(
+                    parkKey = parkKey,
+                    capturedAtMillis = now,
+                    apiCrowdLevel = apiCrowdLevel,
+                    calculatedCrowdLevel = null,
+                    displayCrowdLevel = apiCrowdLevel.takeIf { canDisplayCrowdLevel },
+                    openedToday = openedToday,
+                    openFrom = openFrom,
+                    closedFrom = closedFrom,
+                    openAttractions = openAttractions,
+                    totalAttractions = totalAttractions,
+                )
+            )
+        }
+
+        listOf(openingResult, waitingResult, crowdResult)
+            .asSequence()
+            .filterIsInstance<ApiResult.Error>()
+            .sortedBy { errorPriority(it.type) }
+            .firstOrNull()
+            ?: ApiResult.Success(Unit)
     }
 
     override fun observeParkDetail(parkKey: String): Flow<ParkDetail> {
@@ -232,6 +347,20 @@ class DefaultWartezeitenRepository @Inject constructor(
             NetworkError.EmptyBody -> 4
             NetworkError.Unknown -> 5
         }
+    }
+
+    private fun buildRecommendationReason(
+        crowdLevel: Float?,
+        openAttractions: Int,
+        totalAttractions: Int,
+    ): String {
+        val crowdText = crowdLevel?.let { "ca. ${it.toInt()}% Auslastung" } ?: "Auslastung unbekannt"
+        val attractionText = if (totalAttractions > 0) {
+            "$openAttractions von $totalAttractions Attraktionen offen"
+        } else {
+            "$openAttractions Attraktionen offen"
+        }
+        return "$crowdText, $attractionText"
     }
 
     private fun countryToCoordinates(parkKey: String, country: String): Pair<Double, Double> {

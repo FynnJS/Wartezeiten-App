@@ -6,6 +6,7 @@ import dagger.hilt.android.lifecycle.HiltViewModel
 import de.wartezeiten.app.core.network.ApiResult
 import de.wartezeiten.app.core.network.toUserMessage
 import de.wartezeiten.app.domain.model.Park
+import de.wartezeiten.app.domain.model.ParkRecommendation
 import de.wartezeiten.app.domain.repository.WartezeitenRepository
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.delay
@@ -27,8 +28,11 @@ data class ParkListUiState(
     val showOpenOnly: Boolean = false,
     val showFavoritesOnly: Boolean = false,
     val sort: ParkSort = ParkSort.FavoritesFirst,
+    val recommendation: ParkRecommendation? = null,
+    val isRecommendationLoading: Boolean = false,
     val totalParkCount: Int = 0,
     val visibleCountryCount: Int = 0,
+    val isShowingOfflineData: Boolean = false,
     val isLoading: Boolean = false,
     val errorMessage: String? = null,
     val refreshTrigger: Int = 0,
@@ -51,11 +55,14 @@ class ParkListViewModel @Inject constructor(
     private val showFavoritesOnly = MutableStateFlow(false)
     private val sort = MutableStateFlow(ParkSort.FavoritesFirst)
     private val isLoading = MutableStateFlow(value = false)
+    private val isRecommendationLoading = MutableStateFlow(value = false)
+    private val hasCompletedRecommendationScan = MutableStateFlow(value = false)
     private val errorMessage = MutableStateFlow<String?>(null)
     private val refreshTrigger = MutableStateFlow(0)
 
     private val allParks = query.flatMapLatest { repository.observeParks(it) }
     private val latestOpenParkKeys = repository.observeLatestOpenParkKeys()
+    private val recommendation = repository.observeBestParkRecommendation()
 
     val uiState = combine(
         allParks,
@@ -65,6 +72,9 @@ class ParkListViewModel @Inject constructor(
         showOpenOnly,
         showFavoritesOnly,
         sort,
+        recommendation,
+        isRecommendationLoading,
+        hasCompletedRecommendationScan,
         isLoading,
         errorMessage,
         refreshTrigger
@@ -77,9 +87,12 @@ class ParkListViewModel @Inject constructor(
         val openOnly = args[4] as Boolean
         val favoritesOnly = args[5] as Boolean
         val currentSort = args[6] as ParkSort
-        val loading = args[7] as Boolean
-        val error = args[8] as String?
-        val trigger = args[9] as Int
+        val currentRecommendation = args[7] as ParkRecommendation?
+        val recommendationLoading = args[8] as Boolean
+        val recommendationScanCompleted = args[9] as Boolean
+        val loading = args[10] as Boolean
+        val error = args[11] as String?
+        val trigger = args[12] as Int
 
         val favorites = parks.filter { it.isFavorite }
         val countries = parks.map { it.country }.distinct().sorted()
@@ -99,8 +112,11 @@ class ParkListViewModel @Inject constructor(
             showOpenOnly = openOnly,
             showFavoritesOnly = favoritesOnly,
             sort = currentSort,
+            recommendation = currentRecommendation.takeIf { recommendationScanCompleted },
+            isRecommendationLoading = recommendationLoading,
             totalParkCount = parks.size,
             visibleCountryCount = filtered.map { it.country }.distinct().size,
+            isShowingOfflineData = error != null && parks.isNotEmpty(),
             isLoading = loading,
             errorMessage = error,
             refreshTrigger = trigger
@@ -175,10 +191,24 @@ class ParkListViewModel @Inject constructor(
             when (val result = repository.refreshParks(language)) {
                 is ApiResult.Success -> {
                     if (showFeedback) refreshTrigger.value += 1
+                    if (!silent) {
+                        refreshRecommendations(language)
+                    }
                 }
                 is ApiResult.Error -> errorMessage.value = result.type.toUserMessage()
             }
             isLoading.value = false
+        }
+    }
+
+    private suspend fun refreshRecommendations(language: String) {
+        isRecommendationLoading.value = true
+        hasCompletedRecommendationScan.value = false
+        try {
+            repository.refreshParkRecommendationSnapshots(language)
+            hasCompletedRecommendationScan.value = true
+        } finally {
+            isRecommendationLoading.value = false
         }
     }
 

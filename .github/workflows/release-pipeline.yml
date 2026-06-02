@@ -67,6 +67,9 @@ jobs:
           def sanitize_tag(tag):
               return tag if tag else 'main'
 
+          def version_name_from_tag(tag):
+              return tag[1:] if tag.startswith('v') else tag
+
           def determine_version_code(tag):
               match = re.match(r'^v?(\d+)\.(\d+)\.(\d+)$', tag)
               if match:
@@ -75,14 +78,17 @@ jobs:
               count = int(subprocess.check_output(['git', 'rev-list', '--count', 'HEAD']).decode().strip())
               return count
 
-          version_name = sanitize_tag(tag_name)
-          version_code = determine_version_code(version_name)
+          release_tag = sanitize_tag(tag_name)
+          version_name = version_name_from_tag(release_tag)
+          version_code = determine_version_code(release_tag)
           apk_source = pathlib.Path('app/build/outputs/apk/release/app-release.apk')
           if not apk_source.exists():
               raise SystemExit('Release APK not found at app/build/outputs/apk/release/app-release.apk')
 
           apk_file_name = f'wartezeiten-app-{version_name}.apk'
-          apk_url = f'https://github.com/{github_repo}/releases/download/{version_name}/{apk_file_name}'
+          apk_release_asset = apk_source.with_name(apk_file_name)
+          apk_release_asset.write_bytes(apk_source.read_bytes())
+          apk_url = f'https://github.com/{github_repo}/releases/download/{release_tag}/{apk_file_name}'
           sha256 = subprocess.check_output(['sha256sum', str(apk_source)], text=True).split()[0]
           size_bytes = apk_source.stat().st_size
           size_label = f'{size_bytes} bytes'
@@ -114,6 +120,7 @@ jobs:
               output.write(f"version_name={version_name}\n")
               output.write(f"version_code={version_code}\n")
               output.write(f"apk_file_name={apk_file_name}\n")
+              output.write(f"apk_release_asset={apk_release_asset}\n")
               output.write(f"apk_url={apk_url}\n")
               output.write(f"sha256={sha256}\n")
               output.write(f"apk_size={size_label}\n")
@@ -125,7 +132,7 @@ jobs:
         with:
           tag_name: ${{ github.event.release.tag_name }}
           name: ${{ steps.metadata.outputs.apk_file_name }}
-          files: app/build/outputs/apk/release/app-release.apk
+          files: ${{ steps.metadata.outputs.apk_release_asset }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 

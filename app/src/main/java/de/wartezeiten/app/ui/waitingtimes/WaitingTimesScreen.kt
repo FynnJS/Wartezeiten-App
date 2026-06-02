@@ -28,11 +28,14 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.List
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.FavoriteBorder
 import androidx.compose.material.icons.filled.FilterList
 import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
@@ -45,6 +48,8 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedCard
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarData
 import androidx.compose.material3.SnackbarHost
@@ -98,7 +103,9 @@ fun WaitingTimesRoute(
         onToggleFavorite = { viewModel.toggleFavorite() },
         onSortChange = viewModel::setSort,
         onFilterChange = viewModel::setFilter,
+        onAttractionQueryChange = viewModel::setAttractionQuery,
         onMaxWaitChange = viewModel::setMaxWait,
+        onTogglePlannedAttraction = viewModel::togglePlannedAttraction,
     )
 }
 
@@ -111,7 +118,9 @@ fun WaitingTimesScreen(
     onToggleFavorite: () -> Unit,
     onSortChange: (WaitingTimesSort) -> Unit,
     onFilterChange: (AttractionFilter) -> Unit,
+    onAttractionQueryChange: (String) -> Unit,
     onMaxWaitChange: (Int?) -> Unit,
+    onTogglePlannedAttraction: (String) -> Unit,
 ) {
     val snackbarHostState = remember { SnackbarHostState() }
     var showAddWatchlistDialog by remember { mutableStateOf(false) }
@@ -225,7 +234,9 @@ fun WaitingTimesScreen(
                 state = state,
                 onSortChange = onSortChange,
                 onFilterChange = onFilterChange,
+                onAttractionQueryChange = onAttractionQueryChange,
                 onMaxWaitChange = onMaxWaitChange,
+                onTogglePlannedAttraction = onTogglePlannedAttraction,
                 onAddWatchlist = {
                     selectedAttractionId = null
                     showAddWatchlistDialog = true
@@ -288,7 +299,9 @@ private fun WaitingTimesContent(
     state: WaitingTimesUiState,
     onSortChange: (WaitingTimesSort) -> Unit,
     onFilterChange: (AttractionFilter) -> Unit,
+    onAttractionQueryChange: (String) -> Unit,
     onMaxWaitChange: (Int?) -> Unit,
+    onTogglePlannedAttraction: (String) -> Unit,
     onAddWatchlist: () -> Unit,
     onAddWatchlistForAttraction: (String) -> Unit
 ) {
@@ -323,12 +336,23 @@ private fun WaitingTimesContent(
             FilterSection(
                 sort = state.sort,
                 filter = state.filter,
+                attractionQuery = state.attractionQuery,
                 maxWaitMinutes = state.maxWaitMinutes,
                 onSortChange = onSortChange,
                 onFilterChange = onFilterChange,
+                onAttractionQueryChange = onAttractionQueryChange,
                 onMaxWaitChange = onMaxWaitChange,
                 onAddWatchlist = onAddWatchlist
             )
+        }
+
+        if (state.plannedWaitingTimes.isNotEmpty()) {
+            item {
+                VisitPlannerSection(
+                    plannedWaitingTimes = state.plannedWaitingTimes,
+                    onRemove = onTogglePlannedAttraction,
+                )
+            }
         }
 
         if (state.waitingTimes.isEmpty() && !state.isLoading) {
@@ -340,6 +364,8 @@ private fun WaitingTimesContent(
             ) { index ->
                 WaitingTimeRow(
                     item = state.waitingTimes[index],
+                    isPlanned = state.waitingTimes[index].attractionId in state.plannedAttractionIds,
+                    onTogglePlanned = onTogglePlannedAttraction,
                     onAddWatchlist = onAddWatchlistForAttraction
                 )
             }
@@ -364,9 +390,11 @@ private fun LoadingDetailState() {
 private fun FilterSection(
     sort: WaitingTimesSort,
     filter: AttractionFilter,
+    attractionQuery: String,
     maxWaitMinutes: Int?,
     onSortChange: (WaitingTimesSort) -> Unit,
     onFilterChange: (AttractionFilter) -> Unit,
+    onAttractionQueryChange: (String) -> Unit,
     onMaxWaitChange: (Int?) -> Unit,
     onAddWatchlist: () -> Unit
 ) {
@@ -375,6 +403,29 @@ private fun FilterSection(
             "Filter & Sortierung",
             style = MaterialTheme.typography.titleSmall,
             fontWeight = FontWeight.Bold
+        )
+
+        OutlinedTextField(
+            value = attractionQuery,
+            onValueChange = onAttractionQueryChange,
+            modifier = Modifier.fillMaxWidth(),
+            leadingIcon = {
+                Icon(Icons.Default.Search, contentDescription = null)
+            },
+            trailingIcon = if (attractionQuery.isNotEmpty()) {
+                {
+                    IconButton(onClick = { onAttractionQueryChange("") }) {
+                        Icon(Icons.Default.Clear, contentDescription = "Suche leeren")
+                    }
+                }
+            } else null,
+            placeholder = { Text("Attraktion suchen") },
+            singleLine = true,
+            shape = RoundedCornerShape(12.dp),
+            colors = OutlinedTextFieldDefaults.colors(
+                unfocusedBorderColor = MaterialTheme.colorScheme.outline.copy(alpha = 0.4f),
+                focusedBorderColor = MaterialTheme.colorScheme.primary,
+            ),
         )
         
         Row(
@@ -478,6 +529,58 @@ private fun FilterSection(
 }
 
 @Composable
+private fun VisitPlannerSection(
+    plannedWaitingTimes: List<WaitingTime>,
+    onRemove: (String) -> Unit,
+) {
+    OutlinedCard(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(12.dp),
+        colors = CardDefaults.outlinedCardColors(
+            containerColor = MaterialTheme.colorScheme.secondaryContainer,
+            contentColor = MaterialTheme.colorScheme.onSecondaryContainer,
+        ),
+    ) {
+        Column(
+            modifier = Modifier.padding(12.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            Text(
+                text = "Tagesplan",
+                style = MaterialTheme.typography.titleSmall,
+                fontWeight = FontWeight.Bold,
+            )
+            plannedWaitingTimes.take(5).forEach { item ->
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(item.name, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
+                        Text(
+                            text = plannerLine(item),
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.8f),
+                        )
+                    }
+                    IconButton(onClick = { onRemove(item.attractionId) }, modifier = Modifier.size(36.dp)) {
+                        Icon(Icons.Default.Clear, contentDescription = "Aus Tagesplan entfernen")
+                    }
+                }
+            }
+            if (plannedWaitingTimes.size > 5) {
+                Text(
+                    text = "+${plannedWaitingTimes.size - 5} weitere",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.8f),
+                )
+            }
+        }
+    }
+}
+
+@Composable
 private fun ParkHeaderSection(
     currentTime: Long,
     openingTimes: OpeningTimes?,
@@ -570,6 +673,11 @@ private fun ParkHeaderSection(
                         style = MaterialTheme.typography.labelSmall,
                         color = contentColor.copy(alpha = 0.8f)
                     )
+                    Text(
+                        text = weatherInsight(it),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = contentColor.copy(alpha = 0.8f)
+                    )
                 }
             }
 
@@ -590,6 +698,8 @@ private fun ParkHeaderSection(
 @Composable
 private fun WaitingTimeRow(
     item: WaitingTime,
+    isPlanned: Boolean,
+    onTogglePlanned: (String) -> Unit,
     onAddWatchlist: (String) -> Unit
 ) {
     val waitTimeColor = when {
@@ -641,6 +751,17 @@ private fun WaitingTimeRow(
             }
 
             IconButton(
+                onClick = { onTogglePlanned(item.attractionId) },
+                modifier = Modifier.size(40.dp)
+            ) {
+                Icon(
+                    imageVector = if (isPlanned) Icons.Default.Check else Icons.Default.Add,
+                    contentDescription = if (isPlanned) "Aus Tagesplan entfernen" else "Zum Tagesplan hinzufügen",
+                    tint = if (isPlanned) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+
+            IconButton(
                 onClick = { onAddWatchlist(item.attractionId) },
                 modifier = Modifier.size(40.dp)
             ) {
@@ -667,6 +788,24 @@ private fun WaitingTimeRow(
                 }
             }
         }
+    }
+}
+
+private fun plannerLine(item: WaitingTime): String {
+    return when (item.status) {
+        AttractionStatus.Opened -> "${item.waitingTime ?: 0} Min. Wartezeit"
+        else -> item.status.label()
+    }
+}
+
+private fun weatherInsight(weather: WeatherInfo): String {
+    return when {
+        weather.precipitationProbability >= 70 -> "Regenrisiko hoch - wetterbedingte Schliessungen moeglich"
+        weather.temperature >= 30 -> "Sehr warm - Pausen einplanen"
+        weather.temperature <= 3 -> "Sehr kalt - Outdoor-Attraktionen pruefen"
+        weather.weatherCode in 95..99 -> "Gewitterrisiko - Statusaenderungen beobachten"
+        weather.precipitationProbability <= 20 && weather.temperature in 12.0..26.0 -> "Gutes Besuchswetter"
+        else -> "Wetter im Blick behalten"
     }
 }
 

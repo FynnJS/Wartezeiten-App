@@ -30,6 +30,21 @@ interface ParkSnapshotDao {
         """
     )
     fun observeLatestOpenParkKeys(): Flow<List<String>>
+
+    @Query(
+        """
+        SELECT snapshots.*
+        FROM park_snapshots AS snapshots
+        INNER JOIN (
+            SELECT parkKey, MAX(capturedAtMillis) AS latestCapture
+            FROM park_snapshots
+            GROUP BY parkKey
+        ) AS latest
+            ON snapshots.parkKey = latest.parkKey
+            AND snapshots.capturedAtMillis = latest.latestCapture
+        """
+    )
+    fun observeLatestSnapshots(): Flow<List<ParkSnapshotEntity>>
     
     @Query("DELETE FROM park_snapshots WHERE capturedAtMillis < :olderThanMillis")
     suspend fun deleteOldSnapshots(olderThanMillis: Long)

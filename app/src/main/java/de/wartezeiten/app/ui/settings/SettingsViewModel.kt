@@ -3,6 +3,7 @@ package de.wartezeiten.app.ui.settings
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
+import de.wartezeiten.app.BuildConfig
 import de.wartezeiten.app.data.local.PreferencesDataSource
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -14,7 +15,7 @@ import javax.inject.Inject
 data class SettingsUiState(
     val darkMode: Boolean? = null,
     val dynamicColors: Boolean = true,
-    val version: String = "1.0.0"
+    val version: String = BuildConfig.VERSION_NAME
 )
 
 @HiltViewModel
@@ -27,7 +28,7 @@ class SettingsViewModel @Inject constructor(
             SettingsUiState(
                 darkMode = darkMode,
                 dynamicColors = false, // We'll simplify for now or add more flows
-                version = "1.0.0"
+                version = BuildConfig.VERSION_NAME
             )
         }
         .stateIn(
