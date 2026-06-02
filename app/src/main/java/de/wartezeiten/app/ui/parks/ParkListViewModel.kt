@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
 import de.wartezeiten.app.core.network.ApiResult
+import de.wartezeiten.app.core.network.NetworkError
 import de.wartezeiten.app.core.network.toUserMessage
 import de.wartezeiten.app.domain.model.Park
 import de.wartezeiten.app.domain.model.ParkRecommendation
@@ -192,23 +193,30 @@ class ParkListViewModel @Inject constructor(
                 is ApiResult.Success -> {
                     if (showFeedback) refreshTrigger.value += 1
                     if (!silent) {
-                        refreshRecommendations(language)
+                        refreshRecommendationsInBackground(language)
                     }
                 }
-                is ApiResult.Error -> errorMessage.value = result.type.toUserMessage()
+                is ApiResult.Error -> {
+                    val hasCachedParks = uiState.value.totalParkCount > 0
+                    if (showFeedback || !hasCachedParks || result.type != NetworkError.RateLimited) {
+                        errorMessage.value = result.type.toUserMessage()
+                    }
+                }
             }
             isLoading.value = false
         }
     }
 
-    private suspend fun refreshRecommendations(language: String) {
-        isRecommendationLoading.value = true
-        hasCompletedRecommendationScan.value = false
-        try {
-            repository.refreshParkRecommendationSnapshots(language)
-            hasCompletedRecommendationScan.value = true
-        } finally {
-            isRecommendationLoading.value = false
+    private fun refreshRecommendationsInBackground(language: String) {
+        viewModelScope.launch {
+            isRecommendationLoading.value = true
+            hasCompletedRecommendationScan.value = false
+            try {
+                val result = repository.refreshParkRecommendationSnapshots(language)
+                hasCompletedRecommendationScan.value = result is ApiResult.Success
+            } finally {
+                isRecommendationLoading.value = false
+            }
         }
     }
 

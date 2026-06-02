@@ -23,6 +23,7 @@ import de.wartezeiten.app.domain.repository.WartezeitenRepository
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.first
@@ -31,6 +32,9 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.withContext
 import javax.inject.Inject
 import javax.inject.Singleton
+
+private const val RECOMMENDATION_SNAPSHOT_MAX_AGE_MILLIS = 6 * 60 * 60 * 1000L
+private const val RECOMMENDATION_REQUEST_DELAY_MILLIS = 1_500L
 
 @Singleton
 class DefaultWartezeitenRepository @Inject constructor(
@@ -114,12 +118,26 @@ class DefaultWartezeitenRepository @Inject constructor(
     override suspend fun refreshParkRecommendationSnapshots(language: String): ApiResult<Unit> = withContext(ioDispatcher) {
         val parks = parkDao.observeParks(null).first()
         if (parks.isEmpty()) return@withContext ApiResult.Success(Unit)
+        val now = System.currentTimeMillis()
+        val freshParkKeys = parkSnapshotDao.observeLatestSnapshots()
+            .first()
+            .filter { now - it.capturedAtMillis <= RECOMMENDATION_SNAPSHOT_MAX_AGE_MILLIS }
+            .map { it.parkKey }
+            .toSet()
+        val parksToRefresh = parks.filter { park ->
+            park.id !in freshParkKeys && park.uuid !in freshParkKeys
+        }
+        if (parksToRefresh.isEmpty()) return@withContext ApiResult.Success(Unit)
 
         var firstError: ApiResult.Error? = null
-        parks.forEach { park ->
+        parksToRefresh.forEachIndexed { index, park ->
+            if (index > 0) delay(RECOMMENDATION_REQUEST_DELAY_MILLIS)
             when (val result = refreshParkRecommendationSnapshot(park.id, language)) {
                 is ApiResult.Success -> Unit
-                is ApiResult.Error -> if (firstError == null) firstError = result
+                is ApiResult.Error -> {
+                    if (firstError == null) firstError = result
+                    if (result.type == NetworkError.RateLimited) return@withContext result
+                }
             }
         }
 
@@ -129,16 +147,9 @@ class DefaultWartezeitenRepository @Inject constructor(
     private suspend fun refreshParkRecommendationSnapshot(
         parkKey: String,
         language: String,
-    ): ApiResult<Unit> = coroutineScope {
-        val openingTimes = async { safeApiCall { api.getOpeningTimes(parkKey) } }
-        val waitingTimes = async { safeApiCall { api.getWaitingTimes(parkKey, language) } }
-        val crowdLevel = async { safeApiCall { api.getCrowdLevel(parkKey) } }
-
+    ): ApiResult<Unit> {
         val now = System.currentTimeMillis()
-        val openingResult = openingTimes.await()
-        val waitingResult = waitingTimes.await()
-        val crowdResult = crowdLevel.await()
-
+        val openingResult = safeApiCall { api.getOpeningTimes(parkKey) }
         val openedToday = (openingResult as? ApiResult.Success)
             ?.data
             ?.firstOrNull()
@@ -151,6 +162,37 @@ class DefaultWartezeitenRepository @Inject constructor(
             ?.data
             ?.firstOrNull()
             ?.closing
+
+        if (openedToday == false) {
+            parkSnapshotDao.insert(
+                ParkSnapshotEntity(
+                    parkKey = parkKey,
+                    capturedAtMillis = now,
+                    apiCrowdLevel = null,
+                    calculatedCrowdLevel = null,
+                    displayCrowdLevel = null,
+                    openedToday = false,
+                    openFrom = openFrom,
+                    closedFrom = closedFrom,
+                    openAttractions = 0,
+                    totalAttractions = 0,
+                )
+            )
+            return ApiResult.Success(Unit)
+        }
+
+        if (openingResult is ApiResult.Error && openingResult.type == NetworkError.RateLimited) {
+            return openingResult
+        }
+
+        delay(RECOMMENDATION_REQUEST_DELAY_MILLIS)
+        val waitingResult = safeApiCall { api.getWaitingTimes(parkKey, language) }
+        if (waitingResult is ApiResult.Error && waitingResult.type == NetworkError.RateLimited) {
+            return waitingResult
+        }
+
+        delay(RECOMMENDATION_REQUEST_DELAY_MILLIS)
+        val crowdResult = safeApiCall { api.getCrowdLevel(parkKey) }
         val waitingData = (waitingResult as? ApiResult.Success)?.data.orEmpty()
         val openAttractions = waitingData.count { it.status.equals("opened", ignoreCase = true) }
         val totalAttractions = waitingData.size
@@ -178,7 +220,7 @@ class DefaultWartezeitenRepository @Inject constructor(
             )
         }
 
-        listOf(openingResult, waitingResult, crowdResult)
+        return listOf(openingResult, waitingResult, crowdResult)
             .asSequence()
             .filterIsInstance<ApiResult.Error>()
             .sortedBy { errorPriority(it.type) }
