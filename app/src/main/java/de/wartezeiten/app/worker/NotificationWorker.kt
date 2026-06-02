@@ -1,10 +1,13 @@
 package de.wartezeiten.app.worker
 
 import android.Manifest
+import android.app.PendingIntent
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.content.Context
+import android.content.Intent
 import android.content.pm.PackageManager
+import android.net.Uri
 import android.os.Build
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
@@ -22,6 +25,7 @@ import de.wartezeiten.app.data.local.entity.WatchlistEntity
 import de.wartezeiten.app.data.local.entity.WatchlistType
 import de.wartezeiten.app.data.remote.WartezeitenApiService
 import de.wartezeiten.app.data.remote.dto.WaitingTimeDto
+import de.wartezeiten.app.MainActivity
 import kotlinx.coroutines.flow.first
 import java.util.Locale
 
@@ -34,6 +38,7 @@ private data class WatchlistNotification(
     val title: String,
     val content: String,
     val parkKey: String,
+    val parkName: String,
 )
 
 @HiltWorker
@@ -66,19 +71,20 @@ class NotificationWorker @AssistedInject constructor(
             val openingTimes = safeApiCall { api.getOpeningTimes(parkKey) }
             val waitingTimes = safeApiCall { api.getWaitingTimes(parkKey, "de") }
             val crowdLevel = safeApiCall { api.getCrowdLevel(parkKey) }
-            val isParkOpen = openingTimes?.firstOrNull()?.openedToday == true
+            val opening = openingTimes?.firstOrNull()
+            val isParkOpen = opening?.openedToday == true
+            val canUseLiveAttractionAlerts = opening?.openedToday != false &&
+                    waitingTimes?.any { it.status.normalizedStatus() == "opened" } == true
 
             collectParkNotifications(parkKey, parkName, isParkOpen, alerts, notifications)
 
             val crowdValue = crowdLevel?.crowdLevel?.replace(",", ".")?.toFloatOrNull()
-            collectCrowdNotifications(parkKey, parkName, isParkOpen, crowdValue, alerts, notifications)
+            collectCrowdNotifications(parkKey, parkName, canUseLiveAttractionAlerts, crowdValue, alerts, notifications)
 
-            if (isParkOpen && waitingTimes != null) {
+            if (canUseLiveAttractionAlerts && waitingTimes != null) {
                 collectWaitBelowNotifications(parkKey, parkName, waitingTimes, alerts, notifications)
                 collectWaitAboveNotifications(parkKey, parkName, waitingTimes, alerts, notifications)
-            }
-            if (waitingTimes != null) {
-                collectStatusNotifications(parkKey, waitingTimes, alerts, notifications)
+                collectStatusNotifications(parkKey, parkName, waitingTimes, alerts, notifications)
             }
         }
 
@@ -100,9 +106,10 @@ class NotificationWorker @AssistedInject constructor(
             if (shouldNotifyBoolean(alert.id, isParkOpen)) {
                 notifications.add(
                     WatchlistNotification(
-                        title = "$parkName ist geöffnet",
-                        content = "Der Park ist heute geöffnet. Schau dir jetzt die aktuellen Wartezeiten an.",
+                        title = "$parkName ist heute geöffnet",
+                        content = "Tippe, um die aktuellen Wartezeiten zu sehen.",
                         parkKey = parkKey,
+                        parkName = parkName,
                     )
                 )
             }
@@ -113,13 +120,14 @@ class NotificationWorker @AssistedInject constructor(
             if (shouldNotifyValue(alert.id, status, notifyOnFirstMatch = false)) {
                 notifications.add(
                     WatchlistNotification(
-                        title = "$parkName hat den Status geändert",
+                        title = "$parkName: Status geändert",
                         content = if (isParkOpen) {
-                            "Der Park ist jetzt als geöffnet gemeldet."
+                            "Heute geöffnet."
                         } else {
-                            "Der Park ist jetzt als geschlossen gemeldet."
+                            "Heute geschlossen."
                         },
                         parkKey = parkKey,
+                        parkName = parkName,
                     )
                 )
             }
@@ -139,9 +147,10 @@ class NotificationWorker @AssistedInject constructor(
             if (shouldNotifyBoolean(alert.id, triggered)) {
                 notifications.add(
                     WatchlistNotification(
-                        title = "$parkName wirkt entspannter",
-                        content = "Besucheraufkommen ${crowdValue?.formatPercent() ?: "?"}%, dein Limit: höchstens ${alert.threshold}%.",
+                        title = "$parkName: Auslastung niedrig",
+                        content = "Auslastung bei ${crowdValue?.formatPercent() ?: "?"}% (Limit: max. ${alert.threshold}%).",
                         parkKey = parkKey,
+                        parkName = parkName,
                     )
                 )
             }
@@ -152,9 +161,10 @@ class NotificationWorker @AssistedInject constructor(
             if (shouldNotifyBoolean(alert.id, triggered)) {
                 notifications.add(
                     WatchlistNotification(
-                        title = "$parkName wird voller",
-                        content = "Besucheraufkommen ${crowdValue?.formatPercent() ?: "?"}%, dein Limit: mindestens ${alert.threshold}%.",
+                        title = "$parkName: Auslastung hoch",
+                        content = "Auslastung bei ${crowdValue?.formatPercent() ?: "?"}% (Limit: min. ${alert.threshold}%).",
                         parkKey = parkKey,
+                        parkName = parkName,
                     )
                 )
             }
@@ -182,8 +192,9 @@ class NotificationWorker @AssistedInject constructor(
                 notifications.add(
                     WatchlistNotification(
                         title = if (target != null) "${target.name} ist schneller" else "Kurze Wartezeit in $parkName",
-                        content = "${best?.name ?: "Eine Attraktion"} liegt bei ${best?.waitingTime ?: 0} Min., dein Limit: höchstens ${alert.threshold} Min.",
+                        content = "${best?.name ?: "Eine Attraktion"}: ${best?.waitingTime ?: 0} Min. (Limit: max. ${alert.threshold} Min.).",
                         parkKey = parkKey,
+                        parkName = parkName,
                     )
                 )
             }
@@ -211,8 +222,9 @@ class NotificationWorker @AssistedInject constructor(
                 notifications.add(
                     WatchlistNotification(
                         title = if (target != null) "${target.name} ist länger" else "Lange Wartezeit in $parkName",
-                        content = "${longest?.name ?: "Eine Attraktion"} liegt bei ${longest?.waitingTime ?: 0} Min., dein Limit: mindestens ${alert.threshold} Min.",
+                        content = "${longest?.name ?: "Eine Attraktion"}: ${longest?.waitingTime ?: 0} Min. (Limit: min. ${alert.threshold} Min.).",
                         parkKey = parkKey,
+                        parkName = parkName,
                     )
                 )
             }
@@ -221,6 +233,7 @@ class NotificationWorker @AssistedInject constructor(
 
     private suspend fun collectStatusNotifications(
         parkKey: String,
+        parkName: String,
         waitingTimes: List<WaitingTimeDto>,
         alerts: List<WatchlistEntity>,
         notifications: MutableList<WatchlistNotification>,
@@ -238,12 +251,12 @@ class NotificationWorker @AssistedInject constructor(
                 } ?: return@forEach
 
                 val shouldSend = when (alert.type) {
-                    WatchlistType.ATTRACTION_OPEN -> shouldNotifyBoolean(alert.id, current.status == "opened")
-                    WatchlistType.ATTRACTION_CLOSED -> shouldNotifyBoolean(alert.id, current.status == "closed")
-                    WatchlistType.ATTRACTION_MAINTENANCE -> shouldNotifyBoolean(alert.id, current.status == "maintenance")
+                    WatchlistType.ATTRACTION_OPEN -> shouldNotifyBoolean(alert.id, current.status.normalizedStatus() == "opened")
+                    WatchlistType.ATTRACTION_CLOSED -> shouldNotifyBoolean(alert.id, current.status.normalizedStatus() == "closed")
+                    WatchlistType.ATTRACTION_MAINTENANCE -> shouldNotifyBoolean(alert.id, current.status.normalizedStatus() == "maintenance")
                     WatchlistType.ATTRACTION_STATUS_CHANGE -> shouldNotifyValue(
                         alert.id,
-                        current.status,
+                        current.status.normalizedStatus(),
                         notifyOnFirstMatch = false,
                     )
                     else -> false
@@ -255,21 +268,29 @@ class NotificationWorker @AssistedInject constructor(
                             title = current.name,
                             content = current.status.toReadableStatus(),
                             parkKey = parkKey,
+                            parkName = parkName,
                         )
                     )
                 }
             }
     }
 
-    private fun notificationIntent(parkKey: String): android.app.PendingIntent {
-        return android.app.PendingIntent.getActivity(
+    private fun notificationIntent(parkKey: String): PendingIntent {
+        val intent = Intent(applicationContext, MainActivity::class.java).apply {
+            action = Intent.ACTION_VIEW
+            data = Uri.Builder()
+                .scheme("wartezeiten")
+                .authority("parks")
+                .appendPath(parkKey)
+                .build()
+            flags = Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP
+        }
+
+        return PendingIntent.getActivity(
             applicationContext,
-            0,
-            android.content.Intent(applicationContext, Class.forName("de.wartezeiten.app.MainActivity")).apply {
-                action = android.content.Intent.ACTION_VIEW
-                data = android.net.Uri.parse("wartezeiten://parks/$parkKey")
-            },
-            android.app.PendingIntent.FLAG_IMMUTABLE or android.app.PendingIntent.FLAG_UPDATE_CURRENT
+            parkKey.notificationId(),
+            intent,
+            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
         )
     }
 
@@ -297,7 +318,7 @@ class NotificationWorker @AssistedInject constructor(
             val title = if (parkNotifications.size == 1) {
                 first.title
             } else {
-                "${parkNotifications.size} Hinweise für ${first.parkKey}"
+                "${parkNotifications.size} Hinweise für ${first.parkName}"
             }
             val content = if (parkNotifications.size == 1) {
                 first.content
@@ -327,7 +348,7 @@ class NotificationWorker @AssistedInject constructor(
         val summary = NotificationCompat.Builder(applicationContext, CHANNEL_ID)
             .setSmallIcon(de.wartezeiten.app.R.mipmap.ic_launcher)
             .setContentTitle("${notifications.size} neue Wartezeiten-Hinweise")
-            .setContentText("${groupedByPark.size} Park(s) mit neuen Hinweisen")
+            .setContentText(groupedByPark.size.toParkCountText())
             .setContentIntent(notificationIntent(notifications.first().parkKey))
             .setStyle(NotificationCompat.BigTextStyle().bigText(summaryText))
             .setPriority(NotificationCompat.PRIORITY_HIGH)
@@ -379,7 +400,7 @@ class NotificationWorker @AssistedInject constructor(
     }
 
     private fun WaitingTimeDto.isOpenWithWaitTime(): Boolean {
-        return status == "opened" && waitingTime != null && waitingTime >= 0
+        return status.normalizedStatus() == "opened" && waitingTime != null && waitingTime >= 0
     }
 
     private fun canPostNotifications(): Boolean {
@@ -399,11 +420,21 @@ class NotificationWorker @AssistedInject constructor(
     }
 
     private fun String.toReadableStatus(): String {
-        return when (this) {
-            "opened" -> "Die Attraktion ist jetzt geöffnet."
-            "closed" -> "Die Attraktion ist jetzt geschlossen."
+        return when (normalizedStatus()) {
+            "opened" -> "Jetzt geöffnet."
+            "closed" -> "Jetzt geschlossen."
             "maintenance" -> "Die Attraktion ist aktuell in Wartung."
-            else -> "Der Status hat sich geändert: $this"
+            else -> "Status geändert: $this"
+        }
+    }
+
+    private fun String.normalizedStatus(): String = trim().lowercase(Locale.ROOT)
+
+    private fun Int.toParkCountText(): String {
+        return if (this == 1) {
+            "1 Park mit neuen Hinweisen"
+        } else {
+            "$this Parks mit neuen Hinweisen"
         }
     }
 }

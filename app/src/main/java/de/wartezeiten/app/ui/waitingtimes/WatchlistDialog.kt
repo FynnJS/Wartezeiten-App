@@ -113,11 +113,12 @@ fun AddWatchlistDialog(
     val thresholdLabel = when (selectedType) {
         WatchlistType.WAIT_TIME_BELOW -> "Wartezeit unter (Min)"
         WatchlistType.WAIT_TIME_ABOVE -> "Wartezeit über (Min)"
-        WatchlistType.CROWD_LEVEL_BELOW -> "Crowd unter (%)"
-        WatchlistType.CROWD_LEVEL_ABOVE -> "Crowd über (%)"
+        WatchlistType.CROWD_LEVEL_BELOW -> "Auslastung unter (%)"
+        WatchlistType.CROWD_LEVEL_ABOVE -> "Auslastung über (%)"
         else -> ""
     }
     val thresholdValue = threshold.toIntOrNull()
+    val effectiveThreshold = if (showThresholdField) thresholdValue ?: 0 else 0
     val canSave = permissionGranted.value && (!showThresholdField || thresholdValue != null)
 
     AlertDialog(
@@ -180,9 +181,19 @@ fun AddWatchlistDialog(
                         parkKey = parkKey,
                         attractionId = attractionId,
                         type = selectedType,
-                        threshold = thresholdValue ?: 0
+                        threshold = effectiveThreshold,
+                        onSaved = { saved ->
+                            if (saved) {
+                                NotificationScheduler.runSoonAndKeepChecking(context)
+                            } else {
+                                Toast.makeText(
+                                    context,
+                                    "Diese Benachrichtigung ist bereits angelegt.",
+                                    Toast.LENGTH_SHORT,
+                                ).show()
+                            }
+                        }
                     )
-                    NotificationScheduler.runSoonAndKeepChecking(context)
                     onDismiss()
                 }) { Text("Speichern") }
         },
@@ -196,8 +207,8 @@ fun WatchlistType.label(): String = when (this) {
     WatchlistType.WAIT_TIME_BELOW -> "Unter Limit"
     WatchlistType.WAIT_TIME_ABOVE -> "Über Limit"
     WatchlistType.NOW_OPENED -> "Park öffnet"
-    WatchlistType.CROWD_LEVEL_BELOW -> "Crowd niedrig"
-    WatchlistType.CROWD_LEVEL_ABOVE -> "Crowd hoch"
+    WatchlistType.CROWD_LEVEL_BELOW -> "Auslastung niedrig"
+    WatchlistType.CROWD_LEVEL_ABOVE -> "Auslastung hoch"
     WatchlistType.ATTRACTION_STATUS_CHANGE -> "Statuswechsel"
     WatchlistType.ATTRACTION_OPEN -> "Öffnet"
     WatchlistType.ATTRACTION_CLOSED -> "Schließt"
@@ -209,8 +220,8 @@ private fun WatchlistType.description(): String = when (this) {
     WatchlistType.WAIT_TIME_BELOW -> "Du wirst informiert, sobald die Wartezeit den Grenzwert erreicht oder unterschreitet."
     WatchlistType.WAIT_TIME_ABOVE -> "Du wirst informiert, sobald die Wartezeit den Grenzwert erreicht oder überschreitet."
     WatchlistType.NOW_OPENED -> "Du bekommst einen Hinweis, wenn der Park heute geöffnet ist."
-    WatchlistType.CROWD_LEVEL_BELOW -> "Du bekommst einen Hinweis, wenn das Besucheraufkommen unter deinem Grenzwert liegt."
-    WatchlistType.CROWD_LEVEL_ABOVE -> "Du bekommst einen Hinweis, wenn das Besucheraufkommen über deinem Grenzwert liegt."
+    WatchlistType.CROWD_LEVEL_BELOW -> "Du bekommst einen Hinweis, wenn die Auslastung unter deinem Grenzwert liegt und mindestens eine Attraktion geöffnet ist."
+    WatchlistType.CROWD_LEVEL_ABOVE -> "Du bekommst einen Hinweis, wenn die Auslastung über deinem Grenzwert liegt und mindestens eine Attraktion geöffnet ist."
     WatchlistType.ATTRACTION_STATUS_CHANGE -> "Du bekommst einen Hinweis, wenn sich der Status ändert."
     WatchlistType.ATTRACTION_OPEN -> "Du bekommst einen Hinweis, wenn die Attraktion öffnet."
     WatchlistType.ATTRACTION_CLOSED -> "Du bekommst einen Hinweis, wenn die Attraktion schließt."
@@ -239,16 +250,33 @@ class WatchlistViewModel @Inject constructor(
 
         alerts.map { alert ->
             val parkName = parkNamesById[alert.parkKey] ?: parkNamesByUuid[alert.parkKey]
-            
+
             // Fetch waiting times to get attraction name
             val attractionName = alert.attractionId // Need to map this correctly later
-            
+
             WatchlistAlertWithParkName(alert = alert, parkName = parkName, attractionName = attractionName)
         }
     }
 
-    fun addAlert(parkKey: String, attractionId: String?, type: WatchlistType, threshold: Int) {
+    fun addAlert(
+        parkKey: String,
+        attractionId: String?,
+        type: WatchlistType,
+        threshold: Int,
+        onSaved: (Boolean) -> Unit = {},
+    ) {
         viewModelScope.launch {
+            val alreadyExists = watchlistDao.countMatching(
+                parkKey = parkKey,
+                attractionId = attractionId,
+                type = type,
+                threshold = threshold,
+            ) > 0
+            if (alreadyExists) {
+                onSaved(false)
+                return@launch
+            }
+
             watchlistDao.insert(
                 WatchlistEntity(
                     parkKey = parkKey,
@@ -257,6 +285,7 @@ class WatchlistViewModel @Inject constructor(
                     threshold = threshold
                 )
             )
+            onSaved(true)
         }
     }
 
