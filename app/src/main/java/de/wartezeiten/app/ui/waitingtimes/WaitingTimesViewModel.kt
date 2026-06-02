@@ -23,9 +23,11 @@ import de.wartezeiten.app.domain.model.WeatherInfo
 import de.wartezeiten.app.domain.repository.WartezeitenRepository
 import de.wartezeiten.app.domain.usecase.RefreshParkDetailUseCase
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.take
@@ -70,6 +72,7 @@ data class WaitingTimesUiState(
     val weather: WeatherInfo? = null,
     val holidays: List<HolidayInfo> = emptyList(),
     val trendSummary: ParkTrendSummary = ParkTrendSummary.Empty,
+    val language: String = PreferencesDataSource.DEFAULT_LANGUAGE,
 )
 
 @HiltViewModel
@@ -89,6 +92,8 @@ class WaitingTimesViewModel @Inject constructor(
     private val errorMessage = MutableStateFlow<String?>(null)
     private val lastRefreshed = MutableStateFlow(0L)
     private val refreshTrigger = MutableStateFlow(0)
+    private val currentLanguage = MutableStateFlow(PreferencesDataSource.DEFAULT_LANGUAGE)
+    private var refreshJob: Job? = null
 
     // Aktuelle Uhrzeit Flow (aktualisiert jede Minute)
     private val currentLocalTime = flow {
@@ -103,13 +108,18 @@ class WaitingTimesViewModel @Inject constructor(
         FilterState(s, f, query, maxWait, plan)
     }
 
-    private val loadState = combine(isLoading, errorMessage, lastRefreshed, refreshTrigger, currentLocalTime) { l, e, r, t, c ->
+    private val timeAndLanguageState = combine(currentLocalTime, currentLanguage) { currentTime, language ->
+        currentTime to language
+    }
+
+    private val loadState = combine(isLoading, errorMessage, lastRefreshed, refreshTrigger, timeAndLanguageState) { l, e, r, t, timeAndLanguage ->
         object {
             val isLoading = l
             val errorMessage = e
             val lastRefreshed = r
             val refreshTrigger = t
-            val currentTime = c
+            val currentTime = timeAndLanguage.first
+            val language = timeAndLanguage.second
         }
     }
 
@@ -149,6 +159,7 @@ class WaitingTimesViewModel @Inject constructor(
                 refreshTrigger = status.refreshTrigger,
                 currentLocalTime = status.currentTime,
                 trendSummary = trendSummary,
+                language = status.language,
             )
         } else {
             val hasOpenAttraction = detail.waitingTimes.any { it.status == AttractionStatus.Opened }
@@ -188,6 +199,7 @@ class WaitingTimesViewModel @Inject constructor(
                     confidenceScore = if (detail.crowdLevel != null) 0.9f else 0.7f
                 ),
                 trendSummary = if (canCalculateCrowdLevel) trendSummary else ParkTrendSummary.Empty,
+                language = status.language,
             )
         }
     }.stateIn(
@@ -198,8 +210,17 @@ class WaitingTimesViewModel @Inject constructor(
 
     init {
         restoreSavedFilters()
-        refresh(showFeedback = false)
+        observeLanguage()
         startAutoRefresh()
+    }
+
+    private fun observeLanguage() {
+        viewModelScope.launch {
+            preferences.language.distinctUntilChanged().collect { language ->
+                currentLanguage.value = language
+                refresh(language = language, showFeedback = false)
+            }
+        }
     }
 
     /** Automatische Aktualisierung jede Minute */
@@ -207,7 +228,7 @@ class WaitingTimesViewModel @Inject constructor(
         viewModelScope.launch {
             while (isActive) {
                 delay(60_000L)
-                refresh(silent = true)
+                refresh(language = currentLanguage.value, silent = true)
             }
         }
     }
@@ -251,11 +272,12 @@ class WaitingTimesViewModel @Inject constructor(
     }
 
     fun refresh(
-        language: String = "de",
+        language: String = currentLanguage.value,
         silent: Boolean = false,
         showFeedback: Boolean = !silent
     ) {
-        viewModelScope.launch {
+        refreshJob?.cancel()
+        refreshJob = viewModelScope.launch {
             if (!silent) isLoading.value = true
             errorMessage.value = null
             when (val result = refreshParkDetail(parkKey, language)) {

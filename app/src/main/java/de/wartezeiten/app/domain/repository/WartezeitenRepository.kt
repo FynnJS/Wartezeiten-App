@@ -7,12 +7,21 @@ import de.wartezeiten.app.domain.model.ParkRecommendation
 import de.wartezeiten.app.domain.model.ParkTrendSummary
 import kotlinx.coroutines.flow.Flow
 
+data class ParkRecommendationScanProgress(
+    val completedParks: Int,
+    val totalParks: Int,
+    val estimatedRemainingMillis: Long,
+)
+
 interface WartezeitenRepository {
     fun observeParks(query: String?): Flow<List<Park>>
     fun observeLatestOpenParkKeys(): Flow<Set<String>>
     fun observeBestParkRecommendation(): Flow<ParkRecommendation?>
     suspend fun refreshParks(language: String): ApiResult<Unit>
-    suspend fun refreshParkRecommendationSnapshots(language: String): ApiResult<Unit>
+    suspend fun refreshParkRecommendationSnapshots(
+        language: String,
+        onProgress: (ParkRecommendationScanProgress) -> Unit = {},
+    ): ApiResult<Unit>
 
     fun observeParkDetail(parkKey: String): Flow<ParkDetail>
     suspend fun refreshParkDetail(parkKey: String, language: String): ApiResult<Unit>

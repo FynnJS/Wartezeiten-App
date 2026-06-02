@@ -6,14 +6,18 @@ import dagger.hilt.android.lifecycle.HiltViewModel
 import de.wartezeiten.app.core.network.ApiResult
 import de.wartezeiten.app.core.network.NetworkError
 import de.wartezeiten.app.core.network.toUserMessage
+import de.wartezeiten.app.data.local.PreferencesDataSource
 import de.wartezeiten.app.domain.model.Park
 import de.wartezeiten.app.domain.model.ParkRecommendation
+import de.wartezeiten.app.domain.repository.ParkRecommendationScanProgress
 import de.wartezeiten.app.domain.repository.WartezeitenRepository
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.isActive
@@ -31,6 +35,8 @@ data class ParkListUiState(
     val sort: ParkSort = ParkSort.FavoritesFirst,
     val recommendation: ParkRecommendation? = null,
     val isRecommendationLoading: Boolean = false,
+    val recommendationScanStatus: String? = null,
+    val language: String = PreferencesDataSource.DEFAULT_LANGUAGE,
     val totalParkCount: Int = 0,
     val visibleCountryCount: Int = 0,
     val isShowingOfflineData: Boolean = false,
@@ -49,6 +55,7 @@ enum class ParkSort {
 @HiltViewModel
 class ParkListViewModel @Inject constructor(
     private val repository: WartezeitenRepository,
+    private val preferences: PreferencesDataSource,
 ) : ViewModel() {
     private val query = MutableStateFlow("")
     private val selectedCountry = MutableStateFlow<String?>(null)
@@ -57,9 +64,12 @@ class ParkListViewModel @Inject constructor(
     private val sort = MutableStateFlow(ParkSort.FavoritesFirst)
     private val isLoading = MutableStateFlow(value = false)
     private val isRecommendationLoading = MutableStateFlow(value = false)
-    private val hasCompletedRecommendationScan = MutableStateFlow(value = false)
+    private val recommendationScanProgress = MutableStateFlow<ParkRecommendationScanProgress?>(null)
+    private val currentLanguage = MutableStateFlow(PreferencesDataSource.DEFAULT_LANGUAGE)
     private val errorMessage = MutableStateFlow<String?>(null)
     private val refreshTrigger = MutableStateFlow(0)
+    private var refreshJob: Job? = null
+    private var recommendationRefreshJob: Job? = null
 
     private val allParks = query.flatMapLatest { repository.observeParks(it) }
     private val latestOpenParkKeys = repository.observeLatestOpenParkKeys()
@@ -75,7 +85,8 @@ class ParkListViewModel @Inject constructor(
         sort,
         recommendation,
         isRecommendationLoading,
-        hasCompletedRecommendationScan,
+        recommendationScanProgress,
+        currentLanguage,
         isLoading,
         errorMessage,
         refreshTrigger
@@ -90,10 +101,11 @@ class ParkListViewModel @Inject constructor(
         val currentSort = args[6] as ParkSort
         val currentRecommendation = args[7] as ParkRecommendation?
         val recommendationLoading = args[8] as Boolean
-        val recommendationScanCompleted = args[9] as Boolean
-        val loading = args[10] as Boolean
-        val error = args[11] as String?
-        val trigger = args[12] as Int
+        val scanProgress = args[9] as ParkRecommendationScanProgress?
+        val language = args[10] as String
+        val loading = args[11] as Boolean
+        val error = args[12] as String?
+        val trigger = args[13] as Int
 
         val favorites = parks.filter { it.isFavorite }
         val countries = parks.map { it.country }.distinct().sorted()
@@ -113,8 +125,10 @@ class ParkListViewModel @Inject constructor(
             showOpenOnly = openOnly,
             showFavoritesOnly = favoritesOnly,
             sort = currentSort,
-            recommendation = currentRecommendation.takeIf { recommendationScanCompleted },
-            isRecommendationLoading = recommendationLoading,
+            recommendation = currentRecommendation,
+            isRecommendationLoading = recommendationLoading && currentRecommendation == null,
+            recommendationScanStatus = scanProgress?.toStatusText(language),
+            language = language,
             totalParkCount = parks.size,
             visibleCountryCount = filtered.map { it.country }.distinct().size,
             isShowingOfflineData = error != null && parks.isNotEmpty(),
@@ -129,8 +143,17 @@ class ParkListViewModel @Inject constructor(
     )
 
     init {
-        refresh(showFeedback = false)
+        observeLanguage()
         startAutoRefresh()
+    }
+
+    private fun observeLanguage() {
+        viewModelScope.launch {
+            preferences.language.distinctUntilChanged().collect { language ->
+                currentLanguage.value = language
+                refresh(language = language, showFeedback = false)
+            }
+        }
     }
 
     /** Automatische Aktualisierung jede Minute */
@@ -138,7 +161,7 @@ class ParkListViewModel @Inject constructor(
         viewModelScope.launch {
             while (isActive) {
                 delay(60_000L)
-                refresh(silent = true)
+                refresh(language = currentLanguage.value, silent = true)
             }
         }
     }
@@ -182,11 +205,12 @@ class ParkListViewModel @Inject constructor(
     }
 
     fun refresh(
-        language: String = "de",
+        language: String = currentLanguage.value,
         silent: Boolean = false,
         showFeedback: Boolean = !silent
     ) {
-        viewModelScope.launch {
+        refreshJob?.cancel()
+        refreshJob = viewModelScope.launch {
             if (!silent) isLoading.value = true
             errorMessage.value = null
             when (val result = repository.refreshParks(language)) {
@@ -208,15 +232,37 @@ class ParkListViewModel @Inject constructor(
     }
 
     private fun refreshRecommendationsInBackground(language: String) {
-        viewModelScope.launch {
+        recommendationRefreshJob?.cancel()
+        recommendationRefreshJob = viewModelScope.launch {
             isRecommendationLoading.value = true
-            hasCompletedRecommendationScan.value = false
+            recommendationScanProgress.value = null
             try {
-                val result = repository.refreshParkRecommendationSnapshots(language)
-                hasCompletedRecommendationScan.value = result is ApiResult.Success
+                repository.refreshParkRecommendationSnapshots(language) { progress ->
+                    recommendationScanProgress.value = progress.takeIf { it.totalParks > 0 }
+                }
             } finally {
+                recommendationScanProgress.value = null
                 isRecommendationLoading.value = false
             }
+        }
+    }
+
+    private fun ParkRecommendationScanProgress.toStatusText(language: String): String {
+        return if (language == "en") {
+            "Scan running: $completedParks/$totalParks parks · ${estimatedRemainingMillis.toRemainingTimeText(language)} left"
+        } else {
+            "Scan läuft: $completedParks/$totalParks Parks · ${estimatedRemainingMillis.toRemainingTimeText(language)} verbleibend"
+        }
+    }
+
+    private fun Long.toRemainingTimeText(language: String): String {
+        if (this <= 0L) return if (language == "en") "almost done" else "gleich fertig"
+        val seconds = ((this + 999L) / 1_000L).coerceAtLeast(1L)
+        return if (seconds < 60L) {
+            if (language == "en") "about ${seconds}s" else "ca. ${seconds} Sek."
+        } else {
+            val minutes = ((seconds + 59L) / 60L).coerceAtLeast(1L)
+            if (language == "en") "about ${minutes} min" else "ca. ${minutes} Min."
         }
     }
 

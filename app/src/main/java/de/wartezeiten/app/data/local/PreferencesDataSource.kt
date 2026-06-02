@@ -29,6 +29,7 @@ class PreferencesDataSource @Inject constructor(
         val WAITING_TIMES_SORT = stringPreferencesKey("waiting_times_sort")
         val WAITING_TIMES_FILTER = stringPreferencesKey("waiting_times_filter")
         val WAITING_TIMES_MAX_WAIT = intPreferencesKey("waiting_times_max_wait")
+        val LANGUAGE = stringPreferencesKey("language")
     }
 
     val darkMode: Flow<Boolean?> = context.dataStore.data
@@ -85,6 +86,16 @@ class PreferencesDataSource @Inject constructor(
         }
         .map { preferences -> preferences[PreferencesKeys.WAITING_TIMES_MAX_WAIT] }
 
+    val language: Flow<String> = context.dataStore.data
+        .catch { exception ->
+            if (exception is IOException) {
+                emit(emptyPreferences())
+            } else {
+                throw exception
+            }
+        }
+        .map { preferences -> preferences[PreferencesKeys.LANGUAGE] ?: DEFAULT_LANGUAGE }
+
     suspend fun setDarkMode(enabled: Boolean?) {
         context.dataStore.edit { preferences ->
             if (enabled == null) {
@@ -121,5 +132,16 @@ class PreferencesDataSource @Inject constructor(
                 preferences[PreferencesKeys.WAITING_TIMES_MAX_WAIT] = value
             }
         }
+    }
+
+    suspend fun setLanguage(value: String) {
+        context.dataStore.edit { preferences ->
+            preferences[PreferencesKeys.LANGUAGE] = value.takeIf { it in SUPPORTED_LANGUAGES } ?: DEFAULT_LANGUAGE
+        }
+    }
+
+    companion object {
+        const val DEFAULT_LANGUAGE = "de"
+        val SUPPORTED_LANGUAGES = setOf("de", "en")
     }
 }

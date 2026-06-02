@@ -28,7 +28,9 @@ fun WartezeitenApp(notificationParkKey: String? = null) {
     val navController = rememberNavController()
     val context = LocalContext.current
     val updateViewModel: UpdateViewModel = hiltViewModel()
+    val settingsViewModel: de.wartezeiten.app.ui.settings.SettingsViewModel = hiltViewModel()
     val updateState by updateViewModel.uiState.collectAsStateWithLifecycle()
+    val settingsState by settingsViewModel.uiState.collectAsStateWithLifecycle()
 
     LaunchedEffect(notificationParkKey) {
         notificationParkKey?.let { parkKey ->
@@ -83,6 +85,7 @@ fun WartezeitenApp(notificationParkKey: String? = null) {
         if (updateState.updateAvailable && updateState.showBanner && releaseInfo != null) {
             UpdateBanner(
                 releaseInfo = releaseInfo,
+                language = settingsState.language,
                 onInstallClick = {
                     val intent = Intent(Intent.ACTION_VIEW, Uri.parse(releaseInfo.apkUrl))
                     intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)

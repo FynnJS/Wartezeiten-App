@@ -28,6 +28,7 @@ import de.wartezeiten.app.data.remote.dto.AppUpdateInfo
 @Composable
 fun UpdateBanner(
     releaseInfo: AppUpdateInfo,
+    language: String = "de",
     onInstallClick: () -> Unit,
     onDismiss: () -> Unit,
 ) {
@@ -53,13 +54,18 @@ fun UpdateBanner(
             ) {
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
-                        text = "Update verfügbar: ${releaseInfo.versionName}",
+                        text = if (language == "en") {
+                            "Update available: ${releaseInfo.versionName}"
+                        } else {
+                            "Update verfügbar: ${releaseInfo.versionName}"
+                        },
                         style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
                         color = MaterialTheme.colorScheme.onPrimaryContainer
                     )
                     Spacer(modifier = Modifier.padding(top = 4.dp))
                     Text(
-                        text = releaseInfo.releaseNotes.firstOrNull() ?: "Neue Version verfügbar.",
+                        text = releaseInfo.releaseNotes.firstOrNull()
+                            ?: if (language == "en") "New version available." else "Neue Version verfügbar.",
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onPrimaryContainer
                     )
@@ -68,16 +74,16 @@ fun UpdateBanner(
                 Button(onClick = onInstallClick) {
                     Icon(
                         imageVector = Icons.Default.Download,
-                        contentDescription = "Installieren",
+                        contentDescription = if (language == "en") "Install" else "Installieren",
                         tint = MaterialTheme.colorScheme.onPrimary
                     )
                     Spacer(modifier = Modifier.padding(horizontal = 8.dp))
-                    Text(text = "Installieren")
+                    Text(text = if (language == "en") "Install" else "Installieren")
                 }
                 IconButton(onClick = onDismiss) {
                     Icon(
                         imageVector = Icons.Default.Close,
-                        contentDescription = "Schließen",
+                        contentDescription = if (language == "en") "Close" else "Schließen",
                         tint = MaterialTheme.colorScheme.onPrimaryContainer
                     )
                 }

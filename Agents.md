@@ -87,6 +87,9 @@ Nach jeder Änderung am Programm **MUSS** geprüft werden, ob die Änderung erfo
 
 ## Website & Release-Deployment
 
+### Release-Changelog (PFLICHT)
+Bei jedem neuen Release muss vor dem Commit ein Changelog-Eintrag geschrieben bzw. aktualisiert werden. Der Eintrag soll die wichtigsten Nutzer- und Technikänderungen der Version knapp zusammenfassen.
+
 ### Live Website
 - **URL:** https://wartezeiten-app.tutorialfynn.workers.dev/
 - **Hosting:** Cloudflare Workers

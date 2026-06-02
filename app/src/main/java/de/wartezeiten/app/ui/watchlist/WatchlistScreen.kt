@@ -32,14 +32,18 @@ import de.wartezeiten.app.data.local.entity.WatchlistEntity
 import de.wartezeiten.app.ui.waitingtimes.WatchlistAlertWithParkName
 import de.wartezeiten.app.ui.waitingtimes.WatchlistViewModel
 import de.wartezeiten.app.ui.waitingtimes.label
+import de.wartezeiten.app.ui.settings.SettingsViewModel
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun WatchlistRoute(
     onBackClick: () -> Unit,
-    viewModel: WatchlistViewModel = hiltViewModel()
+    viewModel: WatchlistViewModel = hiltViewModel(),
+    settingsViewModel: SettingsViewModel = hiltViewModel(),
 ) {
     val watchlistItems by viewModel.watchlistItems.collectAsState(initial = emptyList())
+    val settingsState by settingsViewModel.uiState.collectAsState()
+    val language = settingsState.language
     val groupedWatchlist = watchlistItems.groupBy { it.parkName ?: it.alert.parkKey }
 
     Scaffold(
@@ -48,7 +52,7 @@ fun WatchlistRoute(
                 title = { Text("Watchlist") },
                 navigationIcon = {
                     IconButton(onClick = onBackClick) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Zurück")
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = if (language == "en") "Back" else "Zurück")
                     }
                 }
             )
@@ -62,14 +66,21 @@ fun WatchlistRoute(
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             item {
-                Text("Deine Benachrichtigungen", style = MaterialTheme.typography.titleMedium)
+                Text(
+                    if (language == "en") "Your notifications" else "Deine Benachrichtigungen",
+                    style = MaterialTheme.typography.titleMedium,
+                )
                 Spacer(Modifier.height(8.dp))
             }
 
             if (watchlistItems.isEmpty()) {
                 item {
                     Text(
-                        text = "Hier werden deine aktiven Benachrichtigungen angezeigt. Füge sie aus der Park- oder Attraktionsansicht hinzu.",
+                        text = if (language == "en") {
+                            "Your active notifications appear here. Add them from a park or attraction view."
+                        } else {
+                            "Hier werden deine aktiven Benachrichtigungen angezeigt. Füge sie aus der Park- oder Attraktionsansicht hinzu."
+                        },
                         style = MaterialTheme.typography.bodyMedium
                     )
                 }
@@ -84,7 +95,7 @@ fun WatchlistRoute(
                     }
 
                     items(alerts) { alert ->
-                        WatchlistAlertCard(alert = alert, onDelete = viewModel::deleteAlert)
+                        WatchlistAlertCard(alert = alert, language = language, onDelete = viewModel::deleteAlert)
                     }
                 }
             }
@@ -95,6 +106,7 @@ fun WatchlistRoute(
 @Composable
 private fun WatchlistAlertCard(
     alert: WatchlistAlertWithParkName,
+    language: String,
     onDelete: (WatchlistEntity) -> Unit
 ) {
     val item = alert.alert
@@ -106,10 +118,14 @@ private fun WatchlistAlertCard(
                 modifier = Modifier.fillMaxWidth()
             ) {
                 Column(modifier = Modifier.weight(1f)) {
-                    Text(item.type.label(), style = MaterialTheme.typography.titleMedium)
+                    Text(item.type.label(language), style = MaterialTheme.typography.titleMedium)
                     if (item.attractionId != null) {
                         Text(
-                            text = "Attraktion: ${alert.attractionName ?: item.attractionId}",
+                            text = if (language == "en") {
+                                "Attraction: ${alert.attractionName ?: item.attractionId}"
+                            } else {
+                                "Attraktion: ${alert.attractionName ?: item.attractionId}"
+                            },
                             style = MaterialTheme.typography.bodyMedium
                         )
                     }
@@ -119,7 +135,7 @@ private fun WatchlistAlertCard(
                         item.type == de.wartezeiten.app.data.local.entity.WatchlistType.CROWD_LEVEL_ABOVE
                     ) {
                         Text(
-                            text = "Schwellenwert: ${item.threshold}",
+                            text = if (language == "en") "Threshold: ${item.threshold}" else "Schwellenwert: ${item.threshold}",
                             style = MaterialTheme.typography.bodySmall
                         )
                     }
@@ -133,7 +149,7 @@ private fun WatchlistAlertCard(
                 IconButton(onClick = { onDelete(item) }) {
                     Icon(
                         imageVector = Icons.Default.Delete,
-                        contentDescription = "Löschen"
+                        contentDescription = if (language == "en") "Delete" else "Löschen"
                     )
                 }
             }

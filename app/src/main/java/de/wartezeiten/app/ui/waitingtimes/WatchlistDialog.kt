@@ -123,7 +123,7 @@ fun AddWatchlistDialog(
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Benachrichtigung erstellen") },
+        title = { Text("Park-Alarm erstellen") },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 if (attractionName != null) {
@@ -132,10 +132,10 @@ fun AddWatchlistDialog(
                         maxLines = 2
                     )
                 } else {
-                    Text("Parkweite Benachrichtigung")
+                    Text("Parkweiter Alarm")
                 }
 
-                Text("Regel auswählen", style = MaterialTheme.typography.titleSmall)
+                Text("Wobei soll ich dich anstupsen?", style = MaterialTheme.typography.titleSmall)
                 Row(
                     modifier = Modifier.horizontalScroll(rememberScrollState()),
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
@@ -160,7 +160,7 @@ fun AddWatchlistDialog(
 
                 if (isNotificationPermissionRequired && !permissionGranted.value) {
                     Text(
-                        text = "Um Benachrichtigungen zu erhalten, muss die Erlaubnis erteilt werden.",
+                        text = "Erlaube Benachrichtigungen, damit dich die App vor Ort rechtzeitig anstupsen kann.",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.error
                     )
@@ -188,7 +188,7 @@ fun AddWatchlistDialog(
                             } else {
                                 Toast.makeText(
                                     context,
-                                    "Diese Benachrichtigung ist bereits angelegt.",
+                                    "Diesen Alarm gibt es schon.",
                                     Toast.LENGTH_SHORT,
                                 ).show()
                             }
@@ -203,30 +203,30 @@ fun AddWatchlistDialog(
     )
 }
 
-fun WatchlistType.label(): String = when (this) {
-    WatchlistType.WAIT_TIME_BELOW -> "Unter Limit"
-    WatchlistType.WAIT_TIME_ABOVE -> "Über Limit"
-    WatchlistType.NOW_OPENED -> "Park öffnet"
-    WatchlistType.CROWD_LEVEL_BELOW -> "Auslastung niedrig"
-    WatchlistType.CROWD_LEVEL_ABOVE -> "Auslastung hoch"
-    WatchlistType.ATTRACTION_STATUS_CHANGE -> "Statuswechsel"
-    WatchlistType.ATTRACTION_OPEN -> "Öffnet"
-    WatchlistType.ATTRACTION_CLOSED -> "Schließt"
-    WatchlistType.ATTRACTION_MAINTENANCE -> "Wartung"
-    WatchlistType.PARK_STATUS_CHANGED -> "Parkstatus"
+fun WatchlistType.label(language: String = "de"): String = when (this) {
+    WatchlistType.WAIT_TIME_BELOW -> if (language == "en") "Ride window" else "Ride-Fenster"
+    WatchlistType.WAIT_TIME_ABOVE -> if (language == "en") "Too crowded" else "Zu voll"
+    WatchlistType.NOW_OPENED -> if (language == "en") "Entry ready" else "Einlass bereit"
+    WatchlistType.CROWD_LEVEL_BELOW -> if (language == "en") "Relaxed park" else "Entspannter Park"
+    WatchlistType.CROWD_LEVEL_ABOVE -> if (language == "en") "Crowd alert" else "Andrang-Warnung"
+    WatchlistType.ATTRACTION_STATUS_CHANGE -> if (language == "en") "Status radar" else "Status-Radar"
+    WatchlistType.ATTRACTION_OPEN -> if (language == "en") "Open again" else "Wieder offen"
+    WatchlistType.ATTRACTION_CLOSED -> if (language == "en") "Just closed" else "Gerade zu"
+    WatchlistType.ATTRACTION_MAINTENANCE -> if (language == "en") "Tech break" else "Technikpause"
+    WatchlistType.PARK_STATUS_CHANGED -> if (language == "en") "Park ticker" else "Park-Ticker"
 }
 
 private fun WatchlistType.description(): String = when (this) {
-    WatchlistType.WAIT_TIME_BELOW -> "Du wirst informiert, sobald die Wartezeit den Grenzwert erreicht oder unterschreitet."
-    WatchlistType.WAIT_TIME_ABOVE -> "Du wirst informiert, sobald die Wartezeit den Grenzwert erreicht oder überschreitet."
-    WatchlistType.NOW_OPENED -> "Du bekommst einen Hinweis, wenn der Park heute geöffnet ist."
-    WatchlistType.CROWD_LEVEL_BELOW -> "Du bekommst einen Hinweis, wenn die Auslastung unter deinem Grenzwert liegt und mindestens eine Attraktion geöffnet ist."
-    WatchlistType.CROWD_LEVEL_ABOVE -> "Du bekommst einen Hinweis, wenn die Auslastung über deinem Grenzwert liegt und mindestens eine Attraktion geöffnet ist."
-    WatchlistType.ATTRACTION_STATUS_CHANGE -> "Du bekommst einen Hinweis, wenn sich der Status ändert."
-    WatchlistType.ATTRACTION_OPEN -> "Du bekommst einen Hinweis, wenn die Attraktion öffnet."
-    WatchlistType.ATTRACTION_CLOSED -> "Du bekommst einen Hinweis, wenn die Attraktion schließt."
-    WatchlistType.ATTRACTION_MAINTENANCE -> "Du bekommst einen Hinweis, wenn die Attraktion in Wartung geht."
-    WatchlistType.PARK_STATUS_CHANGED -> "Du bekommst einen Hinweis, wenn sich der Parkstatus ändert."
+    WatchlistType.WAIT_TIME_BELOW -> "Für spontane Chancen: Du erfährst, wenn eine Wartezeit kurz genug zum Loslaufen ist."
+    WatchlistType.WAIT_TIME_ABOVE -> "Für Planwechsel: Du erfährst, wenn eine Schlange deinen Grenzwert sprengt."
+    WatchlistType.NOW_OPENED -> "Für den Start in den Tag: Du erfährst, wenn der Park heute als geöffnet gemeldet ist."
+    WatchlistType.CROWD_LEVEL_BELOW -> "Für ruhige Momente: Du erfährst, wenn der Park entspannt genug für einen guten Rundgang ist."
+    WatchlistType.CROWD_LEVEL_ABOVE -> "Für Pausenplanung: Du erfährst, wenn der Park voller wird als gewünscht."
+    WatchlistType.ATTRACTION_STATUS_CHANGE -> "Für Favoriten: Du erfährst, wenn sich bei dieser Attraktion etwas ändert."
+    WatchlistType.ATTRACTION_OPEN -> "Für zweite Chancen: Du erfährst, wenn die Attraktion wieder offen ist."
+    WatchlistType.ATTRACTION_CLOSED -> "Für unnötige Wege: Du erfährst, wenn die Attraktion gerade schließt."
+    WatchlistType.ATTRACTION_MAINTENANCE -> "Für Umwege: Du erfährst, wenn die Attraktion in eine Technikpause geht."
+    WatchlistType.PARK_STATUS_CHANGED -> "Für Tagesplanung: Du erfährst, wenn sich der Parkstatus ändert."
 }
 
 data class WatchlistAlertWithParkName(

@@ -132,7 +132,11 @@ fun WaitingTimesScreen(
                 val updatedAt = LocalTime.now().format(DateTimeFormatter.ofPattern("HH:mm"))
                 val openCount = state.allWaitingTimes.count { it.status == AttractionStatus.Opened }
                 snackbarHostState.showSnackbar(
-                    message = "$openCount offene Attraktionen aktualisiert um $updatedAt",
+                    message = if (state.language == "en") {
+                        "$openCount open attractions updated at $updatedAt"
+                    } else {
+                        "$openCount offene Attraktionen aktualisiert um $updatedAt"
+                    },
                     actionLabel = "OK",
                     withDismissAction = true,
                 )
@@ -151,7 +155,7 @@ fun WaitingTimesScreen(
                 title = {
                     Column {
                         Text(
-                            state.park?.name ?: "Laden…",
+                            state.park?.name ?: if (state.language == "en") "Loading…" else "Laden…",
                             style = MaterialTheme.typography.titleMedium,
                             fontWeight = FontWeight.Bold,
                             maxLines = 1,
@@ -166,7 +170,7 @@ fun WaitingTimesScreen(
                 },
                 navigationIcon = {
                     IconButton(onClick = onBackClick) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Zurück")
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = if (state.language == "en") "Back" else "Zurück")
                     }
                 },
                 actions = {
@@ -174,7 +178,11 @@ fun WaitingTimesScreen(
                     IconButton(onClick = onToggleFavorite) {
                         Icon(
                             imageVector = if (isFavorite) Icons.Default.Favorite else Icons.Default.FavoriteBorder,
-                            contentDescription = if (isFavorite) "Von Favoriten entfernen" else "Zu Favoriten hinzufügen",
+                            contentDescription = if (state.language == "en") {
+                                if (isFavorite) "Remove from favorites" else "Add to favorites"
+                            } else {
+                                if (isFavorite) "Von Favoriten entfernen" else "Zu Favoriten hinzufügen"
+                            },
                             tint = if (isFavorite) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface,
                         )
                     }
@@ -188,7 +196,7 @@ fun WaitingTimesScreen(
                         Spacer(Modifier.width(8.dp))
                     } else {
                         IconButton(onClick = onRefreshClick) {
-                            Icon(Icons.Default.Refresh, contentDescription = "Aktualisieren")
+                            Icon(Icons.Default.Refresh, contentDescription = if (state.language == "en") "Refresh" else "Aktualisieren")
                         }
                     }
                 },
@@ -226,6 +234,7 @@ fun WaitingTimesScreen(
                     ErrorBanner(
                         message = msg,
                         onRetry = onRefreshClick,
+                        language = state.language,
                     )
                 }
             }
@@ -269,6 +278,7 @@ fun WaitingTimesScreen(
 private fun ErrorBanner(
     message: String,
     onRetry: () -> Unit,
+    language: String,
 ) {
     Surface(
         color = MaterialTheme.colorScheme.errorContainer,
@@ -288,7 +298,7 @@ private fun ErrorBanner(
                 modifier = Modifier.weight(1f)
             )
             TextButton(onClick = onRetry) {
-                Text("Neu laden")
+                Text(if (language == "en") "Reload" else "Neu laden")
             }
         }
     }
@@ -323,7 +333,8 @@ private fun WaitingTimesContent(
                 waitingTimes = state.allWaitingTimes,
                 localTimeOffsetSeconds = state.localTimeOffsetSeconds,
                 weather = state.weather,
-                holidays = state.holidays
+                holidays = state.holidays,
+                language = state.language,
             )
         }
 
@@ -342,7 +353,8 @@ private fun WaitingTimesContent(
                 onFilterChange = onFilterChange,
                 onAttractionQueryChange = onAttractionQueryChange,
                 onMaxWaitChange = onMaxWaitChange,
-                onAddWatchlist = onAddWatchlist
+                onAddWatchlist = onAddWatchlist,
+                language = state.language,
             )
         }
 
@@ -351,12 +363,13 @@ private fun WaitingTimesContent(
                 VisitPlannerSection(
                     plannedWaitingTimes = state.plannedWaitingTimes,
                     onRemove = onTogglePlannedAttraction,
+                    language = state.language,
                 )
             }
         }
 
         if (state.waitingTimes.isEmpty() && !state.isLoading) {
-            item { EmptyState() }
+            item { EmptyState(language = state.language) }
         } else {
             items(
                 count = state.waitingTimes.size,
@@ -366,7 +379,8 @@ private fun WaitingTimesContent(
                     item = state.waitingTimes[index],
                     isPlanned = state.waitingTimes[index].attractionId in state.plannedAttractionIds,
                     onTogglePlanned = onTogglePlannedAttraction,
-                    onAddWatchlist = onAddWatchlistForAttraction
+                    onAddWatchlist = onAddWatchlistForAttraction,
+                    language = state.language,
                 )
             }
         }
@@ -396,11 +410,12 @@ private fun FilterSection(
     onFilterChange: (AttractionFilter) -> Unit,
     onAttractionQueryChange: (String) -> Unit,
     onMaxWaitChange: (Int?) -> Unit,
-    onAddWatchlist: () -> Unit
+    onAddWatchlist: () -> Unit,
+    language: String,
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Text(
-            "Filter & Sortierung",
+            if (language == "en") "Filters & sorting" else "Filter & Sortierung",
             style = MaterialTheme.typography.titleSmall,
             fontWeight = FontWeight.Bold
         )
@@ -415,11 +430,11 @@ private fun FilterSection(
             trailingIcon = if (attractionQuery.isNotEmpty()) {
                 {
                     IconButton(onClick = { onAttractionQueryChange("") }) {
-                        Icon(Icons.Default.Clear, contentDescription = "Suche leeren")
+                        Icon(Icons.Default.Clear, contentDescription = if (language == "en") "Clear search" else "Suche leeren")
                     }
                 }
             } else null,
-            placeholder = { Text("Attraktion suchen") },
+            placeholder = { Text(if (language == "en") "Search attraction" else "Attraktion suchen") },
             singleLine = true,
             shape = RoundedCornerShape(12.dp),
             colors = OutlinedTextFieldDefaults.colors(
@@ -445,13 +460,13 @@ private fun FilterSection(
                         horizontalArrangement = Arrangement.spacedBy(4.dp)
                     ) {
                         Icon(Icons.AutoMirrored.Filled.List, contentDescription = null, modifier = Modifier.size(18.dp))
-                        Text(sort.label(), style = MaterialTheme.typography.labelLarge, maxLines = 1)
+                        Text(sort.label(language), style = MaterialTheme.typography.labelLarge, maxLines = 1)
                     }
                 }
                 DropdownMenu(expanded = sortExpanded, onDismissRequest = { sortExpanded = false }) {
                     WaitingTimesSort.entries.forEach { s ->
                         DropdownMenuItem(
-                            text = { Text(s.label()) },
+                            text = { Text(s.label(language)) },
                             onClick = {
                                 onSortChange(s)
                                 sortExpanded = false
@@ -477,13 +492,13 @@ private fun FilterSection(
                         horizontalArrangement = Arrangement.spacedBy(4.dp)
                     ) {
                         Icon(Icons.Default.FilterList, contentDescription = null, modifier = Modifier.size(18.dp))
-                        Text(filter.label(), style = MaterialTheme.typography.labelLarge, maxLines = 1)
+                        Text(filter.label(language), style = MaterialTheme.typography.labelLarge, maxLines = 1)
                     }
                 }
                 DropdownMenu(expanded = filterExpanded, onDismissRequest = { filterExpanded = false }) {
                     AttractionFilter.entries.forEach { f ->
                         DropdownMenuItem(
-                            text = { Text(f.label()) },
+                            text = { Text(f.label(language)) },
                             onClick = {
                                 onFilterChange(f)
                                 filterExpanded = false
@@ -505,7 +520,7 @@ private fun FilterSection(
             horizontalArrangement = Arrangement.spacedBy(8.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Text("Max. Warten:", style = MaterialTheme.typography.labelMedium)
+            Text(if (language == "en") "Max wait:" else "Max. Warten:", style = MaterialTheme.typography.labelMedium)
             val maxWaitOptions = listOf(null, 15, 30, 45, 60)
             maxWaitOptions.forEach { minutes ->
                 FilterChip(
@@ -513,7 +528,11 @@ private fun FilterSection(
                     onClick = { onMaxWaitChange(minutes) },
                     label = {
                         Text(
-                            if (minutes == null) "Alle" else "≤ $minutes",
+                            if (minutes == null) {
+                                if (language == "en") "All" else "Alle"
+                            } else {
+                                "≤ $minutes"
+                            },
                             style = MaterialTheme.typography.labelSmall
                         )
                     },
@@ -522,7 +541,7 @@ private fun FilterSection(
             }
             
             TextButton(onClick = onAddWatchlist) {
-                Text("Benachrichtigung")
+                Text(if (language == "en") "Notification" else "Benachrichtigung")
             }
         }
     }
@@ -532,6 +551,7 @@ private fun FilterSection(
 private fun VisitPlannerSection(
     plannedWaitingTimes: List<WaitingTime>,
     onRemove: (String) -> Unit,
+    language: String,
 ) {
     OutlinedCard(
         modifier = Modifier.fillMaxWidth(),
@@ -546,7 +566,7 @@ private fun VisitPlannerSection(
             verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
             Text(
-                text = "Tagesplan",
+                text = if (language == "en") "Day plan" else "Tagesplan",
                 style = MaterialTheme.typography.titleSmall,
                 fontWeight = FontWeight.Bold,
             )
@@ -559,19 +579,19 @@ private fun VisitPlannerSection(
                     Column(modifier = Modifier.weight(1f)) {
                         Text(item.name, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
                         Text(
-                            text = plannerLine(item),
+                            text = plannerLine(item, language),
                             style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.8f),
                         )
                     }
                     IconButton(onClick = { onRemove(item.attractionId) }, modifier = Modifier.size(36.dp)) {
-                        Icon(Icons.Default.Clear, contentDescription = "Aus Tagesplan entfernen")
+                        Icon(Icons.Default.Clear, contentDescription = if (language == "en") "Remove from day plan" else "Aus Tagesplan entfernen")
                     }
                 }
             }
             if (plannedWaitingTimes.size > 5) {
                 Text(
-                    text = "+${plannedWaitingTimes.size - 5} weitere",
+                    text = if (language == "en") "+${plannedWaitingTimes.size - 5} more" else "+${plannedWaitingTimes.size - 5} weitere",
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.8f),
                 )
@@ -588,7 +608,8 @@ private fun ParkHeaderSection(
     waitingTimes: List<WaitingTime>,
     localTimeOffsetSeconds: Int?,
     weather: WeatherInfo?,
-    holidays: List<HolidayInfo>
+    holidays: List<HolidayInfo>,
+    language: String,
 ) {
     val zoneId = remember(localTimeOffsetSeconds) {
         localTimeOffsetSeconds?.let { ZoneOffset.ofTotalSeconds(it) } ?: ZoneId.systemDefault()
@@ -615,11 +636,14 @@ private fun ParkHeaderSection(
         Color.White
     }
 
-    val dateTimeFormatter = remember {
-        DateTimeFormatter.ofPattern("EEE, dd.MM.yyyy '•' HH:mm 'Uhr'", Locale.GERMAN)
+    val dateTimeFormatter = remember(language) {
+        DateTimeFormatter.ofPattern(
+            if (language == "en") "EEE, MMM d yyyy '•' HH:mm" else "EEE, dd.MM.yyyy '•' HH:mm 'Uhr'",
+            if (language == "en") Locale.ENGLISH else Locale.GERMAN,
+        )
     }
-    val formattedDateTime = remember(currentTime, zoneId) {
-        dateTimeFormatter.format(currentZonedDateTime) + " (Ortszeit)"
+    val formattedDateTime = remember(currentTime, zoneId, language) {
+        dateTimeFormatter.format(currentZonedDateTime) + if (language == "en") " (local time)" else " (Ortszeit)"
     }
 
     OutlinedCard(
@@ -669,12 +693,16 @@ private fun ParkHeaderSection(
             weather?.let {
                 Column(modifier = Modifier.padding(top = 8.dp)) {
                     Text(
-                        text = "Wetter: ${String.format(Locale.getDefault(), "%.0f", it.temperature)}°C • Regen: ${it.precipitationProbability}%",
+                        text = if (language == "en") {
+                            "Weather: ${String.format(Locale.getDefault(), "%.0f", it.temperature)}°C • Rain: ${it.precipitationProbability}%"
+                        } else {
+                            "Wetter: ${String.format(Locale.getDefault(), "%.0f", it.temperature)}°C • Regen: ${it.precipitationProbability}%"
+                        },
                         style = MaterialTheme.typography.labelSmall,
                         color = contentColor.copy(alpha = 0.8f)
                     )
                     Text(
-                        text = weatherInsight(it),
+                        text = weatherInsight(it, language),
                         style = MaterialTheme.typography.labelSmall,
                         color = contentColor.copy(alpha = 0.8f)
                     )
@@ -686,7 +714,7 @@ private fun ParkHeaderSection(
             val todayHoliday = holidays.firstOrNull { it.date == todayIso }
             todayHoliday?.let { h ->
                 Text(
-                    text = "Feiertag: ${h.name}",
+                    text = if (language == "en") "Holiday: ${h.name}" else "Feiertag: ${h.name}",
                     style = MaterialTheme.typography.labelSmall,
                     color = contentColor.copy(alpha = 0.8f)
                 )
@@ -700,7 +728,8 @@ private fun WaitingTimeRow(
     item: WaitingTime,
     isPlanned: Boolean,
     onTogglePlanned: (String) -> Unit,
-    onAddWatchlist: (String) -> Unit
+    onAddWatchlist: (String) -> Unit,
+    language: String,
 ) {
     val waitTimeColor = when {
         item.waitingTime == null -> MaterialTheme.colorScheme.primary
@@ -744,7 +773,7 @@ private fun WaitingTimeRow(
                     fontWeight = FontWeight.SemiBold
                 )
                 Text(
-                    item.status.label(),
+                    item.status.label(language),
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -756,7 +785,11 @@ private fun WaitingTimeRow(
             ) {
                 Icon(
                     imageVector = if (isPlanned) Icons.Default.Check else Icons.Default.Add,
-                    contentDescription = if (isPlanned) "Aus Tagesplan entfernen" else "Zum Tagesplan hinzufügen",
+                    contentDescription = if (language == "en") {
+                        if (isPlanned) "Remove from day plan" else "Add to day plan"
+                    } else {
+                        if (isPlanned) "Aus Tagesplan entfernen" else "Zum Tagesplan hinzufügen"
+                    },
                     tint = if (isPlanned) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
@@ -767,7 +800,11 @@ private fun WaitingTimeRow(
             ) {
                 Icon(
                     imageVector = Icons.Default.Notifications,
-                    contentDescription = "Benachrichtigung für ${item.name} hinzufügen",
+                    contentDescription = if (language == "en") {
+                        "Add notification for ${item.name}"
+                    } else {
+                        "Benachrichtigung für ${item.name} hinzufügen"
+                    },
                     tint = MaterialTheme.colorScheme.primary
                 )
             }
@@ -781,7 +818,7 @@ private fun WaitingTimeRow(
                         color = waitTimeColor
                     )
                     Text(
-                        "Min.",
+                        if (language == "en") "min" else "Min.",
                         style = MaterialTheme.typography.labelSmall,
                         color = waitTimeColor
                     )
@@ -791,14 +828,28 @@ private fun WaitingTimeRow(
     }
 }
 
-private fun plannerLine(item: WaitingTime): String {
+private fun plannerLine(item: WaitingTime, language: String): String {
     return when (item.status) {
-        AttractionStatus.Opened -> "${item.waitingTime ?: 0} Min. Wartezeit"
-        else -> item.status.label()
+        AttractionStatus.Opened -> if (language == "en") {
+            "${item.waitingTime ?: 0} min wait"
+        } else {
+            "${item.waitingTime ?: 0} Min. Wartezeit"
+        }
+        else -> item.status.label(language)
     }
 }
 
-private fun weatherInsight(weather: WeatherInfo): String {
+private fun weatherInsight(weather: WeatherInfo, language: String): String {
+    if (language == "en") {
+        return when {
+            weather.precipitationProbability >= 70 -> "High rain risk - weather closures possible"
+            weather.temperature >= 30 -> "Very warm - plan breaks"
+            weather.temperature <= 3 -> "Very cold - check outdoor attractions"
+            weather.weatherCode in 95..99 -> "Thunderstorm risk - watch status changes"
+            weather.precipitationProbability <= 20 && weather.temperature in 12.0..26.0 -> "Good weather for a visit"
+            else -> "Keep an eye on the weather"
+        }
+    }
     return when {
         weather.precipitationProbability >= 70 -> "Regenrisiko hoch - wetterbedingte Schliessungen moeglich"
         weather.temperature >= 30 -> "Sehr warm - Pausen einplanen"
@@ -843,23 +894,26 @@ private fun RefreshSnackbar(data: SnackbarData) {
 }
 
 @Composable
-private fun EmptyState() {
+private fun EmptyState(language: String) {
     Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-        Text("Keine Attraktionen gefunden.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Text(
+            if (language == "en") "No attractions found." else "Keine Attraktionen gefunden.",
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
     }
 }
 
-private fun WaitingTimesSort.label() = when (this) {
-    WaitingTimesSort.WaitAscending -> "Wartezeit ↑"
-    WaitingTimesSort.WaitDescending -> "Wartezeit ↓"
+private fun WaitingTimesSort.label(language: String) = when (this) {
+    WaitingTimesSort.WaitAscending -> if (language == "en") "Wait time ↑" else "Wartezeit ↑"
+    WaitingTimesSort.WaitDescending -> if (language == "en") "Wait time ↓" else "Wartezeit ↓"
     WaitingTimesSort.Name -> "Name A-Z"
 }
 
-private fun AttractionFilter.label() = when (this) {
-    AttractionFilter.All -> "Alle"
-    AttractionFilter.OpenOnly -> "Nur offen"
-    AttractionFilter.Maintenance -> "Wartung"
-    AttractionFilter.Closed -> "Geschlossen"
+private fun AttractionFilter.label(language: String) = when (this) {
+    AttractionFilter.All -> if (language == "en") "All" else "Alle"
+    AttractionFilter.OpenOnly -> if (language == "en") "Open only" else "Nur offen"
+    AttractionFilter.Maintenance -> if (language == "en") "Maintenance" else "Wartung"
+    AttractionFilter.Closed -> if (language == "en") "Closed" else "Geschlossen"
 }
 
 private fun formatForecastDate(isoDate: String): String {
@@ -870,12 +924,12 @@ private fun formatForecastDate(isoDate: String): String {
     }.getOrElse { isoDate }
 }
 
-private fun AttractionStatus.label() = when (this) {
-    AttractionStatus.Opened -> "Geöffnet"
-    AttractionStatus.Closed -> "Geschlossen"
-    AttractionStatus.Maintenance -> "Wartung"
-    AttractionStatus.ClosedWeather -> "Wetter"
-    AttractionStatus.Unknown -> "Unbekannt"
+private fun AttractionStatus.label(language: String) = when (this) {
+    AttractionStatus.Opened -> if (language == "en") "Open" else "Geöffnet"
+    AttractionStatus.Closed -> if (language == "en") "Closed" else "Geschlossen"
+    AttractionStatus.Maintenance -> if (language == "en") "Maintenance" else "Wartung"
+    AttractionStatus.ClosedWeather -> if (language == "en") "Weather" else "Wetter"
+    AttractionStatus.Unknown -> if (language == "en") "Unknown" else "Unbekannt"
 }
 
 private fun AttractionStatus.indicatorColor() = when (this) {

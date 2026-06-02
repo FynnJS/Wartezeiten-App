@@ -19,6 +19,7 @@ import de.wartezeiten.app.data.remote.WeatherApiService
 import de.wartezeiten.app.domain.model.Park
 import de.wartezeiten.app.domain.model.ParkDetail
 import de.wartezeiten.app.domain.model.ParkRecommendation
+import de.wartezeiten.app.domain.repository.ParkRecommendationScanProgress
 import de.wartezeiten.app.domain.repository.WartezeitenRepository
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.async
@@ -35,6 +36,7 @@ import javax.inject.Singleton
 
 private const val RECOMMENDATION_SNAPSHOT_MAX_AGE_MILLIS = 6 * 60 * 60 * 1000L
 private const val RECOMMENDATION_REQUEST_DELAY_MILLIS = 1_500L
+private const val RECOMMENDATION_ESTIMATED_PARK_SCAN_MILLIS = 4_500L
 
 @Singleton
 class DefaultWartezeitenRepository @Inject constructor(
@@ -115,7 +117,10 @@ class DefaultWartezeitenRepository @Inject constructor(
         }
     }
 
-    override suspend fun refreshParkRecommendationSnapshots(language: String): ApiResult<Unit> = withContext(ioDispatcher) {
+    override suspend fun refreshParkRecommendationSnapshots(
+        language: String,
+        onProgress: (ParkRecommendationScanProgress) -> Unit,
+    ): ApiResult<Unit> = withContext(ioDispatcher) {
         val parks = parkDao.observeParks(null).first()
         if (parks.isEmpty()) return@withContext ApiResult.Success(Unit)
         val now = System.currentTimeMillis()
@@ -127,21 +132,40 @@ class DefaultWartezeitenRepository @Inject constructor(
         val parksToRefresh = parks.filter { park ->
             park.id !in freshParkKeys && park.uuid !in freshParkKeys
         }
-        if (parksToRefresh.isEmpty()) return@withContext ApiResult.Success(Unit)
+        if (parksToRefresh.isEmpty()) {
+            onProgress(ParkRecommendationScanProgress(completedParks = 0, totalParks = 0, estimatedRemainingMillis = 0L))
+            return@withContext ApiResult.Success(Unit)
+        }
 
         var firstError: ApiResult.Error? = null
+        onProgress(parkRecommendationScanProgress(completedParks = 0, totalParks = parksToRefresh.size))
         parksToRefresh.forEachIndexed { index, park ->
             if (index > 0) delay(RECOMMENDATION_REQUEST_DELAY_MILLIS)
             when (val result = refreshParkRecommendationSnapshot(park.id, language)) {
-                is ApiResult.Success -> Unit
+                is ApiResult.Success -> {
+                    onProgress(parkRecommendationScanProgress(completedParks = index + 1, totalParks = parksToRefresh.size))
+                }
                 is ApiResult.Error -> {
                     if (firstError == null) firstError = result
+                    onProgress(parkRecommendationScanProgress(completedParks = index + 1, totalParks = parksToRefresh.size))
                     if (result.type == NetworkError.RateLimited) return@withContext result
                 }
             }
         }
 
         firstError ?: ApiResult.Success(Unit)
+    }
+
+    private fun parkRecommendationScanProgress(
+        completedParks: Int,
+        totalParks: Int,
+    ): ParkRecommendationScanProgress {
+        val remainingParks = (totalParks - completedParks).coerceAtLeast(0)
+        return ParkRecommendationScanProgress(
+            completedParks = completedParks,
+            totalParks = totalParks,
+            estimatedRemainingMillis = remainingParks * RECOMMENDATION_ESTIMATED_PARK_SCAN_MILLIS,
+        )
     }
 
     private suspend fun refreshParkRecommendationSnapshot(

@@ -135,7 +135,11 @@ fun ParkListScreen(
             if (state.errorMessage == null) {
                 val updatedAt = LocalTime.now().format(DateTimeFormatter.ofPattern("HH:mm"))
                 snackbarHostState.showSnackbar(
-                    message = "${state.totalParkCount} Parks aktualisiert um $updatedAt",
+                    message = if (state.language == "en") {
+                        "${state.totalParkCount} parks updated at $updatedAt"
+                    } else {
+                        "${state.totalParkCount} Parks aktualisiert um $updatedAt"
+                    },
                     actionLabel = "OK",
                     withDismissAction = true,
                 )
@@ -154,12 +158,12 @@ fun ParkListScreen(
                 title = {
                     Column {
                         Text(
-                            "Wartezeiten",
+                            if (state.language == "en") "Wait times" else "Wartezeiten",
                             style = MaterialTheme.typography.headlineSmall,
                             fontWeight = FontWeight.Bold,
                         )
                         Text(
-                            "Freizeitparks",
+                            if (state.language == "en") "Theme parks" else "Freizeitparks",
                             style = MaterialTheme.typography.labelMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
@@ -176,10 +180,10 @@ fun ParkListScreen(
                         Spacer(Modifier.width(8.dp))
                     } else {
                         IconButton(onClick = onRefreshClick) {
-                            Icon(Icons.Default.Refresh, contentDescription = "Aktualisieren")
+                            Icon(Icons.Default.Refresh, contentDescription = if (state.language == "en") "Refresh" else "Aktualisieren")
                         }
                         IconButton(onClick = onSettingsClick) {
-                            Icon(Icons.Default.Settings, contentDescription = "Einstellungen")
+                            Icon(Icons.Default.Settings, contentDescription = if (state.language == "en") "Settings" else "Einstellungen")
                         }
                         IconButton(onClick = onWatchlistClick) {
                             Icon(Icons.Default.List, contentDescription = "Watchlist")
@@ -218,6 +222,7 @@ fun ParkListScreen(
                     ErrorBanner(
                         message = msg,
                         onRetry = onRefreshClick,
+                        language = state.language,
                     )
                 }
             }
@@ -248,7 +253,7 @@ fun ParkListScreen(
                         ) {
                             CircularProgressIndicator(color = MaterialTheme.colorScheme.primary)
                             Text(
-                                "Parks werden geladen…",
+                                if (state.language == "en") "Loading parks…" else "Parks werden geladen…",
                                 style = MaterialTheme.typography.bodyMedium,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
@@ -266,18 +271,21 @@ fun ParkListScreen(
                         verticalArrangement = Arrangement.spacedBy(10.dp),
                     ) {
                         item {
-                            AttributionBanner()
+                            AttributionBanner(language = state.language)
                         }
 
                         if (state.isShowingOfflineData) {
                             item {
-                                OfflineDataBanner()
+                                OfflineDataBanner(language = state.language)
                             }
                         }
 
                         if (state.isRecommendationLoading) {
                             item {
-                                BestParkLoadingCard()
+                                BestParkLoadingCard(
+                                    scanStatus = state.recommendationScanStatus,
+                                    language = state.language,
+                                )
                             }
                         }
 
@@ -285,6 +293,8 @@ fun ParkListScreen(
                             item {
                                 BestParkCard(
                                     recommendation = recommendation,
+                                    scanStatus = state.recommendationScanStatus,
+                                    language = state.language,
                                     onClick = { onParkClick(recommendation.park) },
                                 )
                             }
@@ -304,7 +314,7 @@ fun ParkListScreen(
                                 },
                                 placeholder = {
                                     Text(
-                                        "Park suchen…",
+                                        if (state.language == "en") "Search park…" else "Park suchen…",
                                         color = MaterialTheme.colorScheme.onSurfaceVariant
                                     )
                                 },
@@ -325,6 +335,7 @@ fun ParkListScreen(
                                     showOpenOnly = state.showOpenOnly,
                                     showFavoritesOnly = state.showFavoritesOnly,
                                     sort = state.sort,
+                                    language = state.language,
                                     onSelect = onCountrySelected,
                                     onToggleOpenOnly = onToggleOpenOnly,
                                     onToggleFavoritesOnly = onToggleFavoritesOnly,
@@ -349,7 +360,7 @@ fun ParkListScreen(
                                     contentAlignment = Alignment.Center
                                 ) {
                                     Text(
-                                        "Keine Parks gefunden",
+                                        if (state.language == "en") "No parks found" else "Keine Parks gefunden",
                                         style = MaterialTheme.typography.bodyLarge,
                                         color = MaterialTheme.colorScheme.onSurfaceVariant
                                     )
@@ -359,7 +370,7 @@ fun ParkListScreen(
                             if (!isSearching && state.favoriteParks.isNotEmpty()) {
                                 item {
                                     Text(
-                                        "Deine Favoriten",
+                                        if (state.language == "en") "Your favorites" else "Deine Favoriten",
                                         style = MaterialTheme.typography.titleSmall,
                                         color = MaterialTheme.colorScheme.primary,
                                         fontWeight = FontWeight.Bold,
@@ -369,6 +380,7 @@ fun ParkListScreen(
                                 itemsIndexed(state.favoriteParks, key = { _, park -> "fav_${park.id}" }) { _, park ->
                                     ParkCard(
                                         park = park,
+                                        language = state.language,
                                         onClick = { onParkClick(park) },
                                         onQuickAddWatchlist = {
                                             selectedParkForWatchlist = park
@@ -383,7 +395,7 @@ fun ParkListScreen(
                                         color = MaterialTheme.colorScheme.outline.copy(alpha = 0.3f)
                                     )
                                     Text(
-                                        "Alle Parks",
+                                        if (state.language == "en") "All parks" else "Alle Parks",
                                         style = MaterialTheme.typography.titleSmall,
                                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                                         fontWeight = FontWeight.Bold,
@@ -400,6 +412,7 @@ fun ParkListScreen(
                                 ) {
                                     ParkCard(
                                         park = park,
+                                        language = state.language,
                                         onClick = { onParkClick(park) },
                                         onQuickAddWatchlist = {
                                             selectedParkForWatchlist = park
@@ -431,7 +444,7 @@ fun ParkListScreen(
 }
 
 @Composable
-private fun OfflineDataBanner() {
+private fun OfflineDataBanner(language: String) {
     Surface(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(12.dp),
@@ -445,7 +458,7 @@ private fun OfflineDataBanner() {
         ) {
             Icon(Icons.Default.Warning, contentDescription = null, modifier = Modifier.size(20.dp))
             Text(
-                text = "Offline-Daten werden angezeigt",
+                text = if (language == "en") "Showing offline data" else "Offline-Daten werden angezeigt",
                 style = MaterialTheme.typography.bodySmall,
                 fontWeight = FontWeight.SemiBold,
             )
@@ -454,7 +467,10 @@ private fun OfflineDataBanner() {
 }
 
 @Composable
-private fun BestParkLoadingCard() {
+private fun BestParkLoadingCard(
+    scanStatus: String?,
+    language: String,
+) {
     OutlinedCard(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(16.dp),
@@ -471,12 +487,12 @@ private fun BestParkLoadingCard() {
             CircularProgressIndicator(modifier = Modifier.size(24.dp), strokeWidth = 2.5.dp)
             Column(modifier = Modifier.weight(1f)) {
                 Text(
-                    text = "Bester Park heute",
+                    text = if (language == "en") "Best park today" else "Bester Park heute",
                     style = MaterialTheme.typography.labelMedium,
                     fontWeight = FontWeight.Bold,
                 )
                 Text(
-                    text = "Parks werden verglichen",
+                    text = scanStatus ?: if (language == "en") "Checking live data" else "Live-Daten werden abgeglichen",
                     style = MaterialTheme.typography.bodySmall,
                 )
             }
@@ -487,6 +503,8 @@ private fun BestParkLoadingCard() {
 @Composable
 private fun BestParkCard(
     recommendation: ParkRecommendation,
+    scanStatus: String?,
+    language: String,
     onClick: () -> Unit,
 ) {
     OutlinedCard(
@@ -510,7 +528,7 @@ private fun BestParkCard(
             Icon(Icons.Default.Star, contentDescription = null, modifier = Modifier.size(28.dp))
             Column(modifier = Modifier.weight(1f)) {
                 Text(
-                    text = "Bester Park heute",
+                    text = if (language == "en") "Best park today" else "Bester Park heute",
                     style = MaterialTheme.typography.labelMedium,
                     fontWeight = FontWeight.Bold,
                 )
@@ -520,9 +538,23 @@ private fun BestParkCard(
                     fontWeight = FontWeight.Bold,
                 )
                 Text(
-                    text = recommendation.reason,
+                    text = recommendation.localizedReason(language),
                     style = MaterialTheme.typography.bodySmall,
                 )
+                scanStatus?.let { status ->
+                    Spacer(Modifier.height(6.dp))
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        CircularProgressIndicator(modifier = Modifier.size(14.dp), strokeWidth = 2.dp)
+                        Text(
+                            text = status,
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onPrimaryContainer,
+                        )
+                    }
+                }
             }
             Text(
                 text = "${recommendation.score}",
@@ -540,6 +572,7 @@ private fun CountryFilterRow(
     showOpenOnly: Boolean,
     showFavoritesOnly: Boolean,
     sort: ParkSort,
+    language: String,
     onSelect: (String?) -> Unit,
     onToggleOpenOnly: () -> Unit,
     onToggleFavoritesOnly: () -> Unit,
@@ -555,7 +588,7 @@ private fun CountryFilterRow(
         FilterChip(
             selected = showFavoritesOnly,
             onClick = onToggleFavoritesOnly,
-            label = { Text("Favoriten", style = MaterialTheme.typography.labelMedium) },
+            label = { Text(if (language == "en") "Favorites" else "Favoriten", style = MaterialTheme.typography.labelMedium) },
             leadingIcon = if (showFavoritesOnly) {
                 { Icon(Icons.Default.Favorite, contentDescription = null, modifier = Modifier.size(16.dp)) }
             } else {
@@ -571,7 +604,7 @@ private fun CountryFilterRow(
         FilterChip(
             selected = showOpenOnly,
             onClick = onToggleOpenOnly,
-            label = { Text("Nur offen", style = MaterialTheme.typography.labelMedium) },
+            label = { Text(if (language == "en") "Open only" else "Nur offen", style = MaterialTheme.typography.labelMedium) },
             leadingIcon = if (showOpenOnly) {
                 { Icon(Icons.Default.Check, contentDescription = null, modifier = Modifier.size(16.dp)) }
             } else null,
@@ -589,7 +622,7 @@ private fun CountryFilterRow(
             FilterChip(
                 selected = sort != ParkSort.FavoritesFirst,
                 onClick = { sortExpanded = true },
-                label = { Text(sort.label(), style = MaterialTheme.typography.labelMedium) },
+                label = { Text(sort.label(language), style = MaterialTheme.typography.labelMedium) },
                 leadingIcon = {
                     Icon(Icons.Default.Sort, contentDescription = null, modifier = Modifier.size(16.dp))
                 },
@@ -605,7 +638,7 @@ private fun CountryFilterRow(
             ) {
                 ParkSort.entries.forEach { value ->
                     DropdownMenuItem(
-                        text = { Text(value.label()) },
+                        text = { Text(value.label(language)) },
                         onClick = {
                             onSortChange(value)
                             sortExpanded = false
@@ -621,7 +654,7 @@ private fun CountryFilterRow(
         FilterChip(
             selected = selected == null,
             onClick = { onSelect(null) },
-            label = { Text("Alle Länder", style = MaterialTheme.typography.labelMedium) },
+            label = { Text(if (language == "en") "All countries" else "Alle Länder", style = MaterialTheme.typography.labelMedium) },
             shape = RoundedCornerShape(12.dp),
             colors = FilterChipDefaults.filterChipColors(
                 selectedContainerColor = MaterialTheme.colorScheme.primaryContainer,
@@ -671,17 +704,17 @@ private fun ParkOverviewStrip(
             horizontalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             OverviewMetric(
-                label = "Angezeigt",
+                label = if (state.language == "en") "Shown" else "Angezeigt",
                 value = "${state.parks.size}/${state.totalParkCount}",
                 modifier = Modifier.weight(1f),
             )
             OverviewMetric(
-                label = "Favoriten",
+                label = if (state.language == "en") "Favorites" else "Favoriten",
                 value = state.favoriteParks.size.toString(),
                 modifier = Modifier.weight(1f),
             )
             OverviewMetric(
-                label = "Länder",
+                label = if (state.language == "en") "Countries" else "Länder",
                 value = state.visibleCountryCount.toString(),
                 modifier = Modifier.weight(1f),
             )
@@ -689,7 +722,7 @@ private fun ParkOverviewStrip(
                 IconButton(onClick = onClearFilters, modifier = Modifier.size(36.dp)) {
                     Icon(
                         imageVector = Icons.Default.Clear,
-                        contentDescription = "Filter zurücksetzen",
+                        contentDescription = if (state.language == "en") "Reset filters" else "Filter zurücksetzen",
                     )
                 }
             }
@@ -756,6 +789,7 @@ private fun RefreshSnackbar(data: SnackbarData) {
 private fun ErrorBanner(
     message: String,
     onRetry: () -> Unit,
+    language: String,
 ) {
     Surface(
         color = MaterialTheme.colorScheme.errorContainer,
@@ -782,7 +816,7 @@ private fun ErrorBanner(
             )
             TextButton(onClick = onRetry) {
                 Text(
-                    "Erneut",
+                    if (language == "en") "Retry" else "Erneut",
                     color = MaterialTheme.colorScheme.error,
                     style = MaterialTheme.typography.labelMedium,
                     fontWeight = FontWeight.SemiBold
@@ -792,15 +826,36 @@ private fun ErrorBanner(
     }
 }
 
-private fun ParkSort.label() = when (this) {
-    ParkSort.FavoritesFirst -> "Favoriten zuerst"
+private fun ParkSort.label(language: String) = when (this) {
+    ParkSort.FavoritesFirst -> if (language == "en") "Favorites first" else "Favoriten zuerst"
     ParkSort.Name -> "Name A-Z"
-    ParkSort.Country -> "Land"
+    ParkSort.Country -> if (language == "en") "Country" else "Land"
+}
+
+private fun ParkRecommendation.localizedReason(language: String): String {
+    val crowdText = crowdLevel?.let {
+        if (language == "en") "approx. ${it.toInt()}% crowd level" else "ca. ${it.toInt()}% Auslastung"
+    } ?: if (language == "en") {
+        "crowd level unknown"
+    } else {
+        "Auslastung unbekannt"
+    }
+    val attractionText = if (totalAttractions > 0) {
+        if (language == "en") {
+            "$openAttractions of $totalAttractions attractions open"
+        } else {
+            "$openAttractions von $totalAttractions Attraktionen offen"
+        }
+    } else {
+        if (language == "en") "$openAttractions attractions open" else "$openAttractions Attraktionen offen"
+    }
+    return "$crowdText, $attractionText"
 }
 
 @Composable
 private fun ParkCard(
     park: Park,
+    language: String,
     onClick: () -> Unit,
     onQuickAddWatchlist: () -> Unit,
     onToggleFavorite: () -> Unit
@@ -856,13 +911,24 @@ private fun ParkCard(
             IconButton(onClick = onToggleFavorite) {
                 Icon(
                     imageVector = if (park.isFavorite) Icons.Default.Favorite else Icons.Default.FavoriteBorder,
-                    contentDescription = if (park.isFavorite) "Von Favoriten entfernen" else "Zu Favoriten hinzufügen",
+                    contentDescription = if (language == "en") {
+                        if (park.isFavorite) "Remove from favorites" else "Add to favorites"
+                    } else {
+                        if (park.isFavorite) "Von Favoriten entfernen" else "Zu Favoriten hinzufügen"
+                    },
                     tint = if (park.isFavorite) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline
                 )
             }
 
             IconButton(onClick = onQuickAddWatchlist) {
-                Icon(Icons.Default.Notifications, contentDescription = "Parkweite Benachrichtigung hinzufügen")
+                Icon(
+                    Icons.Default.Notifications,
+                    contentDescription = if (language == "en") {
+                        "Add park-wide notification"
+                    } else {
+                        "Parkweite Benachrichtigung hinzufügen"
+                    },
+                )
             }
 
             Text(

@@ -20,6 +20,7 @@ import dagger.assisted.AssistedInject
 import de.wartezeiten.app.data.local.dao.AlertHistoryDao
 import de.wartezeiten.app.data.local.dao.ParkDao
 import de.wartezeiten.app.data.local.dao.WatchlistDao
+import de.wartezeiten.app.data.local.PreferencesDataSource
 import de.wartezeiten.app.data.local.entity.AlertHistoryEntity
 import de.wartezeiten.app.data.local.entity.WatchlistEntity
 import de.wartezeiten.app.data.local.entity.WatchlistType
@@ -30,7 +31,7 @@ import kotlinx.coroutines.flow.first
 import java.util.Locale
 
 private const val CHANNEL_ID = "watchlist_alerts"
-private const val CHANNEL_NAME = "Wartezeiten Erinnerungen"
+private const val CHANNEL_NAME = "Park-Alarme"
 private const val SUMMARY_NOTIFICATION_ID = 1234
 private const val GROUP_KEY = "de.wartezeiten.app.WATCHLIST_ALERTS"
 
@@ -48,6 +49,7 @@ class NotificationWorker @AssistedInject constructor(
     private val watchlistDao: WatchlistDao,
     private val alertHistoryDao: AlertHistoryDao,
     private val parkDao: ParkDao,
+    private val preferences: PreferencesDataSource,
     private val api: WartezeitenApiService,
 ) : CoroutineWorker(context, params) {
 
@@ -65,11 +67,12 @@ class NotificationWorker @AssistedInject constructor(
             .flatMap { park -> listOf(park.id to park.name, park.uuid to park.name) }
             .toMap()
         val notifications = mutableListOf<WatchlistNotification>()
+        val language = preferences.language.first()
 
         groupedByPark.forEach { (parkKey, alerts) ->
             val parkName = parkNames[parkKey] ?: parkKey
             val openingTimes = safeApiCall { api.getOpeningTimes(parkKey) }
-            val waitingTimes = safeApiCall { api.getWaitingTimes(parkKey, "de") }
+            val waitingTimes = safeApiCall { api.getWaitingTimes(parkKey, language) }
             val crowdLevel = safeApiCall { api.getCrowdLevel(parkKey) }
             val opening = openingTimes?.firstOrNull()
             val isParkOpen = opening?.openedToday == true
@@ -106,8 +109,8 @@ class NotificationWorker @AssistedInject constructor(
             if (shouldNotifyBoolean(alert.id, isParkOpen)) {
                 notifications.add(
                     WatchlistNotification(
-                        title = "$parkName ist heute geöffnet",
-                        content = "Tippe, um die aktuellen Wartezeiten zu sehen.",
+                        title = "Einlass bereit: $parkName",
+                        content = "Der Park ist heute geöffnet. Prüfe jetzt Wartezeiten und starte mit den kurzen Wegen.",
                         parkKey = parkKey,
                         parkName = parkName,
                     )
@@ -120,11 +123,11 @@ class NotificationWorker @AssistedInject constructor(
             if (shouldNotifyValue(alert.id, status, notifyOnFirstMatch = false)) {
                 notifications.add(
                     WatchlistNotification(
-                        title = "$parkName: Status geändert",
+                        title = "$parkName im Park-Ticker",
                         content = if (isParkOpen) {
-                            "Heute geöffnet."
+                            "Heute geöffnet. Ein guter Moment, deine Route zu checken."
                         } else {
-                            "Heute geschlossen."
+                            "Heute geschlossen. Spar dir den Weg und plane um."
                         },
                         parkKey = parkKey,
                         parkName = parkName,
@@ -147,8 +150,8 @@ class NotificationWorker @AssistedInject constructor(
             if (shouldNotifyBoolean(alert.id, triggered)) {
                 notifications.add(
                     WatchlistNotification(
-                        title = "$parkName: Auslastung niedrig",
-                        content = "Auslastung bei ${crowdValue?.formatPercent() ?: "?"}% (Limit: max. ${alert.threshold}%).",
+                        title = "Entspannter Park: $parkName",
+                        content = "Auslastung bei ${crowdValue?.formatPercent() ?: "?"}%. Gute Zeit für Favoriten, Fotos oder die nächste Runde.",
                         parkKey = parkKey,
                         parkName = parkName,
                     )
@@ -161,8 +164,8 @@ class NotificationWorker @AssistedInject constructor(
             if (shouldNotifyBoolean(alert.id, triggered)) {
                 notifications.add(
                     WatchlistNotification(
-                        title = "$parkName: Auslastung hoch",
-                        content = "Auslastung bei ${crowdValue?.formatPercent() ?: "?"}% (Limit: min. ${alert.threshold}%).",
+                        title = "Andrang-Warnung: $parkName",
+                        content = "Auslastung bei ${crowdValue?.formatPercent() ?: "?"}%. Plane Snackpause, Shows oder ruhigere Ecken ein.",
                         parkKey = parkKey,
                         parkName = parkName,
                     )
@@ -189,10 +192,11 @@ class NotificationWorker @AssistedInject constructor(
             val triggered = best?.waitingTime != null && best.waitingTime <= alert.threshold
 
             if (shouldNotifyBoolean(alert.id, triggered)) {
+                val waitMinutes = best?.waitingTime ?: 0
                 notifications.add(
                     WatchlistNotification(
-                        title = if (target != null) "${target.name} ist schneller" else "Kurze Wartezeit in $parkName",
-                        content = "${best?.name ?: "Eine Attraktion"}: ${best?.waitingTime ?: 0} Min. (Limit: max. ${alert.threshold} Min.).",
+                        title = if (target != null) "Ride-Fenster: ${target.name}" else "Ride-Fenster in $parkName",
+                        content = "${best?.name ?: "Eine Attraktion"} liegt bei $waitMinutes Min. Jetzt lohnt sich der Weg.",
                         parkKey = parkKey,
                         parkName = parkName,
                     )
@@ -219,10 +223,11 @@ class NotificationWorker @AssistedInject constructor(
             val triggered = longest?.waitingTime != null && longest.waitingTime >= alert.threshold
 
             if (shouldNotifyBoolean(alert.id, triggered)) {
+                val waitMinutes = longest?.waitingTime ?: 0
                 notifications.add(
                     WatchlistNotification(
-                        title = if (target != null) "${target.name} ist länger" else "Lange Wartezeit in $parkName",
-                        content = "${longest?.name ?: "Eine Attraktion"}: ${longest?.waitingTime ?: 0} Min. (Limit: min. ${alert.threshold} Min.).",
+                        title = if (target != null) "Zu voll: ${target.name}" else "Zu voll in $parkName",
+                        content = "${longest?.name ?: "Eine Attraktion"} steht bei $waitMinutes Min. Lieber Route ändern oder später wiederkommen.",
                         parkKey = parkKey,
                         parkName = parkName,
                     )
@@ -265,7 +270,7 @@ class NotificationWorker @AssistedInject constructor(
                 if (shouldSend) {
                     notifications.add(
                         WatchlistNotification(
-                            title = current.name,
+                            title = current.name.toStatusNotificationTitle(current.status),
                             content = current.status.toReadableStatus(),
                             parkKey = parkKey,
                             parkName = parkName,
@@ -301,7 +306,7 @@ class NotificationWorker @AssistedInject constructor(
             CHANNEL_NAME,
             NotificationManager.IMPORTANCE_DEFAULT
         ).apply {
-            description = "Benachrichtigungen für Park- und Attraktionsalarme"
+            description = "Vor-Ort-Hinweise für Wartezeiten, Auslastung und Attraktionsstatus"
         }
         val manager = applicationContext.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
         manager.createNotificationChannel(channel)
@@ -318,7 +323,7 @@ class NotificationWorker @AssistedInject constructor(
             val title = if (parkNotifications.size == 1) {
                 first.title
             } else {
-                "${parkNotifications.size} Hinweise für ${first.parkName}"
+                "${parkNotifications.size} Park-Alarme für ${first.parkName}"
             }
             val content = if (parkNotifications.size == 1) {
                 first.content
@@ -347,7 +352,7 @@ class NotificationWorker @AssistedInject constructor(
         }
         val summary = NotificationCompat.Builder(applicationContext, CHANNEL_ID)
             .setSmallIcon(de.wartezeiten.app.R.mipmap.ic_launcher)
-            .setContentTitle("${notifications.size} neue Wartezeiten-Hinweise")
+            .setContentTitle("${notifications.size} neue Park-Alarme")
             .setContentText(groupedByPark.size.toParkCountText())
             .setContentIntent(notificationIntent(notifications.first().parkKey))
             .setStyle(NotificationCompat.BigTextStyle().bigText(summaryText))
@@ -421,10 +426,19 @@ class NotificationWorker @AssistedInject constructor(
 
     private fun String.toReadableStatus(): String {
         return when (normalizedStatus()) {
-            "opened" -> "Jetzt geöffnet."
-            "closed" -> "Jetzt geschlossen."
-            "maintenance" -> "Die Attraktion ist aktuell in Wartung."
+            "opened" -> "Wieder offen. Wenn sie auf deiner Liste steht: jetzt hin."
+            "closed" -> "Gerade geschlossen. Spar dir den Weg und nimm eine Alternative."
+            "maintenance" -> "Technikpause gemeldet. Plane die Attraktion später nochmal ein."
             else -> "Status geändert: $this"
+        }
+    }
+
+    private fun String.toStatusNotificationTitle(status: String): String {
+        return when (status.normalizedStatus()) {
+            "opened" -> "Wieder offen: $this"
+            "closed" -> "Gerade zu: $this"
+            "maintenance" -> "Technikpause: $this"
+            else -> "Status-Radar: $this"
         }
     }
 
@@ -432,9 +446,9 @@ class NotificationWorker @AssistedInject constructor(
 
     private fun Int.toParkCountText(): String {
         return if (this == 1) {
-            "1 Park mit neuen Hinweisen"
+            "1 Park mit neuen Alarmen"
         } else {
-            "$this Parks mit neuen Hinweisen"
+            "$this Parks mit neuen Alarmen"
         }
     }
 }

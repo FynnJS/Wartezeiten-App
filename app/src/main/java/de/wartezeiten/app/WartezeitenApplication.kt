@@ -5,6 +5,7 @@ import androidx.hilt.work.HiltWorkerFactory
 import androidx.work.Configuration
 import dagger.hilt.android.HiltAndroidApp
 import de.wartezeiten.app.worker.NotificationScheduler
+import de.wartezeiten.app.worker.RecommendationScanScheduler
 import de.wartezeiten.app.worker.UpdateScheduler
 import javax.inject.Inject
 
@@ -20,6 +21,7 @@ class WartezeitenApplication : Application(), Configuration.Provider {
     override fun onCreate() {
         super.onCreate()
         NotificationScheduler.ensureBackgroundChecks(this)
+        RecommendationScanScheduler.ensureBackgroundScans(this)
         UpdateScheduler.ensureBackgroundChecks(this)
     }
 }

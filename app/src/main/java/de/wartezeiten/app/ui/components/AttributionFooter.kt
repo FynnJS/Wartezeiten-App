@@ -22,13 +22,14 @@ import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.dp
 
 @Composable
-fun AttributionFooter() {
-    AttributionBanner(modifier = Modifier.navigationBarsPadding())
+fun AttributionFooter(language: String = "de") {
+    AttributionBanner(modifier = Modifier.navigationBarsPadding(), language = language)
 }
 
 @Composable
 fun AttributionBanner(
     modifier: Modifier = Modifier,
+    language: String = "de",
 ) {
     val context = LocalContext.current
     Surface(
@@ -49,7 +50,7 @@ fun AttributionBanner(
                 modifier = Modifier.padding(end = 8.dp),
             )
             Text(
-                text = "Daten bereitgestellt von ",
+                text = if (language == "en") "Data provided by " else "Daten bereitgestellt von ",
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
