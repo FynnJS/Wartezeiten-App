@@ -7,6 +7,7 @@ data class ParkCrowdSnapshot(
     val apiCrowdLevel: Float?,
     val calculatedCrowdLevel: Float?,
     val displayCrowdLevel: Float?,
+    val openedToday: Boolean?,
     val openAttractions: Int,
     val totalAttractions: Int,
 )
@@ -50,7 +51,14 @@ fun buildParkTrendSummary(
 ): ParkTrendSummary {
     val sortedSnapshots = snapshots.sortedBy { it.capturedAtMillis }
     val latest = sortedSnapshots.lastOrNull() ?: return ParkTrendSummary.Empty
-    val values = sortedSnapshots.mapNotNull { it.displayCrowdLevel }.sorted()
+    if (latest.openedToday == false || latest.displayCrowdLevel == null) {
+        return ParkTrendSummary.Empty
+    }
+
+    val values = sortedSnapshots
+        .filter { it.openedToday != false }
+        .mapNotNull { it.displayCrowdLevel }
+        .sorted()
     val latestAgeMillis = nowMillis - latest.capturedAtMillis
 
     return ParkTrendSummary(

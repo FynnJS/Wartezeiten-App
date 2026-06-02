@@ -15,6 +15,25 @@ interface WatchlistDao {
     @Insert
     suspend fun insert(item: WatchlistEntity)
 
+    @Query(
+        """
+        SELECT COUNT(*) FROM watchlist
+        WHERE parkKey = :parkKey
+          AND type = :type
+          AND threshold = :threshold
+          AND (
+              (:attractionId IS NULL AND attractionId IS NULL)
+              OR attractionId = :attractionId
+          )
+        """
+    )
+    suspend fun countMatching(
+        parkKey: String,
+        attractionId: String?,
+        type: de.wartezeiten.app.data.local.entity.WatchlistType,
+        threshold: Int,
+    ): Int
+
     @Delete
     suspend fun delete(item: WatchlistEntity)
 }

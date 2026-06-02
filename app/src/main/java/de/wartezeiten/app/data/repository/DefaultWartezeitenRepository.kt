@@ -127,19 +127,35 @@ class DefaultWartezeitenRepository @Inject constructor(
                 )
             }
             (crowdResult as? ApiResult.Success)?.let {
+                val openedToday = if (openingResult is ApiResult.Success && openingResult.data.isNotEmpty()) {
+                    openingResult.data.first().openedToday
+                } else {
+                    null
+                }
+                val openFrom = if (openingResult is ApiResult.Success && openingResult.data.isNotEmpty()) openingResult.data.first().opening else null
+                val closedFrom = if (openingResult is ApiResult.Success && openingResult.data.isNotEmpty()) openingResult.data.first().closing else null
+                val openAttractions = if (waitingResult is ApiResult.Success) {
+                    waitingResult.data.count { it.status.equals("opened", ignoreCase = true) }
+                } else {
+                    0
+                }
+                val canDisplayCrowdLevel = openedToday != false && openAttractions > 0
+                val apiCrowdLevel = it.data.crowdLevel?.replace(",", ".")?.toFloatOrNull()
+                val displayCrowdLevel = apiCrowdLevel.takeIf { canDisplayCrowdLevel }
+
                 parkDetailDao.upsertCrowdLevel(it.data.toEntity(parkKey, now))
                 
                 parkSnapshotDao.insert(
                     ParkSnapshotEntity(
                         parkKey = parkKey,
                         capturedAtMillis = now,
-                        apiCrowdLevel = it.data.crowdLevel?.replace(",", ".")?.toFloatOrNull(),
+                        apiCrowdLevel = apiCrowdLevel,
                         calculatedCrowdLevel = null,
-                        displayCrowdLevel = it.data.crowdLevel?.replace(",", ".")?.toFloatOrNull(),
-                        openedToday = openingResult is ApiResult.Success && openingResult.data.isNotEmpty() && (openingResult.data.first().openedToday == true),
-                        openFrom = if (openingResult is ApiResult.Success && openingResult.data.isNotEmpty()) openingResult.data.first().opening else null,
-                        closedFrom = if (openingResult is ApiResult.Success && openingResult.data.isNotEmpty()) openingResult.data.first().closing else null,
-                        openAttractions = if (waitingResult is ApiResult.Success) waitingResult.data.count { it.status == "opened" } else 0,
+                        displayCrowdLevel = displayCrowdLevel,
+                        openedToday = openedToday,
+                        openFrom = openFrom,
+                        closedFrom = closedFrom,
+                        openAttractions = openAttractions,
                         totalAttractions = if (waitingResult is ApiResult.Success) waitingResult.data.size else 0
                     )
                 )
@@ -287,6 +303,7 @@ class DefaultWartezeitenRepository @Inject constructor(
                         apiCrowdLevel = it.apiCrowdLevel,
                         calculatedCrowdLevel = it.calculatedCrowdLevel,
                         displayCrowdLevel = it.displayCrowdLevel,
+                        openedToday = it.openedToday,
                         openAttractions = it.openAttractions,
                         totalAttractions = it.totalAttractions
                     )
