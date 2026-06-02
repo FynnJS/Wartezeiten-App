@@ -7,10 +7,21 @@ const apkSizeEl = document.getElementById('apkSize');
 const apkHashEl = document.getElementById('apkHash');
 const releaseNotesEl = document.getElementById('releaseNotes');
 
-let apkDownloadUrl = null;
+const defaultReleasePageUrl = 'https://github.com/FynnJS/Wartezeiten-App/releases/latest';
+
+function setDownloadLinks(url = defaultReleasePageUrl) {
+  downloadButton.href = url;
+  downloadButton2.href = url;
+  downloadButton.target = '_blank';
+  downloadButton2.target = '_blank';
+  downloadButton.rel = 'noopener';
+  downloadButton2.rel = 'noopener';
+}
 
 async function loadRelease() {
   try {
+    setDownloadLinks();
+
     const response = await fetch(releaseUrl, { cache: 'no-store' });
     if (!response.ok) {
       throw new Error(`HTTP ${response.status}: Release metadata konnte nicht geladen werden.`);
@@ -35,15 +46,7 @@ async function loadRelease() {
       apkHashEl.style.color = '#999';
     }
 
-    // Download-URL speichern und Handler setzen
-    if (data.apkUrl) {
-      apkDownloadUrl = data.apkUrl;
-      downloadButton.onclick = startDownload;
-      downloadButton2.onclick = startDownload;
-      // Nicht .href setzen, damit Download-Handler aktiv wird
-      downloadButton.href = '#';
-      downloadButton2.href = '#';
-    }
+    setDownloadLinks(data.releasePageUrl || defaultReleasePageUrl);
 
     // Release Notes
     if (data.releaseNotes && Array.isArray(data.releaseNotes)) {
@@ -55,22 +58,8 @@ async function loadRelease() {
     console.error('✗ Fehler beim Laden der Release-Informationen:', error);
     apkHashEl.textContent = 'Fehler beim Laden';
     apkHashEl.style.color = '#d32f2f';
+    setDownloadLinks();
   }
-}
-
-function startDownload(e) {
-  e.preventDefault();
-  if (!apkDownloadUrl) {
-    alert('Download-Link nicht verfügbar');
-    return;
-  }
-  // Öffne Download in neuem Tab/Fenster und lade herunter
-  const link = document.createElement('a');
-  link.href = apkDownloadUrl;
-  link.download = 'wartezeiten-app-1.0.0.apk';
-  document.body.appendChild(link);
-  link.click();
-  document.body.removeChild(link);
 }
 
 function copyToClipboard() {

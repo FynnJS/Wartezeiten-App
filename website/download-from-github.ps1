@@ -78,7 +78,7 @@ try {
         Write-Status "SHA-256: $sha256" "Info"
 
         # Aktualisiere release.json
-        $releaseJsonPath = Join-Path (Split-Path $PSScriptRoot) "release.json"
+        $releaseJsonPath = Join-Path $PSScriptRoot "release.json"
         
         if (Test-Path $releaseJsonPath) {
             $releaseJson = Get-Content $releaseJsonPath -Raw | ConvertFrom-Json
@@ -90,6 +90,7 @@ try {
         $releaseJson | Add-Member -NotePropertyName "versionName" -NotePropertyValue ($response.tag_name -replace "^v", "") -Force
         # Download direkt von GitHub (funktioniert zuverlässig)
         $gitHubDownloadUrl = "https://github.com/$Owner/$Repo/releases/download/$($response.tag_name)/$apkName"
+        $releaseJson | Add-Member -NotePropertyName "releasePageUrl" -NotePropertyValue $response.html_url -Force
         $releaseJson | Add-Member -NotePropertyName "apkUrl" -NotePropertyValue $gitHubDownloadUrl -Force
         $releaseJson | Add-Member -NotePropertyName "sha256" -NotePropertyValue $sha256 -Force
         $releaseJson | Add-Member -NotePropertyName "apkSize" -NotePropertyValue "$([Math]::Round($fileSize, 2))" -Force
