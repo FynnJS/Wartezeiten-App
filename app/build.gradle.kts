@@ -1,3 +1,7 @@
+import java.io.File
+import java.io.FileInputStream
+import java.util.Properties
+
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
@@ -9,6 +13,27 @@ plugins {
 android {
     namespace = "de.wartezeiten.app"
     compileSdk = 35
+
+    val keystorePropertiesFile = rootProject.file("keystore.properties")
+    val defaultDebugKeystore = File(System.getProperty("user.home"), ".android/debug.keystore")
+
+    signingConfigs {
+        create("release") {
+            val keystoreProperties = Properties()
+            if (keystorePropertiesFile.exists()) {
+                FileInputStream(keystorePropertiesFile).use { keystoreProperties.load(it) }
+                storeFile = file(keystoreProperties["storeFile"].toString())
+                storePassword = keystoreProperties["storePassword"].toString()
+                keyAlias = keystoreProperties["keyAlias"].toString()
+                keyPassword = keystoreProperties["keyPassword"].toString()
+            } else if (defaultDebugKeystore.exists()) {
+                storeFile = defaultDebugKeystore
+                storePassword = "android"
+                keyAlias = "androiddebugkey"
+                keyPassword = "android"
+            }
+        }
+    }
 
     defaultConfig {
         applicationId = "de.wartezeiten.app"
@@ -22,6 +47,7 @@ android {
     buildTypes {
         release {
             isMinifyEnabled = true
+            signingConfig = signingConfigs.getByName("release")
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"

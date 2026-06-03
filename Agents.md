@@ -84,6 +84,7 @@ Nach jeder Änderung am Programm **MUSS** geprüft werden, ob die Änderung erfo
 - Alle Build-Fehler wurden behoben.
 - `android.useAndroidX=true` ist in `gradle.properties` gesetzt.
 - Die API-Integration in `WartezeitenApiService` wurde auf Header-Parameter korrigiert.
+- Release-APK-Updates müssen mit demselben Keystore signiert werden wie die zuvor installierte Version, um Paketkonflikte zu vermeiden. `app/build.gradle.kts` unterstützt jetzt eine `keystore.properties`-basierte Release-Signaturkonfiguration; ohne eigene Keystore-Datei wird lokal der Android-Debug-Keystore verwendet, damit Entwicklungs-Updates installierbar bleiben.
 
 ## Website & Release-Deployment
 
