@@ -146,7 +146,7 @@ fun ParkTrendDashboard(
 
             Text(
                 text = if (summary.hasPublicHistory) {
-                    "${summary.sampleCount} Messpunkte aus lokalem und oeffentlichem Verlauf"
+                    "${summary.sampleCount} Messpunkte aus lokalem und öffentlichem Verlauf"
                 } else {
                     "${summary.sampleCount} Messpunkte im lokalen Verlauf"
                 },

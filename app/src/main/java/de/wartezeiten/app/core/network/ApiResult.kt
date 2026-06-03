@@ -57,7 +57,7 @@ suspend fun <T> safeApiCall(call: suspend () -> Response<T>): ApiResult<T> {
             response.code() == 404 -> {
                 ApiResult.Error(
                     type = NetworkError.NotFound,
-                    message = "Fuer diesen Park liegen aktuell keine Daten vor."
+                    message = "Für diesen Park liegen aktuell keine Daten vor."
                 )
             }
             response.code() in 500..599 -> {

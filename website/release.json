@@ -6,9 +6,9 @@
   "apkUrl": "https://github.com/FynnJS/Wartezeiten-App/releases/download/v1.0.3/wartezeiten-app-1.0.3.apk",
   "apkSize": "",
   "releaseNotes": [
-    "Zentrale Cloudflare App-Daten mit Cron fuer Empfehlungen und Trendverlaeufe vorbereitet.",
-    "Neues Ranking \"Bester Wert heute\" und Schnellzugriff auf Favoriten ergaenzt.",
-    "Share-Funktion fuer Parkstatus und einzelne Attraktionen hinzugefuegt.",
+    "Zentrale Cloudflare App-Daten mit Cron für Empfehlungen und Trendverläufe vorbereitet.",
+    "Neues Ranking \"Bester Wert heute\" und Schnellzugriff auf Favoriten ergänzt.",
+    "Share-Funktion für Parkstatus und einzelne Attraktionen hinzugefügt.",
     "Watchlist-Benachrichtigungen mit Presets, besseren Details und Deep Links verbessert.",
     "Attribution an feste Inhaltsstellen verschoben statt als permanente Footer-Leiste."
   ],

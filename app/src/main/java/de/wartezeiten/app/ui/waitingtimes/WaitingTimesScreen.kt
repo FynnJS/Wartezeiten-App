@@ -959,10 +959,10 @@ private fun weatherInsight(weather: WeatherInfo, language: String): String {
         }
     }
     return when {
-        weather.precipitationProbability >= 70 -> "Regenrisiko hoch - wetterbedingte Schliessungen moeglich"
+        weather.precipitationProbability >= 70 -> "Regenrisiko hoch - wetterbedingte Schliessungen möglich"
         weather.temperature >= 30 -> "Sehr warm - Pausen einplanen"
-        weather.temperature <= 3 -> "Sehr kalt - Outdoor-Attraktionen pruefen"
-        weather.weatherCode in 95..99 -> "Gewitterrisiko - Statusaenderungen beobachten"
+        weather.temperature <= 3 -> "Sehr kalt - Outdoor-Attraktionen prüfen"
+        weather.weatherCode in 95..99 -> "Gewitterrisiko - Statusänderungen beobachten"
         weather.precipitationProbability <= 20 && weather.temperature in 12.0..26.0 -> "Gutes Besuchswetter"
         else -> "Wetter im Blick behalten"
     }

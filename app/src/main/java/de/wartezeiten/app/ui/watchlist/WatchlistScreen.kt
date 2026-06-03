@@ -75,7 +75,7 @@ fun WatchlistRoute(
                     text = if (language == "en") {
                         "Checks run in the background and open the matching park from each alert."
                     } else {
-                        "Pruefungen laufen im Hintergrund und oeffnen aus jedem Alarm direkt den passenden Park."
+                        "Prüfungen laufen im Hintergrund und öffnen aus jedem Alarm direkt den passenden Park."
                     },
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
