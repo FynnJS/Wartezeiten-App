@@ -32,7 +32,7 @@ data class ParkListUiState(
     val availableCountries: List<String> = emptyList(),
     val showOpenOnly: Boolean = false,
     val showFavoritesOnly: Boolean = false,
-    val sort: ParkSort = ParkSort.FavoritesFirst,
+    val sort: ParkSort = ParkSort.Name,
     val recommendation: ParkRecommendation? = null,
     val recommendations: List<ParkRecommendation> = emptyList(),
     val isRecommendationLoading: Boolean = false,
@@ -62,7 +62,7 @@ class ParkListViewModel @Inject constructor(
     private val selectedCountry = MutableStateFlow<String?>(null)
     private val showOpenOnly = MutableStateFlow(false)
     private val showFavoritesOnly = MutableStateFlow(false)
-    private val sort = MutableStateFlow(ParkSort.FavoritesFirst)
+    private val sort = MutableStateFlow(ParkSort.Name)
     private val isLoading = MutableStateFlow(value = false)
     private val isRecommendationLoading = MutableStateFlow(value = false)
     private val recommendationScanProgress = MutableStateFlow<ParkRecommendationScanProgress?>(null)
@@ -193,7 +193,7 @@ class ParkListViewModel @Inject constructor(
         selectedCountry.value = null
         showOpenOnly.value = false
         showFavoritesOnly.value = false
-        sort.value = ParkSort.FavoritesFirst
+        sort.value = ParkSort.Name
     }
 
     fun toggleFavorite(park: Park) {

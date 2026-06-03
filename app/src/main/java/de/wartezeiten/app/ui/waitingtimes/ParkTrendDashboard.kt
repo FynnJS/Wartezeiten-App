@@ -20,8 +20,13 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import de.wartezeiten.app.domain.model.ParkTrendSummary
+import java.time.Instant
+import java.time.ZoneId
+import java.time.format.DateTimeFormatter
 import java.util.Locale
 import java.util.concurrent.TimeUnit
+import kotlin.math.ceil
+import kotlin.math.floor
 
 @Composable
 fun ParkTrendDashboard(
@@ -141,7 +146,7 @@ fun ParkTrendDashboard(
                 color = crowdStatus.color,
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(112.dp),
+                    .height(148.dp),
             )
 
             Text(
@@ -165,47 +170,108 @@ private fun TrendLineChart(
 ) {
     if (points.size < 2) return
 
-    Canvas(modifier = modifier) {
-        val horizontalPadding = 8.dp.toPx()
-        val verticalPadding = 12.dp.toPx()
-        val width = size.width - (horizontalPadding * 2)
-        val height = size.height - (verticalPadding * 2)
-        val minTime = points.minOf { it.capturedAtMillis }
-        val maxTime = points.maxOf { it.capturedAtMillis }.coerceAtLeast(minTime + 1)
+    val sortedPoints = remember(points) { points.sortedBy { it.capturedAtMillis } }
+    val minTime = sortedPoints.first().capturedAtMillis
+    val maxTime = sortedPoints.last().capturedAtMillis.coerceAtLeast(minTime + 1)
+    val midTime = minTime + ((maxTime - minTime) / 2)
+    val minCrowdLevel = sortedPoints.minOf { it.crowdLevel }
+    val maxCrowdLevel = sortedPoints.maxOf { it.crowdLevel }
+    val yAxisMin = floor(minCrowdLevel / 10f).toInt().times(10).coerceIn(0, 100)
+    val yAxisMax = ceil(maxCrowdLevel / 10f).toInt().times(10).coerceIn(0, 100)
+    val yAxisRange = when {
+        yAxisMax > yAxisMin -> yAxisMin to yAxisMax
+        yAxisMin <= 0 -> 0 to 10
+        yAxisMax >= 100 -> 90 to 100
+        else -> (yAxisMin - 10) to (yAxisMax + 10)
+    }
+    val yAxisMid = (((yAxisRange.first + yAxisRange.second) / 2f) / 10f).toInt().times(10)
+    val timeFormatter = remember { DateTimeFormatter.ofPattern("HH:mm").withZone(ZoneId.systemDefault()) }
 
-        repeat(4) { index ->
-            val y = verticalPadding + (height * index / 3f)
-            drawLine(
-                color = Color.Gray.copy(alpha = 0.18f),
-                start = androidx.compose.ui.geometry.Offset(horizontalPadding, y),
-                end = androidx.compose.ui.geometry.Offset(horizontalPadding + width, y),
-                strokeWidth = 1.dp.toPx(),
+    Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .weight(1f),
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
+        ) {
+            Column(
+                modifier = Modifier.fillMaxHeight(),
+                verticalArrangement = Arrangement.SpaceBetween,
+                horizontalAlignment = Alignment.End,
+            ) {
+                Text("${yAxisRange.second}%", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text("$yAxisMid%", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text("${yAxisRange.first}%", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+            Canvas(
+                modifier = Modifier
+                    .weight(1f)
+                    .fillMaxHeight()
+            ) {
+                val horizontalPadding = 4.dp.toPx()
+                val verticalPadding = 8.dp.toPx()
+                val width = size.width - (horizontalPadding * 2)
+                val height = size.height - (verticalPadding * 2)
+                val chartMin = yAxisRange.first.toFloat()
+                val chartRange = (yAxisRange.second - yAxisRange.first).coerceAtLeast(1).toFloat()
+
+                repeat(4) { index ->
+                    val y = verticalPadding + (height * index / 3f)
+                    drawLine(
+                        color = Color.Gray.copy(alpha = 0.18f),
+                        start = androidx.compose.ui.geometry.Offset(horizontalPadding, y),
+                        end = androidx.compose.ui.geometry.Offset(horizontalPadding + width, y),
+                        strokeWidth = 1.dp.toPx(),
+                    )
+                }
+
+                val path = Path()
+                sortedPoints.forEachIndexed { index, point ->
+                    val x = horizontalPadding + ((point.capturedAtMillis - minTime).toFloat() / (maxTime - minTime).toFloat()) * width
+                    val y = verticalPadding + (1f - ((point.crowdLevel - chartMin) / chartRange).coerceIn(0f, 1f)) * height
+                    if (index == 0) path.moveTo(x, y) else path.lineTo(x, y)
+                }
+                drawPath(
+                    path = path,
+                    color = color,
+                    style = Stroke(width = 3.dp.toPx(), cap = StrokeCap.Round),
+                )
+
+                sortedPoints.takeLast(12).forEach { point ->
+                    val x = horizontalPadding + ((point.capturedAtMillis - minTime).toFloat() / (maxTime - minTime).toFloat()) * width
+                    val y = verticalPadding + (1f - ((point.crowdLevel - chartMin) / chartRange).coerceIn(0f, 1f)) * height
+                    drawCircle(
+                        color = if (point.source == de.wartezeiten.app.domain.model.ParkTrendSource.PublicHistory) {
+                            Color(0xFF1565C0)
+                        } else {
+                            color
+                        },
+                        radius = 3.dp.toPx(),
+                        center = androidx.compose.ui.geometry.Offset(x, y),
+                    )
+                }
+            }
+        }
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(start = 34.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+        ) {
+            Text(
+                text = "${timeFormatter.format(Instant.ofEpochMilli(minTime))} Uhr",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
-        }
-
-        val path = Path()
-        points.sortedBy { it.capturedAtMillis }.forEachIndexed { index, point ->
-            val x = horizontalPadding + ((point.capturedAtMillis - minTime).toFloat() / (maxTime - minTime).toFloat()) * width
-            val y = verticalPadding + (1f - (point.crowdLevel / 100f).coerceIn(0f, 1f)) * height
-            if (index == 0) path.moveTo(x, y) else path.lineTo(x, y)
-        }
-        drawPath(
-            path = path,
-            color = color,
-            style = Stroke(width = 3.dp.toPx(), cap = StrokeCap.Round),
-        )
-
-        points.takeLast(12).forEach { point ->
-            val x = horizontalPadding + ((point.capturedAtMillis - minTime).toFloat() / (maxTime - minTime).toFloat()) * width
-            val y = verticalPadding + (1f - (point.crowdLevel / 100f).coerceIn(0f, 1f)) * height
-            drawCircle(
-                color = if (point.source == de.wartezeiten.app.domain.model.ParkTrendSource.PublicHistory) {
-                    Color(0xFF1565C0)
-                } else {
-                    color
-                },
-                radius = 3.dp.toPx(),
-                center = androidx.compose.ui.geometry.Offset(x, y),
+            Text(
+                text = "${timeFormatter.format(Instant.ofEpochMilli(midTime))} Uhr",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Text(
+                text = "${timeFormatter.format(Instant.ofEpochMilli(maxTime))} Uhr",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
     }

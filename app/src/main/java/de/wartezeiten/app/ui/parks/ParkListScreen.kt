@@ -34,6 +34,8 @@ import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.FavoriteBorder
+import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.List
 import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.Refresh
@@ -548,6 +550,8 @@ private fun BestParkRankingSection(
     language: String,
     onParkClick: (ParkRecommendation) -> Unit,
 ) {
+    var expanded by remember { mutableStateOf(false) }
+
     OutlinedCard(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(14.dp),
@@ -559,37 +563,86 @@ private fun BestParkRankingSection(
             modifier = Modifier.padding(14.dp),
             verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
-            Text(
-                text = if (language == "en") "Best value today" else "Bester Wert heute",
-                style = MaterialTheme.typography.titleSmall,
-                fontWeight = FontWeight.Bold,
-            )
-            recommendations.forEachIndexed { index, recommendation ->
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clip(RoundedCornerShape(10.dp))
-                        .clickable { onParkClick(recommendation) }
-                        .padding(vertical = 6.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(10.dp),
-                ) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(10.dp))
+                    .clickable { expanded = !expanded }
+                    .padding(vertical = 2.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
                     Text(
-                        text = "#${index + 1}",
-                        style = MaterialTheme.typography.labelLarge,
-                        fontWeight = FontWeight.Black,
-                        color = MaterialTheme.colorScheme.primary,
+                        text = if (language == "en") "Best value today" else "Bester Wert heute",
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.Bold,
                     )
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text(recommendation.park.name, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
-                        Text(recommendation.localizedReason(language), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    recommendations.firstOrNull()?.let { best ->
+                        Text(
+                            text = best.park.name,
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
                     }
-                    Text(
-                        text = recommendation.score.toString(),
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Black,
-                        color = MaterialTheme.colorScheme.primary,
-                    )
+                }
+                Text(
+                    text = recommendations.firstOrNull()?.score?.toString().orEmpty(),
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Black,
+                    color = MaterialTheme.colorScheme.primary,
+                )
+                Icon(
+                    imageVector = if (expanded) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
+                    contentDescription = if (expanded) {
+                        if (language == "en") "Hide ranking" else "Ranking einklappen"
+                    } else {
+                        if (language == "en") "Show ranking" else "Ranking ausklappen"
+                    },
+                )
+            }
+            AnimatedVisibility(
+                visible = expanded,
+                enter = expandVertically() + fadeIn(),
+                exit = shrinkVertically() + fadeOut(),
+            ) {
+                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    recommendations.forEachIndexed { index, recommendation ->
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(10.dp))
+                                .clickable { onParkClick(recommendation) }
+                                .padding(vertical = 6.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(10.dp),
+                        ) {
+                            Text(
+                                text = "#${index + 1}",
+                                style = MaterialTheme.typography.labelLarge,
+                                fontWeight = FontWeight.Black,
+                                color = MaterialTheme.colorScheme.primary,
+                            )
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = recommendation.park.name,
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    fontWeight = FontWeight.SemiBold,
+                                )
+                                Text(
+                                    text = recommendation.localizedReason(language),
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                            }
+                            Text(
+                                text = recommendation.score.toString(),
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Black,
+                                color = MaterialTheme.colorScheme.primary,
+                            )
+                        }
+                    }
                 }
             }
         }
@@ -750,7 +803,7 @@ private fun CountryFilterRow(
         var sortExpanded by remember { mutableStateOf(false) }
         Box {
             FilterChip(
-                selected = sort != ParkSort.FavoritesFirst,
+                selected = sort != ParkSort.Name,
                 onClick = { sortExpanded = true },
                 label = { Text(sort.label(language), style = MaterialTheme.typography.labelMedium) },
                 leadingIcon = {
@@ -821,7 +874,7 @@ private fun ParkOverviewStrip(
             state.selectedCountry != null ||
             state.showOpenOnly ||
             state.showFavoritesOnly ||
-            state.sort != ParkSort.FavoritesFirst
+            state.sort != ParkSort.Name
 
     Surface(
         modifier = Modifier.fillMaxWidth(),
