@@ -91,7 +91,7 @@ jobs:
           apk_url = f'https://github.com/{github_repo}/releases/download/{release_tag}/{apk_file_name}'
           sha256 = subprocess.check_output(['sha256sum', str(apk_source)], text=True).split()[0]
           size_bytes = apk_source.stat().st_size
-          size_label = f'{size_bytes} bytes'
+          size_label = f'{size_bytes / (1024 * 1024):.2f}'
           release_date = subprocess.check_output(['date', '-u', '+%Y-%m-%d'], text=True).strip()
 
           release_notes = [line for line in release_body.splitlines() if line.strip()]

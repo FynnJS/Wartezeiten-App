@@ -18,6 +18,20 @@ function setDownloadLinks(url = defaultReleasePageUrl) {
   downloadButton2.rel = 'noopener';
 }
 
+function formatApkSize(value) {
+  if (!value) return null;
+
+  const raw = String(value).trim();
+  const numericValue = Number(raw.replace(',', '.').replace(/[^0-9.]/g, ''));
+  if (!Number.isFinite(numericValue)) return raw;
+
+  if (/bytes?/i.test(raw)) {
+    return (numericValue / (1024 * 1024)).toFixed(2);
+  }
+
+  return numericValue.toFixed(2);
+}
+
 async function loadRelease() {
   try {
     setDownloadLinks();
@@ -34,7 +48,7 @@ async function loadRelease() {
     
     // APK-Größe
     if (data.apkSize) {
-      apkSizeEl.textContent = data.apkSize;
+      apkSizeEl.textContent = formatApkSize(data.apkSize) || data.apkSize;
     }
 
     // SHA-256 Hash mit Fallback
