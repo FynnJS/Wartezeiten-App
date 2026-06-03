@@ -35,6 +35,7 @@ import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.FavoriteBorder
 import androidx.compose.material.icons.filled.FilterList
+import androidx.compose.material.icons.filled.Insights
 import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Search
@@ -97,6 +98,7 @@ import java.util.Locale
 @Composable
 fun WaitingTimesRoute(
     onBackClick: () -> Unit,
+    onAttractionStatisticsClick: (String, String) -> Unit,
     viewModel: WaitingTimesViewModel = hiltViewModel(),
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
@@ -110,6 +112,7 @@ fun WaitingTimesRoute(
         onAttractionQueryChange = viewModel::setAttractionQuery,
         onMaxWaitChange = viewModel::setMaxWait,
         onTogglePlannedAttraction = viewModel::togglePlannedAttraction,
+        onAttractionStatisticsClick = onAttractionStatisticsClick,
     )
 }
 
@@ -125,6 +128,7 @@ fun WaitingTimesScreen(
     onAttractionQueryChange: (String) -> Unit,
     onMaxWaitChange: (Int?) -> Unit,
     onTogglePlannedAttraction: (String) -> Unit,
+    onAttractionStatisticsClick: (String, String) -> Unit,
 ) {
     val snackbarHostState = remember { SnackbarHostState() }
     var showAddWatchlistDialog by remember { mutableStateOf(false) }
@@ -267,6 +271,9 @@ fun WaitingTimesScreen(
                 onShareAttraction = { item ->
                     shareText(context, state.toShareText(item))
                 },
+                onAttractionStatisticsClick = { attractionId ->
+                    state.park?.let { park -> onAttractionStatisticsClick(park.id, attractionId) }
+                },
             )
         }
     }
@@ -328,6 +335,7 @@ private fun WaitingTimesContent(
     onAddWatchlist: () -> Unit,
     onAddWatchlistForAttraction: (String) -> Unit,
     onShareAttraction: (WaitingTime) -> Unit,
+    onAttractionStatisticsClick: (String) -> Unit,
 ) {
     if (state.isLoading && (state.lastRefreshed == 0L)) {
         LoadingDetailState()
@@ -409,6 +417,7 @@ private fun WaitingTimesContent(
                     onTogglePlanned = onTogglePlannedAttraction,
                     onAddWatchlist = onAddWatchlistForAttraction,
                     onShare = onShareAttraction,
+                    onStatisticsClick = onAttractionStatisticsClick,
                     language = state.language,
                 )
             }
@@ -788,6 +797,7 @@ private fun WaitingTimeRow(
     onTogglePlanned: (String) -> Unit,
     onAddWatchlist: (String) -> Unit,
     onShare: (WaitingTime) -> Unit,
+    onStatisticsClick: (String) -> Unit,
     language: String,
 ) {
     val waitTimeColor = when {
@@ -835,6 +845,21 @@ private fun WaitingTimeRow(
                     item.status.label(language),
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+
+            IconButton(
+                onClick = { onStatisticsClick(item.attractionId) },
+                modifier = Modifier.size(40.dp)
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Insights,
+                    contentDescription = if (language == "en") {
+                        "Show statistics for ${item.name}"
+                    } else {
+                        "Statistik für ${item.name} anzeigen"
+                    },
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
 

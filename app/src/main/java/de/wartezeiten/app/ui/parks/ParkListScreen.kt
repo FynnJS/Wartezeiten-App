@@ -34,6 +34,7 @@ import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.FavoriteBorder
+import androidx.compose.material.icons.filled.Insights
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.List
@@ -94,6 +95,7 @@ fun ParkListRoute(
     onParkClick: (Park) -> Unit,
     onSettingsClick: () -> Unit,
     onWatchlistClick: () -> Unit,
+    onStatisticsClick: () -> Unit,
     viewModel: ParkListViewModel = hiltViewModel(),
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
@@ -110,6 +112,7 @@ fun ParkListRoute(
         onParkClick = onParkClick,
         onSettingsClick = onSettingsClick,
         onWatchlistClick = onWatchlistClick,
+        onStatisticsClick = onStatisticsClick,
     )
 }
 
@@ -128,6 +131,7 @@ fun ParkListScreen(
     onParkClick: (Park) -> Unit,
     onSettingsClick: () -> Unit,
     onWatchlistClick: () -> Unit,
+    onStatisticsClick: () -> Unit,
 ) {
     val snackbarHostState = remember { SnackbarHostState() }
     var showAddWatchlistDialog by remember { mutableStateOf(false) }
@@ -190,6 +194,9 @@ fun ParkListScreen(
                         }
                         IconButton(onClick = onWatchlistClick) {
                             Icon(Icons.Default.List, contentDescription = "Watchlist")
+                        }
+                        IconButton(onClick = onStatisticsClick) {
+                            Icon(Icons.Default.Insights, contentDescription = if (state.language == "en") "Statistics" else "Statistik")
                         }
                     }
                 },

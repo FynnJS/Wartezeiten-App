@@ -1,6 +1,6 @@
 # Wartezeiten App
 
-Android-App zur Anzeige aktueller Wartezeiten, Öffnungszeiten und Besucheraufkommen in Freizeitparks weltweit. Die App nutzt die Wartezeiten.APP API, speichert Daten lokal mit Room und zeigt die Oberfläche mit Jetpack Compose.
+Android-App zur Anzeige aktueller Wartezeiten, Öffnungszeiten und Besucheraufkommen in Freizeitparks weltweit. Die App nutzt die Wartezeiten.APP API, speichert operative Live-Daten lokal mit Room und zeigt die Oberfläche mit Jetpack Compose.
 
 ## Download
 
@@ -14,12 +14,13 @@ Die Website liest `website/release.json` und verlinkt auf den neuesten GitHub Re
 
 - Parkliste mit Länder-, Favoriten- und Öffnungsstatus-Filter
 - Parkdetails mit Wartezeiten, Öffnungszeiten, Wetter, Feiertagen, Auslastung und Trend-Chart
-- Zentrale Cloudflare App-Daten für Ranking- und Trend-Snapshots
+- Zentrale Cloudflare App-Daten für Ranking-, Trend- und Attraktionsstatistik-Snapshots
+- Statistikbereich mit Park-, Datum- und Attraktionsauswahl für zentrale Tagesverläufe
 - Watchlist-Alarme für Wartezeiten, Attraktionsstatus, Parkstatus und Crowd-Level
 - Schnellzugriff auf Favoriten und Ranking "Bester Wert heute"
 - Teilen von Parkstatus und einzelnen Attraktionen
 - In-App-Hinweis und Benachrichtigung bei neuer APK-Version
-- Offline-First-Datenhaltung über Room und automatische Aktualisierung
+- Offline-First-Datenhaltung über Room und automatische Aktualisierung für Live-Daten
 
 ## Entwicklung
 
@@ -55,7 +56,7 @@ Die Website liegt im Ordner `website/` und wird als Cloudflare Worker deployt. B
 
 Der GitHub Actions Workflow `.github/workflows/release-pipeline.yml` baut die Release-APK, lädt sie als GitHub-Release-Asset hoch und aktualisiert `website/release.json` automatisch.
 
-Cloudflare App-Daten für Ranking und Trends werden vom Worker-Cron erzeugt. Setup-Hinweise stehen in `website/CLOUDFLARE-APP-DATA.md`.
+Cloudflare App-Daten für Ranking, Trends und zentrale Attraktionsstatistiken werden vom Worker-Cron erzeugt. Setup-Hinweise stehen in `website/CLOUDFLARE-APP-DATA.md`.
 
 Vor jedem Release prüfen:
 

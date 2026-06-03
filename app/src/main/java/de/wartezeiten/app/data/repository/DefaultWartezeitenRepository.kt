@@ -17,6 +17,7 @@ import de.wartezeiten.app.data.remote.HolidayApiService
 import de.wartezeiten.app.data.remote.PublicAppDataApiService
 import de.wartezeiten.app.data.remote.WartezeitenApiService
 import de.wartezeiten.app.data.remote.WeatherApiService
+import de.wartezeiten.app.data.remote.dto.toDomain
 import de.wartezeiten.app.domain.model.Park
 import de.wartezeiten.app.domain.model.ParkDetail
 import de.wartezeiten.app.domain.model.ParkRecommendation
@@ -642,6 +643,23 @@ class DefaultWartezeitenRepository @Inject constructor(
                 }
                 ApiResult.Success(Unit)
             }
+            is ApiResult.Error -> result
+        }
+    }
+
+    override suspend fun getStatisticsIndex(): ApiResult<de.wartezeiten.app.domain.model.StatisticsIndex> = withContext(ioDispatcher) {
+        when (val result = safeApiCall { publicAppDataApi.getStatisticsIndex() }) {
+            is ApiResult.Success -> ApiResult.Success(result.data.toDomain())
+            is ApiResult.Error -> result
+        }
+    }
+
+    override suspend fun getAttractionHistoryDay(
+        parkKey: String,
+        date: String,
+    ): ApiResult<de.wartezeiten.app.domain.model.AttractionHistoryDay> = withContext(ioDispatcher) {
+        when (val result = safeApiCall { publicAppDataApi.getAttractionHistoryDay(parkKey, date) }) {
+            is ApiResult.Success -> ApiResult.Success(result.data.toDomain())
             is ApiResult.Error -> result
         }
     }

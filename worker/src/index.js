@@ -1,8 +1,11 @@
 const WARTEZEITEN_API_BASE = "https://api.wartezeiten.app/v1";
 const LATEST_KEY = "app-data/latest.json";
 const TREND_KEY = "app-data/trend-history.json";
+const ATTRACTION_HISTORY_INDEX_KEY = "app-data/attraction-history/index.json";
+const ATTRACTION_HISTORY_PREFIX = "app-data/attraction-history";
 const MAX_HISTORY_AGE_MILLIS = 48 * 60 * 60 * 1000;
 const MAX_HISTORY_POINTS_PER_PARK = 96;
+const MAX_ATTRACTION_SNAPSHOTS_PER_DAY = 160;
 const REQUEST_DELAY_MILLIS = 900;
 
 const DEFAULT_PARK_KEYS = [
@@ -25,6 +28,29 @@ export default {
 
     if (url.pathname === "/app-data/trend-history.json") {
       return jsonResponse(await readJson(env, TREND_KEY, emptyTrendHistory()));
+    }
+
+    if (url.pathname === "/app-data/statistics/index.json") {
+      return jsonResponse(await readJson(env, ATTRACTION_HISTORY_INDEX_KEY, emptyAttractionHistoryIndex()));
+    }
+
+    const datesMatch = url.pathname.match(/^\/app-data\/statistics\/parks\/([^/]+)\/dates\.json$/);
+    if (datesMatch) {
+      const parkKey = decodeURIComponent(datesMatch[1]);
+      const index = await readJson(env, ATTRACTION_HISTORY_INDEX_KEY, emptyAttractionHistoryIndex());
+      const park = index.parks.find((item) => item.parkKey === parkKey);
+      return jsonResponse({
+        generatedAtMillis: index.generatedAtMillis ?? 0,
+        parkKey,
+        dates: park?.dates ?? [],
+      });
+    }
+
+    const dayMatch = url.pathname.match(/^\/app-data\/statistics\/parks\/([^/]+)\/days\/(\d{4}-\d{2}-\d{2})\.json$/);
+    if (dayMatch) {
+      const parkKey = decodeURIComponent(dayMatch[1]);
+      const date = dayMatch[2];
+      return jsonResponse(await readJson(env, attractionDayKey(parkKey, date), emptyAttractionDay(parkKey, date)));
     }
 
     if (url.pathname === "/app-data/refresh" && request.method === "POST") {
@@ -62,7 +88,7 @@ async function updateAppData(env) {
   for (const parkKey of parkKeys) {
     try {
       const snapshot = await collectParkSnapshot(parkKey, now);
-      parks.push(snapshot);
+      parks.push(toLatestParkSnapshot(snapshot));
 
       if (snapshot.openedToday && snapshot.openAttractions > 0 && snapshot.displayCrowdLevel != null) {
         const score = recommendationScore(snapshot);
@@ -84,6 +110,10 @@ async function updateAppData(env) {
             .sort((a, b) => Number(a.capturedAtMillis) - Number(b.capturedAtMillis))
             .slice(-MAX_HISTORY_POINTS_PER_PARK),
         );
+      }
+
+      if (snapshot.attractions.length > 0) {
+        await updateAttractionHistory(env, snapshot, now);
       }
 
       await delay(REQUEST_DELAY_MILLIS);
@@ -120,11 +150,10 @@ async function collectParkSnapshot(parkKey, now) {
   ]);
 
   const opening = Array.isArray(openingTimes) ? openingTimes[0] : null;
+  const waitingItems = Array.isArray(waitingTimes) ? waitingTimes : [];
   const openedToday = opening?.opened_today === true;
-  const openAttractions = Array.isArray(waitingTimes)
-    ? waitingTimes.filter((item) => String(item.status ?? "").toLowerCase() === "opened").length
-    : 0;
-  const totalAttractions = Array.isArray(waitingTimes) ? waitingTimes.length : 0;
+  const openAttractions = waitingItems.filter((item) => String(item.status ?? "").toLowerCase() === "opened").length;
+  const totalAttractions = waitingItems.length;
   const apiCrowdLevel = parseCrowdLevel(crowdLevel?.crowd_level);
   const displayCrowdLevel = openedToday && openAttractions > 0 ? apiCrowdLevel : null;
 
@@ -139,6 +168,7 @@ async function collectParkSnapshot(parkKey, now) {
     closedFrom: opening?.closed_from ?? opening?.closing ?? null,
     openAttractions,
     totalAttractions,
+    attractions: waitingItems.map((item) => toAttractionSnapshotItem(item)),
   };
 }
 
@@ -183,6 +213,123 @@ function toTrendSnapshot(snapshot) {
   };
 }
 
+function toLatestParkSnapshot(snapshot) {
+  const { attractions: _attractions, ...publicSnapshot } = snapshot;
+  return publicSnapshot;
+}
+
+async function updateAttractionHistory(env, snapshot, now) {
+  const date = isoDate(now);
+  const key = attractionDayKey(snapshot.parkKey, date);
+  const existing = await readJson(env, key, emptyAttractionDay(snapshot.parkKey, date));
+  const snapshots = [
+    ...(existing.snapshots ?? []).filter((item) => Number(item.capturedAtMillis) !== snapshot.capturedAtMillis),
+    {
+      capturedAtMillis: snapshot.capturedAtMillis,
+      attractions: snapshot.attractions,
+    },
+  ]
+    .sort((a, b) => Number(a.capturedAtMillis) - Number(b.capturedAtMillis))
+    .slice(-MAX_ATTRACTION_SNAPSHOTS_PER_DAY);
+
+  const dayData = buildAttractionDayData(snapshot.parkKey, date, snapshots, now);
+  await env.APP_DATA.put(key, JSON.stringify(dayData));
+  await updateAttractionHistoryIndex(env, dayData);
+}
+
+async function updateAttractionHistoryIndex(env, dayData) {
+  const index = await readJson(env, ATTRACTION_HISTORY_INDEX_KEY, emptyAttractionHistoryIndex());
+  const parks = [...(index.parks ?? [])];
+  const existingIndex = parks.findIndex((park) => park.parkKey === dayData.parkKey);
+  const existing = existingIndex >= 0 ? parks[existingIndex] : { parkKey: dayData.parkKey, dates: [] };
+  const dates = [...new Set([...(existing.dates ?? []), dayData.date])].sort();
+  const updated = {
+    parkKey: dayData.parkKey,
+    dates,
+    latestDate: dates[dates.length - 1] ?? dayData.date,
+    attractionCount: dayData.attractions.length,
+    sampleCount: dayData.snapshots.length,
+    updatedAtMillis: dayData.generatedAtMillis,
+  };
+  if (existingIndex >= 0) {
+    parks[existingIndex] = updated;
+  } else {
+    parks.push(updated);
+  }
+  parks.sort((a, b) => a.parkKey.localeCompare(b.parkKey));
+  await env.APP_DATA.put(
+    ATTRACTION_HISTORY_INDEX_KEY,
+    JSON.stringify({ generatedAtMillis: dayData.generatedAtMillis, parks }),
+  );
+}
+
+function buildAttractionDayData(parkKey, date, snapshots, generatedAtMillis) {
+  const attractionsById = new Map();
+  for (const snapshot of snapshots) {
+    for (const item of snapshot.attractions ?? []) {
+      const existing = attractionsById.get(item.id) ?? {
+        id: item.id,
+        name: item.name,
+        values: [],
+        statusCodes: [],
+      };
+      existing.name = item.name || existing.name;
+      existing.values.push(item.value);
+      existing.statusCodes.push(item.statusCode);
+      attractionsById.set(item.id, existing);
+    }
+  }
+
+  const attractions = [...attractionsById.values()]
+    .map((item) => {
+      const openValues = item.values.filter((value) => value >= 0);
+      return {
+        id: item.id,
+        name: item.name,
+        sampleCount: item.values.length,
+        openSampleCount: openValues.length,
+        closedSampleCount: item.values.length - openValues.length,
+        averageWaitMinutes: openValues.length > 0 ? round(openValues.reduce((sum, value) => sum + value, 0) / openValues.length, 1) : null,
+        minWaitMinutes: openValues.length > 0 ? Math.min(...openValues) : null,
+        maxWaitMinutes: openValues.length > 0 ? Math.max(...openValues) : null,
+        lastValue: item.values[item.values.length - 1] ?? null,
+        lastStatusCode: item.statusCodes[item.statusCodes.length - 1] ?? null,
+      };
+    })
+    .sort((a, b) => a.name.localeCompare(b.name));
+
+  return {
+    generatedAtMillis,
+    parkKey,
+    date,
+    snapshots,
+    attractions,
+  };
+}
+
+function toAttractionSnapshotItem(item) {
+  const id = item.id || item.uuid || stableAttractionId(item.name);
+  const status = String(item.status ?? "").toLowerCase();
+  const statusCode = attractionStatusCode(status);
+  const waitingTime = Number(item.waitingtime ?? item.waitingTime ?? item.wait_time);
+  const openValue = Number.isFinite(waitingTime) ? Math.max(0, Math.round(waitingTime)) : 0;
+  return {
+    id,
+    name: item.name || id,
+    value: statusCode === 0 ? openValue : statusCode,
+    statusCode,
+    status: status || "unknown",
+  };
+}
+
+function attractionStatusCode(status) {
+  if (status === "opened" || status === "open") return 0;
+  if (status === "closedweather" || status === "closed_weather" || status === "weather") return -2;
+  if (status === "maintenance") return -3;
+  if (status === "closed") return -1;
+  return -4;
+}
+
 function parseCrowdLevel(value) {
   if (value == null) return null;
   const parsed = Number(String(value).replace(",", "."));
@@ -205,6 +352,35 @@ function emptyLatest() {
 
 function emptyTrendHistory() {
   return { generatedAtMillis: 0, parks: [] };
+}
+
+function emptyAttractionHistoryIndex() {
+  return { generatedAtMillis: 0, parks: [] };
+}
+
+function emptyAttractionDay(parkKey, date) {
+  return { generatedAtMillis: 0, parkKey, date, snapshots: [], attractions: [] };
+}
+
+function attractionDayKey(parkKey, date) {
+  return `${ATTRACTION_HISTORY_PREFIX}/${parkKey}/${date}.json`;
+}
+
+function stableAttractionId(name) {
+  return String(name || "unknown")
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+}
+
+function isoDate(timestampMillis) {
+  return new Date(timestampMillis).toISOString().slice(0, 10);
+}
+
+function round(value, decimals) {
+  const factor = 10 ** decimals;
+  return Math.round(value * factor) / factor;
 }
 
 function jsonResponse(value, status = 200) {

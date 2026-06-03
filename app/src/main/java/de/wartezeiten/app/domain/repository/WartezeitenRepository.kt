@@ -1,10 +1,12 @@
 package de.wartezeiten.app.domain.repository
 
 import de.wartezeiten.app.core.network.ApiResult
+import de.wartezeiten.app.domain.model.AttractionHistoryDay
 import de.wartezeiten.app.domain.model.Park
 import de.wartezeiten.app.domain.model.ParkDetail
 import de.wartezeiten.app.domain.model.ParkRecommendation
 import de.wartezeiten.app.domain.model.ParkTrendSummary
+import de.wartezeiten.app.domain.model.StatisticsIndex
 import kotlinx.coroutines.flow.Flow
 
 data class ParkRecommendationScanProgress(
@@ -30,6 +32,8 @@ interface WartezeitenRepository {
     
     fun getParkTrendSummary(parkKey: String): Flow<ParkTrendSummary>
     suspend fun refreshPublicTrendHistory(parkKey: String): ApiResult<Unit>
+    suspend fun getStatisticsIndex(): ApiResult<StatisticsIndex>
+    suspend fun getAttractionHistoryDay(parkKey: String, date: String): ApiResult<AttractionHistoryDay>
 
     suspend fun toggleFavorite(parkId: String, isFavorite: Boolean)
 }

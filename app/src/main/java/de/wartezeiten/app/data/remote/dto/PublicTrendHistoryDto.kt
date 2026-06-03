@@ -1,6 +1,12 @@
 package de.wartezeiten.app.data.remote.dto
 
 import com.google.gson.annotations.SerializedName
+import de.wartezeiten.app.domain.model.AttractionHistoryDay
+import de.wartezeiten.app.domain.model.AttractionHistoryPoint
+import de.wartezeiten.app.domain.model.AttractionHistorySnapshot
+import de.wartezeiten.app.domain.model.AttractionHistorySummary
+import de.wartezeiten.app.domain.model.StatisticsIndex
+import de.wartezeiten.app.domain.model.StatisticsParkIndex
 
 data class PublicLatestAppDataDto(
     @SerializedName("generatedAtMillis")
@@ -79,3 +85,141 @@ data class PublicParkTrendSnapshotDto(
     @SerializedName("totalAttractions")
     val totalAttractions: Int,
 )
+
+data class PublicStatisticsIndexDto(
+    @SerializedName("generatedAtMillis")
+    val generatedAtMillis: Long?,
+    @SerializedName("parks")
+    val parks: List<PublicStatisticsParkIndexDto> = emptyList(),
+)
+
+data class PublicStatisticsParkIndexDto(
+    @SerializedName("parkKey")
+    val parkKey: String,
+    @SerializedName("dates")
+    val dates: List<String> = emptyList(),
+    @SerializedName("latestDate")
+    val latestDate: String?,
+    @SerializedName("attractionCount")
+    val attractionCount: Int?,
+    @SerializedName("sampleCount")
+    val sampleCount: Int?,
+    @SerializedName("updatedAtMillis")
+    val updatedAtMillis: Long?,
+)
+
+data class PublicAttractionHistoryDayDto(
+    @SerializedName("generatedAtMillis")
+    val generatedAtMillis: Long?,
+    @SerializedName("parkKey")
+    val parkKey: String,
+    @SerializedName("date")
+    val date: String,
+    @SerializedName("snapshots")
+    val snapshots: List<PublicAttractionHistorySnapshotDto> = emptyList(),
+    @SerializedName("attractions")
+    val attractions: List<PublicAttractionHistorySummaryDto> = emptyList(),
+)
+
+data class PublicAttractionHistorySnapshotDto(
+    @SerializedName("capturedAtMillis")
+    val capturedAtMillis: Long,
+    @SerializedName("attractions")
+    val attractions: List<PublicAttractionHistoryPointDto> = emptyList(),
+)
+
+data class PublicAttractionHistoryPointDto(
+    @SerializedName("id")
+    val id: String,
+    @SerializedName("name")
+    val name: String,
+    @SerializedName("value")
+    val value: Int,
+    @SerializedName("statusCode")
+    val statusCode: Int,
+    @SerializedName("status")
+    val status: String?,
+)
+
+data class PublicAttractionHistorySummaryDto(
+    @SerializedName("id")
+    val id: String,
+    @SerializedName("name")
+    val name: String,
+    @SerializedName("sampleCount")
+    val sampleCount: Int?,
+    @SerializedName("openSampleCount")
+    val openSampleCount: Int?,
+    @SerializedName("closedSampleCount")
+    val closedSampleCount: Int?,
+    @SerializedName("averageWaitMinutes")
+    val averageWaitMinutes: Float?,
+    @SerializedName("minWaitMinutes")
+    val minWaitMinutes: Int?,
+    @SerializedName("maxWaitMinutes")
+    val maxWaitMinutes: Int?,
+    @SerializedName("lastValue")
+    val lastValue: Int?,
+    @SerializedName("lastStatusCode")
+    val lastStatusCode: Int?,
+)
+
+fun PublicStatisticsIndexDto.toDomain(): StatisticsIndex {
+    return StatisticsIndex(
+        generatedAtMillis = generatedAtMillis ?: 0L,
+        parks = parks.map { it.toDomain() },
+    )
+}
+
+fun PublicStatisticsParkIndexDto.toDomain(): StatisticsParkIndex {
+    return StatisticsParkIndex(
+        parkKey = parkKey,
+        dates = dates.sorted(),
+        latestDate = latestDate,
+        attractionCount = attractionCount ?: 0,
+        sampleCount = sampleCount ?: 0,
+        updatedAtMillis = updatedAtMillis ?: 0L,
+    )
+}
+
+fun PublicAttractionHistoryDayDto.toDomain(): AttractionHistoryDay {
+    return AttractionHistoryDay(
+        generatedAtMillis = generatedAtMillis ?: 0L,
+        parkKey = parkKey,
+        date = date,
+        snapshots = snapshots.map { it.toDomain() },
+        attractions = attractions.map { it.toDomain() },
+    )
+}
+
+fun PublicAttractionHistorySnapshotDto.toDomain(): AttractionHistorySnapshot {
+    return AttractionHistorySnapshot(
+        capturedAtMillis = capturedAtMillis,
+        attractions = attractions.map { it.toDomain() },
+    )
+}
+
+fun PublicAttractionHistoryPointDto.toDomain(): AttractionHistoryPoint {
+    return AttractionHistoryPoint(
+        id = id,
+        name = name,
+        value = value,
+        statusCode = statusCode,
+        status = status ?: "unknown",
+    )
+}
+
+fun PublicAttractionHistorySummaryDto.toDomain(): AttractionHistorySummary {
+    return AttractionHistorySummary(
+        id = id,
+        name = name,
+        sampleCount = sampleCount ?: 0,
+        openSampleCount = openSampleCount ?: 0,
+        closedSampleCount = closedSampleCount ?: 0,
+        averageWaitMinutes = averageWaitMinutes,
+        minWaitMinutes = minWaitMinutes,
+        maxWaitMinutes = maxWaitMinutes,
+        lastValue = lastValue,
+        lastStatusCode = lastStatusCode,
+    )
+}

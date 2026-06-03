@@ -4,8 +4,13 @@ Der Worker sammelt zentrale Live-Snapshots für die Android-App und stellt sie a
 
 - `/app-data/latest.json` für aktuelle Park-Snapshots und Ranking-Daten
 - `/app-data/trend-history.json` für Verlauf/Messpunkte
+- `/app-data/statistics/index.json` für verfügbare Park-/Datumsbereiche der zentralen Attraktionsstatistiken
+- `/app-data/statistics/parks/{parkKey}/dates.json` für verfügbare Tage eines Parks
+- `/app-data/statistics/parks/{parkKey}/days/{yyyy-MM-dd}.json` für Wartezeiten- und Statusverlauf aller Attraktionen eines Tages
 
-Die App importiert diese Daten in Room und nutzt lokale/API-Scans nur noch als Fallback.
+Die App importiert Park- und Trenddaten in Room und nutzt lokale/API-Scans nur noch als Fallback.
+Die Attraktionsstatistiken werden nicht lokal gespeichert, sondern pro Park und Tag zentral im Cloudflare-KV abgelegt.
+Dadurch kann die App später gezielt alte Tagesdateien laden, z.B. für Vergleiche oder Monatsübersichten.
 
 ## Einmalige Einrichtung
 
@@ -66,6 +71,8 @@ Endpunkte prüfen:
 ```powershell
 curl "http://localhost:8787/app-data/latest.json"
 curl "http://localhost:8787/app-data/trend-history.json"
+curl "http://localhost:8787/app-data/statistics/index.json"
+curl "http://localhost:8787/app-data/statistics/parks/europapark/days/2026-06-03.json"
 ```
 
 ## Deploy

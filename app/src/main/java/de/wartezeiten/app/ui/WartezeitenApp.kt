@@ -19,6 +19,7 @@ import androidx.navigation.navArgument
 import de.wartezeiten.app.ui.components.UpdateBanner
 import de.wartezeiten.app.ui.parks.ParkListRoute
 import de.wartezeiten.app.ui.settings.SettingsRoute
+import de.wartezeiten.app.ui.statistics.StatisticsRoute
 import de.wartezeiten.app.ui.update.UpdateViewModel
 import de.wartezeiten.app.ui.watchlist.WatchlistRoute
 import de.wartezeiten.app.ui.waitingtimes.WaitingTimesRoute
@@ -63,6 +64,9 @@ fun WartezeitenApp(
                     },
                     onWatchlistClick = {
                         navController.navigate("watchlist")
+                    },
+                    onStatisticsClick = {
+                        navController.navigate("statistics")
                     }
                 )
             }
@@ -77,6 +81,17 @@ fun WartezeitenApp(
                 )
             }
             composable(
+                route = "statistics?parkKey={parkKey}&attractionId={attractionId}",
+                arguments = listOf(
+                    navArgument("parkKey") { type = NavType.StringType; nullable = true; defaultValue = null },
+                    navArgument("attractionId") { type = NavType.StringType; nullable = true; defaultValue = null }
+                )
+            ) {
+                StatisticsRoute(
+                    onBackClick = { navController.popBackStack() }
+                )
+            }
+            composable(
                 route = "parks/{parkKey}?attractionId={attractionId}",
                 arguments = listOf(
                     navArgument("parkKey") { type = NavType.StringType },
@@ -84,7 +99,10 @@ fun WartezeitenApp(
                 )
             ) {
                 WaitingTimesRoute(
-                    onBackClick = { navController.popBackStack() }
+                    onBackClick = { navController.popBackStack() },
+                    onAttractionStatisticsClick = { parkKey, attractionId ->
+                        navController.navigate("statistics?parkKey=${Uri.encode(parkKey)}&attractionId=${Uri.encode(attractionId)}")
+                    }
                 )
             }
         }
