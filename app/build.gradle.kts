@@ -16,6 +16,7 @@ android {
 
     val keystorePropertiesFile = rootProject.file("keystore.properties")
     val defaultDebugKeystore = File(System.getProperty("user.home"), ".android/debug.keystore")
+    var hasValidKeystore = false
 
     signingConfigs {
         create("release") {
@@ -26,11 +27,13 @@ android {
                 storePassword = keystoreProperties["storePassword"].toString()
                 keyAlias = keystoreProperties["keyAlias"].toString()
                 keyPassword = keystoreProperties["keyPassword"].toString()
+                hasValidKeystore = true
             } else if (defaultDebugKeystore.exists()) {
                 storeFile = defaultDebugKeystore
                 storePassword = "android"
                 keyAlias = "androiddebugkey"
                 keyPassword = "android"
+                hasValidKeystore = true
             }
         }
     }
@@ -47,7 +50,9 @@ android {
     buildTypes {
         release {
             isMinifyEnabled = true
-            signingConfig = signingConfigs.getByName("release")
+            if (hasValidKeystore) {
+                signingConfig = signingConfigs.getByName("release")
+            }
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
