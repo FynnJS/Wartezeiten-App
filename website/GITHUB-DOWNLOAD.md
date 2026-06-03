@@ -9,7 +9,7 @@ cd website
 .\download-from-github.ps1 -Owner "FynnJS" -Repo "Wartezeiten-App"
 ```
 
-Optional mit Token fuer hoehere GitHub API Limits:
+Optional mit Token für höhere GitHub API Limits:
 
 ```powershell
 $token = "ghp_xxxxxxxxxxxxxxxxxxxxxxxxxxxx"
@@ -27,4 +27,4 @@ Das Skript aktualisiert:
 - `releaseDate`
 - `releaseNotes`
 
-Zusaetzliche Sicherheits-Scan-Felder werden nicht mehr geschrieben.
+Zusätzliche Sicherheits-Scan-Felder werden nicht mehr geschrieben.

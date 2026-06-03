@@ -1,7 +1,5 @@
 # Changelog
 
-## Unreleased
-
 ## v1.0.3 - 2026-06-03
 
 - Added Cloudflare Worker app-data endpoints with Cron/KV setup for central park snapshots, recommendations, and trend history.

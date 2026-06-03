@@ -1,15 +1,15 @@
 # Cloudflare App-Data Worker
 
-Der Worker sammelt zentrale Live-Snapshots fuer die Android-App und stellt sie als kompakte JSON-Endpunkte bereit:
+Der Worker sammelt zentrale Live-Snapshots für die Android-App und stellt sie als kompakte JSON-Endpunkte bereit:
 
-- `/app-data/latest.json` fuer aktuelle Park-Snapshots und Ranking-Daten
-- `/app-data/trend-history.json` fuer Verlauf/Messpunkte
+- `/app-data/latest.json` für aktuelle Park-Snapshots und Ranking-Daten
+- `/app-data/trend-history.json` für Verlauf/Messpunkte
 
 Die App importiert diese Daten in Room und nutzt lokale/API-Scans nur noch als Fallback.
 
 ## Einmalige Einrichtung
 
-1. Abhaengigkeiten installieren:
+1. Abhängigkeiten installieren:
 
    ```powershell
    npm install
@@ -37,7 +37,7 @@ Die App importiert diese Daten in Room und nutzt lokale/API-Scans nur noch als F
 
 4. Die ausgegebene `id` in `wrangler.jsonc` bei `kv_namespaces[0].id` eintragen.
 
-5. Optional Parkliste fuer den Cron anpassen:
+5. Optional Parkliste für den Cron anpassen:
 
    ```powershell
    npx wrangler secret put APP_DATA_PARK_KEYS
@@ -61,7 +61,7 @@ Cron manuell triggern:
 curl "http://localhost:8787/__scheduled?cron=*+*+*+*+*"
 ```
 
-Endpunkte pruefen:
+Endpunkte prüfen:
 
 ```powershell
 curl "http://localhost:8787/app-data/latest.json"
