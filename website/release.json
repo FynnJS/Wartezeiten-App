@@ -1,16 +1,18 @@
 {
-  "versionName": "1.0",
-  "versionCode": 1,
-  "releaseDate": "2026-05-30",
-  "releasePageUrl": "https://github.com/FynnJS/Wartezeiten-App/releases/tag/v1.0.0",
-  "apkUrl": "https://github.com/FynnJS/Wartezeiten-App/releases/download/v1.0.0/wartezeiten-app-1.0.0.apk",
-  "sha256": "299e995ab87c88b7f6e6721a2ab19691b76ea5a1c283ed786d84d0c35c4fa36a",
-  "apkSize": "19.33",
+  "versionName": "1.0.2",
+  "versionCode": 10002,
+  "releaseDate": "2026-06-02",
+  "releasePageUrl": "https://github.com/FynnJS/Wartezeiten-App/releases/tag/v1.0.2",
+  "apkUrl": "https://github.com/FynnJS/Wartezeiten-App/releases/download/v1.0.2/wartezeiten-app-1.0.2.apk",
+  "sha256": "ec3be2d4ee1edf942c30d9bda9e2274885b24bf8a547ae2ad73ee111cf77eb5d",
+  "apkSize": "20337930 bytes",
   "releaseNotes": [
-    "Initialer Release",
-    "Live-Wartezeiten für Freizeitparks weltweit",
-    "Offline-Caching und sprachabhängige Anzeige",
-    "In-App-Update-Banner bei neuer Version"
+    "Added German/English language setting and refreshed API calls when the language changes.",
+    "Localized the main park list, park detail controls, watchlist, attribution, update banner, and best-park scan status.",
+    "Added background recommendation scans via WorkManager so \"Best park today\" can stay warm while the app is closed.",
+    "Improved \"Best park today\" with scan progress and estimated remaining time.",
+    "Reworked visitor-focused notification categories and notification copy."
   ],
-  "showBanner": true
+  "showBanner": true,
+  "virusTotalUrl": ""
 }

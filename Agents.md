@@ -89,6 +89,7 @@ Nach jeder Änderung am Programm **MUSS** geprüft werden, ob die Änderung erfo
 
 ### Release-Changelog (PFLICHT)
 Bei jedem neuen Release muss vor dem Commit ein Changelog-Eintrag geschrieben bzw. aktualisiert werden. Der Eintrag soll die wichtigsten Nutzer- und Technikänderungen der Version knapp zusammenfassen.
+Bei jedem Release muss zusätzlich geprüft werden, ob die Projekt-README neue Informationen zur Version, Installation, Website oder Release-/Download-Automation benötigt. Relevante Änderungen sind vor dem Commit einzutragen.
 
 ### Live Website
 - **URL:** https://wartezeiten-app.tutorialfynn.workers.dev/

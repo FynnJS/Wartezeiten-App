@@ -31,9 +31,12 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.withContext
+import java.time.Instant
+import java.time.OffsetDateTime
 import javax.inject.Inject
 import javax.inject.Singleton
 
+private const val RECOMMENDATION_CURRENT_MAX_AGE_MILLIS = 30 * 60 * 1000L
 private const val RECOMMENDATION_SNAPSHOT_MAX_AGE_MILLIS = 6 * 60 * 60 * 1000L
 private const val RECOMMENDATION_REQUEST_DELAY_MILLIS = 1_500L
 private const val RECOMMENDATION_ESTIMATED_PARK_SCAN_MILLIS = 4_500L
@@ -66,12 +69,14 @@ class DefaultWartezeitenRepository @Inject constructor(
             parkDao.observeParks(null),
             parkSnapshotDao.observeLatestSnapshots(),
         ) { parks, snapshots ->
+            val now = System.currentTimeMillis()
             val parksByKey = parks
                 .flatMap { park -> listOf(park.id to park, park.uuid to park) }
                 .toMap()
 
             snapshots
                 .asSequence()
+                .filter { now - it.capturedAtMillis <= RECOMMENDATION_CURRENT_MAX_AGE_MILLIS }
                 .filter { it.openedToday == true && it.openAttractions > 0 }
                 .mapNotNull { snapshot ->
                     val park = parksByKey[snapshot.parkKey] ?: return@mapNotNull null
@@ -127,6 +132,14 @@ class DefaultWartezeitenRepository @Inject constructor(
         val freshParkKeys = parkSnapshotDao.observeLatestSnapshots()
             .first()
             .filter { now - it.capturedAtMillis <= RECOMMENDATION_SNAPSHOT_MAX_AGE_MILLIS }
+            .filter { snapshot ->
+                snapshot.openedToday == false || isParkCurrentlyOpen(
+                    openedToday = snapshot.openedToday,
+                    openFrom = snapshot.openFrom,
+                    closedFrom = snapshot.closedFrom,
+                    nowMillis = now,
+                )
+            }
             .map { it.parkKey }
             .toSet()
         val parksToRefresh = parks.filter { park ->
@@ -186,8 +199,14 @@ class DefaultWartezeitenRepository @Inject constructor(
             ?.data
             ?.firstOrNull()
             ?.closing
+        val currentlyOpen = isParkCurrentlyOpen(
+            openedToday = openedToday,
+            openFrom = openFrom,
+            closedFrom = closedFrom,
+            nowMillis = now,
+        )
 
-        if (openedToday == false) {
+        if (openingResult is ApiResult.Success && !currentlyOpen) {
             parkSnapshotDao.insert(
                 ParkSnapshotEntity(
                     parkKey = parkKey,
@@ -195,7 +214,7 @@ class DefaultWartezeitenRepository @Inject constructor(
                     apiCrowdLevel = null,
                     calculatedCrowdLevel = null,
                     displayCrowdLevel = null,
-                    openedToday = false,
+                    openedToday = openedToday ?: false,
                     openFrom = openFrom,
                     closedFrom = closedFrom,
                     openAttractions = 0,
@@ -413,6 +432,26 @@ class DefaultWartezeitenRepository @Inject constructor(
             NetworkError.EmptyBody -> 4
             NetworkError.Unknown -> 5
         }
+    }
+
+    private fun isParkCurrentlyOpen(
+        openedToday: Boolean?,
+        openFrom: String?,
+        closedFrom: String?,
+        nowMillis: Long,
+    ): Boolean {
+        if (openedToday != true) return false
+        val now = Instant.ofEpochMilli(nowMillis)
+        val opensAt = openFrom?.toInstantOrNull()
+        val closesAt = closedFrom?.toInstantOrNull()
+        if (opensAt != null && now.isBefore(opensAt)) return false
+        if (closesAt != null && !now.isBefore(closesAt)) return false
+        return true
+    }
+
+    private fun String.toInstantOrNull(): Instant? {
+        return runCatching { OffsetDateTime.parse(this).toInstant() }
+            .getOrElse { runCatching { Instant.parse(this) }.getOrNull() }
     }
 
     private fun buildRecommendationReason(

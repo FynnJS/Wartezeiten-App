@@ -29,6 +29,8 @@ import de.wartezeiten.app.data.remote.dto.WaitingTimeDto
 import de.wartezeiten.app.MainActivity
 import kotlinx.coroutines.flow.first
 import java.util.Locale
+import java.time.Instant
+import java.time.OffsetDateTime
 
 private const val CHANNEL_ID = "watchlist_alerts"
 private const val CHANNEL_NAME = "Park-Alarme"
@@ -75,8 +77,12 @@ class NotificationWorker @AssistedInject constructor(
             val waitingTimes = safeApiCall { api.getWaitingTimes(parkKey, language) }
             val crowdLevel = safeApiCall { api.getCrowdLevel(parkKey) }
             val opening = openingTimes?.firstOrNull()
-            val isParkOpen = opening?.openedToday == true
-            val canUseLiveAttractionAlerts = opening?.openedToday != false &&
+            val isParkOpen = isParkCurrentlyOpen(
+                openedToday = opening?.openedToday,
+                openFrom = opening?.opening,
+                closedFrom = opening?.closing,
+            )
+            val canUseLiveAttractionAlerts = isParkOpen &&
                     waitingTimes?.any { it.status.normalizedStatus() == "opened" } == true
 
             collectParkNotifications(parkKey, parkName, isParkOpen, alerts, notifications)
@@ -443,6 +449,25 @@ class NotificationWorker @AssistedInject constructor(
     }
 
     private fun String.normalizedStatus(): String = trim().lowercase(Locale.ROOT)
+
+    private fun isParkCurrentlyOpen(
+        openedToday: Boolean?,
+        openFrom: String?,
+        closedFrom: String?,
+    ): Boolean {
+        if (openedToday != true) return false
+        val now = Instant.now()
+        val opensAt = openFrom?.toInstantOrNull()
+        val closesAt = closedFrom?.toInstantOrNull()
+        if (opensAt != null && now.isBefore(opensAt)) return false
+        if (closesAt != null && !now.isBefore(closesAt)) return false
+        return true
+    }
+
+    private fun String.toInstantOrNull(): Instant? {
+        return runCatching { OffsetDateTime.parse(this).toInstant() }
+            .getOrElse { runCatching { Instant.parse(this) }.getOrNull() }
+    }
 
     private fun Int.toParkCountText(): String {
         return if (this == 1) {

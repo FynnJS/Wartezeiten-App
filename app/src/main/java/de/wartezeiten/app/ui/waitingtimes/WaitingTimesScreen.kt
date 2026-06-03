@@ -679,16 +679,6 @@ private fun ParkHeaderSection(
                 overflow = TextOverflow.Ellipsis
             )
 
-            displayState.crowdText?.let { crowdText ->
-                Text(
-                    text = crowdText,
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = contentColor,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-            }
-            
             // Kompakte Wetter-Anzeige innerhalb des Headers
             weather?.let {
                 Column(modifier = Modifier.padding(top = 8.dp)) {

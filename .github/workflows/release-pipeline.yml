@@ -102,6 +102,7 @@ jobs:
               'versionName': version_name,
               'versionCode': version_code,
               'releaseDate': release_date,
+              'releasePageUrl': f'https://github.com/{github_repo}/releases/tag/{release_tag}',
               'apkUrl': apk_url,
               'sha256': sha256,
               'apkSize': size_label,
