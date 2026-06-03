@@ -14,6 +14,8 @@ import java.time.ZoneOffset
 import java.time.ZonedDateTime
 import java.time.format.DateTimeFormatter
 import java.util.Locale
+import java.util.logging.Level
+import java.util.logging.Logger
 
 internal enum class ParkOpeningTone {
     Open,
@@ -87,14 +89,28 @@ internal fun parkOpeningDisplayState(
 }
 
 private fun parseDateTime(value: String, zoneId: ZoneId): ZonedDateTime? {
-    return runCatching { OffsetDateTime.parse(value).atZoneSameInstant(zoneId) }
-        .recoverCatching { LocalDateTime.parse(value).atZone(zoneId) }
-        .getOrNull()
+    runCatching { OffsetDateTime.parse(value).atZoneSameInstant(zoneId) }
+        .onSuccess { return it }
+
+    runCatching { LocalDateTime.parse(value).atZone(zoneId) }
+        .onSuccess { return it }
+
+    logger.log(Level.WARNING, "Could not parse opening date-time value: {0}", value)
+    return null
 }
 
 private fun parseTime(value: String): LocalTime? {
-    val rawTime = timePattern.find(value.substringAfter('T', value))?.value ?: return null
-    return runCatching { LocalTime.parse(rawTime) }.getOrNull()
+    val rawTime = timePattern.find(value.substringAfter('T', value))?.value
+    if (rawTime == null) {
+        logger.log(Level.WARNING, "Could not find opening time value in: {0}", value)
+        return null
+    }
+
+    return runCatching { LocalTime.parse(rawTime) }
+        .onFailure {
+            logger.log(Level.WARNING, "Could not parse opening time value: $rawTime", it)
+        }
+        .getOrNull()
 }
 
 private fun isWithinOpeningHours(
@@ -133,3 +149,4 @@ private fun buildCrowdText(level: Float?): String? {
 
 private val displayTimeFormatter: DateTimeFormatter = DateTimeFormatter.ofPattern("HH:mm")
 private val timePattern = Regex("""\d{2}:\d{2}(:\d{2})?""")
+private val logger: Logger = Logger.getLogger("ParkOpeningDisplayState")

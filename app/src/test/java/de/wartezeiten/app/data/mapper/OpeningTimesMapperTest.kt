@@ -37,4 +37,18 @@ class OpeningTimesMapperTest {
         assertEquals("2026-05-27T09:00:00+02:00", entity.from)
         assertEquals("2026-05-27T18:00:00+02:00", entity.to)
     }
+
+    @Test
+    fun missingOpenedTodayDoesNotFallBackToStatus() {
+        val entity = listOf(
+            OpeningTimesDto(
+                openedToday = null,
+                status = "opened",
+                opening = "2026-05-27T09:00:00+02:00",
+                closing = "2026-05-27T18:00:00+02:00",
+            ),
+        ).toEntity(parkKey = "phantasialand", updatedAtMillis = 123L)
+
+        assertFalse(entity.opened)
+    }
 }

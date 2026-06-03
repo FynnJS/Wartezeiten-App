@@ -47,8 +47,7 @@ fun ParkEntity.toDomain(): Park {
  */
 fun List<OpeningTimesDto>.toEntity(parkKey: String, updatedAtMillis: Long): OpeningTimesEntity {
     val dto = firstOrNull()
-    val isOpen = dto?.openedToday
-        ?: (dto?.status?.lowercase() in listOf("open", "opened", "true", "operating"))
+    val isOpen = dto?.openedToday ?: false
     return OpeningTimesEntity(
         parkKey = parkKey,
         opened = isOpen,

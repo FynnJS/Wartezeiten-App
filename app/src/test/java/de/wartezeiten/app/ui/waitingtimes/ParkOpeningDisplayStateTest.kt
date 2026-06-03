@@ -130,6 +130,42 @@ class ParkOpeningDisplayStateTest {
         assertNull(state.crowdText)
     }
 
+    @Test
+    fun openedTodayWithoutTimesFallsBackToOpenedStatus() {
+        val state = parkOpeningDisplayState(
+            openingTimes = OpeningTimes(
+                opened = true,
+                from = null,
+                to = null,
+            ),
+            crowdLevel = CrowdLevel(level = 42f, timestamp = "2026-05-28T12:00:00+02:00"),
+            currentTimeMillis = millis("2026-05-28T12:00:00+02:00"),
+            localTimeOffsetSeconds = 7200,
+        )
+
+        assertEquals(ParkOpeningTone.Open, state.tone)
+        assertEquals("Heute ge\u00f6ffnet", state.statusText)
+        assertEquals("Auslastung: ca. 40% (Normal)", state.crowdText)
+    }
+
+    @Test
+    fun invalidOpeningTimesFallbackToOpenedTodayBoolean() {
+        val state = parkOpeningDisplayState(
+            openingTimes = OpeningTimes(
+                opened = true,
+                from = "kein-datum",
+                to = "auch-kein-datum",
+            ),
+            crowdLevel = CrowdLevel(level = 42f, timestamp = "2026-05-28T12:00:00+02:00"),
+            currentTimeMillis = millis("2026-05-28T12:00:00+02:00"),
+            localTimeOffsetSeconds = 7200,
+        )
+
+        assertEquals(ParkOpeningTone.Open, state.tone)
+        assertEquals("Heute ge\u00f6ffnet", state.statusText)
+        assertEquals("Auslastung: ca. 40% (Normal)", state.crowdText)
+    }
+
     private fun millis(value: String): Long {
         return OffsetDateTime.parse(value).toInstant().toEpochMilli()
     }

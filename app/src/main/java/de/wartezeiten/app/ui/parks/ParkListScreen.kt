@@ -81,7 +81,7 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import de.wartezeiten.app.domain.model.Park
 import de.wartezeiten.app.domain.model.ParkRecommendation
-import de.wartezeiten.app.ui.components.AttributionBanner
+import de.wartezeiten.app.ui.components.AttributionFooter
 import de.wartezeiten.app.ui.waitingtimes.AddWatchlistDialog
 import java.time.LocalTime
 import java.time.format.DateTimeFormatter
@@ -194,6 +194,9 @@ fun ParkListScreen(
                     containerColor = MaterialTheme.colorScheme.background,
                 ),
             )
+        },
+        bottomBar = {
+            AttributionFooter(language = state.language)
         }
     ) { padding ->
         Column(
@@ -270,10 +273,6 @@ fun ParkListScreen(
                         ),
                         verticalArrangement = Arrangement.spacedBy(10.dp),
                     ) {
-                        item {
-                            AttributionBanner(language = state.language)
-                        }
-
                         if (state.isShowingOfflineData) {
                             item {
                                 OfflineDataBanner(language = state.language)

@@ -244,7 +244,7 @@ class DefaultWartezeitenRepository @Inject constructor(
             ?.crowdLevel
             ?.replace(",", ".")
             ?.toFloatOrNull()
-        val canDisplayCrowdLevel = openedToday != false && openAttractions > 0
+        val canDisplayCrowdLevel = openedToday == true && openAttractions > 0
 
         if (openingResult is ApiResult.Success || waitingResult is ApiResult.Success || crowdResult is ApiResult.Success) {
             parkSnapshotDao.insert(
@@ -339,7 +339,7 @@ class DefaultWartezeitenRepository @Inject constructor(
                 } else {
                     0
                 }
-                val canDisplayCrowdLevel = openedToday != false && openAttractions > 0
+                val canDisplayCrowdLevel = openedToday == true && openAttractions > 0
                 val apiCrowdLevel = it.data.crowdLevel?.replace(",", ".")?.toFloatOrNull()
                 val displayCrowdLevel = apiCrowdLevel.takeIf { canDisplayCrowdLevel }
 

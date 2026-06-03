@@ -31,11 +31,14 @@ import kotlinx.coroutines.flow.first
 import java.util.Locale
 import java.time.Instant
 import java.time.OffsetDateTime
+import java.util.logging.Level
+import java.util.logging.Logger
 
 private const val CHANNEL_ID = "watchlist_alerts"
 private const val CHANNEL_NAME = "Park-Alarme"
 private const val SUMMARY_NOTIFICATION_ID = 1234
 private const val GROUP_KEY = "de.wartezeiten.app.WATCHLIST_ALERTS"
+private val logger: Logger = Logger.getLogger("NotificationWorker")
 
 private data class WatchlistNotification(
     val title: String,
@@ -72,28 +75,33 @@ class NotificationWorker @AssistedInject constructor(
         val language = preferences.language.first()
 
         groupedByPark.forEach { (parkKey, alerts) ->
-            val parkName = parkNames[parkKey] ?: parkKey
-            val openingTimes = safeApiCall { api.getOpeningTimes(parkKey) }
-            val waitingTimes = safeApiCall { api.getWaitingTimes(parkKey, language) }
-            val crowdLevel = safeApiCall { api.getCrowdLevel(parkKey) }
-            val opening = openingTimes?.firstOrNull()
-            val isParkOpen = isParkCurrentlyOpen(
-                openedToday = opening?.openedToday,
-                openFrom = opening?.opening,
-                closedFrom = opening?.closing,
-            )
-            val canUseLiveAttractionAlerts = isParkOpen &&
-                    waitingTimes?.any { it.status.normalizedStatus() == "opened" } == true
+            runCatching {
+                val parkName = parkNames[parkKey] ?: parkKey
+                val openingTimes = safeApiCall { api.getOpeningTimes(parkKey) }
+                val waitingTimes = safeApiCall { api.getWaitingTimes(parkKey, language) }
+                val crowdLevel = safeApiCall { api.getCrowdLevel(parkKey) }
+                val opening = openingTimes?.firstOrNull()
+                val isParkOpen = isParkCurrentlyOpen(
+                    openedToday = opening?.openedToday,
+                    openFrom = opening?.opening,
+                    closedFrom = opening?.closing,
+                )
+                val liveWaitingTimes = waitingTimes.orEmpty()
+                val canUseLiveAttractionAlerts = isParkOpen &&
+                        liveWaitingTimes.any { it.normalizedStatus() == "opened" }
 
-            collectParkNotifications(parkKey, parkName, isParkOpen, alerts, notifications)
+                collectParkNotifications(parkKey, parkName, isParkOpen, alerts, notifications)
 
-            val crowdValue = crowdLevel?.crowdLevel?.replace(",", ".")?.toFloatOrNull()
-            collectCrowdNotifications(parkKey, parkName, canUseLiveAttractionAlerts, crowdValue, alerts, notifications)
+                val crowdValue = crowdLevel?.crowdLevel?.replace(",", ".")?.toFloatOrNull()
+                collectCrowdNotifications(parkKey, parkName, canUseLiveAttractionAlerts, crowdValue, alerts, notifications)
 
-            if (canUseLiveAttractionAlerts && waitingTimes != null) {
-                collectWaitBelowNotifications(parkKey, parkName, waitingTimes, alerts, notifications)
-                collectWaitAboveNotifications(parkKey, parkName, waitingTimes, alerts, notifications)
-                collectStatusNotifications(parkKey, parkName, waitingTimes, alerts, notifications)
+                if (canUseLiveAttractionAlerts) {
+                    collectWaitBelowNotifications(parkKey, parkName, liveWaitingTimes, alerts, notifications)
+                    collectWaitAboveNotifications(parkKey, parkName, liveWaitingTimes, alerts, notifications)
+                    collectStatusNotifications(parkKey, parkName, liveWaitingTimes, alerts, notifications)
+                }
+            }.onFailure {
+                logger.log(Level.WARNING, "Watchlist notification scan failed for park $parkKey", it)
             }
         }
 
@@ -201,8 +209,8 @@ class NotificationWorker @AssistedInject constructor(
                 val waitMinutes = best?.waitingTime ?: 0
                 notifications.add(
                     WatchlistNotification(
-                        title = if (target != null) "Ride-Fenster: ${target.name}" else "Ride-Fenster in $parkName",
-                        content = "${best?.name ?: "Eine Attraktion"} liegt bei $waitMinutes Min. Jetzt lohnt sich der Weg.",
+                        title = if (target != null) "Ride-Fenster: ${target.safeName()}" else "Ride-Fenster in $parkName",
+                        content = "${best?.safeName() ?: "Eine Attraktion"} liegt bei $waitMinutes Min. Jetzt lohnt sich der Weg.",
                         parkKey = parkKey,
                         parkName = parkName,
                     )
@@ -232,8 +240,8 @@ class NotificationWorker @AssistedInject constructor(
                 val waitMinutes = longest?.waitingTime ?: 0
                 notifications.add(
                     WatchlistNotification(
-                        title = if (target != null) "Zu voll: ${target.name}" else "Zu voll in $parkName",
-                        content = "${longest?.name ?: "Eine Attraktion"} steht bei $waitMinutes Min. Lieber Route ändern oder später wiederkommen.",
+                        title = if (target != null) "Zu voll: ${target.safeName()}" else "Zu voll in $parkName",
+                        content = "${longest?.safeName() ?: "Eine Attraktion"} steht bei $waitMinutes Min. Lieber Route ändern oder später wiederkommen.",
                         parkKey = parkKey,
                         parkName = parkName,
                     )
@@ -262,12 +270,12 @@ class NotificationWorker @AssistedInject constructor(
                 } ?: return@forEach
 
                 val shouldSend = when (alert.type) {
-                    WatchlistType.ATTRACTION_OPEN -> shouldNotifyBoolean(alert.id, current.status.normalizedStatus() == "opened")
-                    WatchlistType.ATTRACTION_CLOSED -> shouldNotifyBoolean(alert.id, current.status.normalizedStatus() == "closed")
-                    WatchlistType.ATTRACTION_MAINTENANCE -> shouldNotifyBoolean(alert.id, current.status.normalizedStatus() == "maintenance")
+                    WatchlistType.ATTRACTION_OPEN -> shouldNotifyBoolean(alert.id, current.normalizedStatus() == "opened")
+                    WatchlistType.ATTRACTION_CLOSED -> shouldNotifyBoolean(alert.id, current.normalizedStatus() == "closed")
+                    WatchlistType.ATTRACTION_MAINTENANCE -> shouldNotifyBoolean(alert.id, current.normalizedStatus() == "maintenance")
                     WatchlistType.ATTRACTION_STATUS_CHANGE -> shouldNotifyValue(
                         alert.id,
-                        current.status.normalizedStatus(),
+                        current.normalizedStatus(),
                         notifyOnFirstMatch = false,
                     )
                     else -> false
@@ -276,8 +284,8 @@ class NotificationWorker @AssistedInject constructor(
                 if (shouldSend) {
                     notifications.add(
                         WatchlistNotification(
-                            title = current.name.toStatusNotificationTitle(current.status),
-                            content = current.status.toReadableStatus(),
+                            title = current.safeName().toStatusNotificationTitle(current.safeStatus()),
+                            content = current.safeStatus().toReadableStatus(),
                             parkKey = parkKey,
                             parkName = parkName,
                         )
@@ -373,7 +381,7 @@ class NotificationWorker @AssistedInject constructor(
     }
 
     private fun normalizeAttractionId(dto: WaitingTimeDto): String {
-        return dto.id ?: dto.name.trim().lowercase().replace(Regex("[^a-z0-9]+"), "-")
+        return dto.id ?: dto.safeName().trim().lowercase().replace(Regex("[^a-z0-9]+"), "-")
     }
 
     private fun String.notificationId(): Int {
@@ -383,8 +391,12 @@ class NotificationWorker @AssistedInject constructor(
     private suspend fun <T> safeApiCall(call: suspend () -> retrofit2.Response<T>): T? {
         return try {
             val response = call()
-            if (response.isSuccessful) response.body() else null
-        } catch (_: Exception) {
+            if (response.isSuccessful) response.body() else {
+                logger.log(Level.WARNING, "Watchlist API call failed with HTTP {0}", response.code())
+                null
+            }
+        } catch (exception: Exception) {
+            logger.log(Level.WARNING, "Watchlist API call failed", exception)
             null
         }
     }
@@ -411,7 +423,19 @@ class NotificationWorker @AssistedInject constructor(
     }
 
     private fun WaitingTimeDto.isOpenWithWaitTime(): Boolean {
-        return status.normalizedStatus() == "opened" && waitingTime != null && waitingTime >= 0
+        return normalizedStatus() == "opened" && waitingTime != null && waitingTime >= 0
+    }
+
+    private fun WaitingTimeDto.safeName(): String {
+        return (name as String?).orEmpty().ifBlank { "Eine Attraktion" }
+    }
+
+    private fun WaitingTimeDto.safeStatus(): String {
+        return (status as String?).orEmpty()
+    }
+
+    private fun WaitingTimeDto.normalizedStatus(): String {
+        return safeStatus().normalizedStatus()
     }
 
     private fun canPostNotifications(): Boolean {

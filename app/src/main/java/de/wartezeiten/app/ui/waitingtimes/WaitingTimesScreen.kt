@@ -82,6 +82,7 @@ import de.wartezeiten.app.domain.model.OpeningTimes
 import de.wartezeiten.app.domain.model.Park
 import de.wartezeiten.app.domain.model.WaitingTime
 import de.wartezeiten.app.domain.model.WeatherInfo
+import de.wartezeiten.app.ui.components.AttributionFooter
 import java.time.Instant
 import java.time.LocalDate
 import java.time.LocalTime
@@ -204,6 +205,9 @@ fun WaitingTimesScreen(
                     containerColor = MaterialTheme.colorScheme.background
                 )
             )
+        },
+        bottomBar = {
+            AttributionFooter(language = state.language)
         }
     ) { padding ->
         Column(

@@ -24,6 +24,7 @@ import de.wartezeiten.app.domain.repository.WartezeitenRepository
 import de.wartezeiten.app.domain.usecase.RefreshParkDetailUseCase
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.combine
@@ -97,7 +98,7 @@ class WaitingTimesViewModel @Inject constructor(
 
     // Aktuelle Uhrzeit Flow (aktualisiert jede Minute)
     private val currentLocalTime = flow {
-        while (true) {
+        while (currentCoroutineContext().isActive) {
             emit(System.currentTimeMillis())
             delay(60_000 - (System.currentTimeMillis() % 60_000))
         }

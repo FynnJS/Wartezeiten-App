@@ -29,6 +29,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import de.wartezeiten.app.data.local.entity.WatchlistEntity
+import de.wartezeiten.app.ui.components.AttributionFooter
 import de.wartezeiten.app.ui.waitingtimes.WatchlistAlertWithParkName
 import de.wartezeiten.app.ui.waitingtimes.WatchlistViewModel
 import de.wartezeiten.app.ui.waitingtimes.label
@@ -56,6 +57,9 @@ fun WatchlistRoute(
                     }
                 }
             )
+        },
+        bottomBar = {
+            AttributionFooter(language = language)
         }
     ) { padding ->
         LazyColumn(
