@@ -6,6 +6,7 @@ import de.wartezeiten.app.domain.model.AttractionHistoryPoint
 import de.wartezeiten.app.domain.model.AttractionHistorySnapshot
 import de.wartezeiten.app.domain.model.AttractionHistorySummary
 import de.wartezeiten.app.domain.model.StatisticsIndex
+import de.wartezeiten.app.domain.model.StatisticsAttractionIndex
 import de.wartezeiten.app.domain.model.StatisticsParkIndex
 
 data class PublicLatestAppDataDto(
@@ -38,6 +39,21 @@ data class PublicLatestParkSnapshotDto(
     val openAttractions: Int,
     @SerializedName("totalAttractions")
     val totalAttractions: Int,
+    @SerializedName("attractions")
+    val attractions: List<PublicLatestAttractionDto> = emptyList(),
+)
+
+data class PublicLatestAttractionDto(
+    @SerializedName("id")
+    val id: String,
+    @SerializedName("name")
+    val name: String,
+    @SerializedName("value")
+    val value: Int?,
+    @SerializedName("statusCode")
+    val statusCode: Int?,
+    @SerializedName("status")
+    val status: String?,
 )
 
 data class PublicParkRecommendationDto(
@@ -106,6 +122,25 @@ data class PublicStatisticsParkIndexDto(
     val sampleCount: Int?,
     @SerializedName("updatedAtMillis")
     val updatedAtMillis: Long?,
+    @SerializedName("attractions")
+    val attractions: List<PublicStatisticsAttractionIndexDto> = emptyList(),
+)
+
+data class PublicStatisticsAttractionIndexDto(
+    @SerializedName("id")
+    val id: String,
+    @SerializedName("name")
+    val name: String,
+    @SerializedName("latestDate")
+    val latestDate: String?,
+    @SerializedName("sampleCount")
+    val sampleCount: Int?,
+    @SerializedName("averageWaitMinutes")
+    val averageWaitMinutes: Float?,
+    @SerializedName("lastValue")
+    val lastValue: Int?,
+    @SerializedName("lastStatusCode")
+    val lastStatusCode: Int?,
 )
 
 data class PublicAttractionHistoryDayDto(
@@ -179,6 +214,19 @@ fun PublicStatisticsParkIndexDto.toDomain(): StatisticsParkIndex {
         attractionCount = attractionCount ?: 0,
         sampleCount = sampleCount ?: 0,
         updatedAtMillis = updatedAtMillis ?: 0L,
+        attractions = attractions.map { it.toDomain() },
+    )
+}
+
+fun PublicStatisticsAttractionIndexDto.toDomain(): StatisticsAttractionIndex {
+    return StatisticsAttractionIndex(
+        id = id,
+        name = name,
+        latestDate = latestDate,
+        sampleCount = sampleCount ?: 0,
+        averageWaitMinutes = averageWaitMinutes,
+        lastValue = lastValue,
+        lastStatusCode = lastStatusCode,
     )
 }
 

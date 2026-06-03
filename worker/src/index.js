@@ -214,8 +214,7 @@ function toTrendSnapshot(snapshot) {
 }
 
 function toLatestParkSnapshot(snapshot) {
-  const { attractions: _attractions, ...publicSnapshot } = snapshot;
-  return publicSnapshot;
+  return snapshot;
 }
 
 async function updateAttractionHistory(env, snapshot, now) {
@@ -250,6 +249,7 @@ async function updateAttractionHistoryIndex(env, dayData) {
     attractionCount: dayData.attractions.length,
     sampleCount: dayData.snapshots.length,
     updatedAtMillis: dayData.generatedAtMillis,
+    attractions: mergeAttractionIndex(existing.attractions ?? [], dayData),
   };
   if (existingIndex >= 0) {
     parks[existingIndex] = updated;
@@ -261,6 +261,23 @@ async function updateAttractionHistoryIndex(env, dayData) {
     ATTRACTION_HISTORY_INDEX_KEY,
     JSON.stringify({ generatedAtMillis: dayData.generatedAtMillis, parks }),
   );
+}
+
+function mergeAttractionIndex(existingAttractions, dayData) {
+  const byId = new Map(existingAttractions.map((item) => [item.id, item]));
+  for (const attraction of dayData.attractions) {
+    const existing = byId.get(attraction.id) ?? {};
+    byId.set(attraction.id, {
+      id: attraction.id,
+      name: attraction.name,
+      latestDate: dayData.date,
+      sampleCount: Math.max(Number(existing.sampleCount ?? 0), attraction.sampleCount ?? 0),
+      averageWaitMinutes: attraction.averageWaitMinutes ?? existing.averageWaitMinutes ?? null,
+      lastValue: attraction.lastValue ?? existing.lastValue ?? null,
+      lastStatusCode: attraction.lastStatusCode ?? existing.lastStatusCode ?? null,
+    });
+  }
+  return [...byId.values()].sort((a, b) => String(a.name).localeCompare(String(b.name)));
 }
 
 function buildAttractionDayData(parkKey, date, snapshots, generatedAtMillis) {

@@ -7,8 +7,11 @@ import de.wartezeiten.app.core.network.ApiResult
 import de.wartezeiten.app.core.network.NetworkError
 import de.wartezeiten.app.core.network.toUserMessage
 import de.wartezeiten.app.data.local.PreferencesDataSource
+import de.wartezeiten.app.domain.model.AttractionStatus
+import de.wartezeiten.app.domain.model.CurrentAttractionSearchEntry
 import de.wartezeiten.app.domain.model.Park
 import de.wartezeiten.app.domain.model.ParkRecommendation
+import de.wartezeiten.app.domain.model.StatisticsIndex
 import de.wartezeiten.app.domain.repository.ParkRecommendationScanProgress
 import de.wartezeiten.app.domain.repository.WartezeitenRepository
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -18,7 +21,6 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
-import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
@@ -44,6 +46,20 @@ data class ParkListUiState(
     val isLoading: Boolean = false,
     val errorMessage: String? = null,
     val refreshTrigger: Int = 0,
+    val attractionSearchResults: List<AttractionSearchResult> = emptyList(),
+    val isStatisticsIndexLoading: Boolean = false,
+)
+
+data class AttractionSearchResult(
+    val parkKey: String,
+    val parkName: String,
+    val parkCountry: String?,
+    val attractionId: String,
+    val attractionName: String,
+    val latestDate: String?,
+    val averageWaitMinutes: Float?,
+    val lastValue: Int?,
+    val lastStatusCode: Int?,
 )
 
 enum class ParkSort {
@@ -69,15 +85,19 @@ class ParkListViewModel @Inject constructor(
     private val currentLanguage = MutableStateFlow(PreferencesDataSource.DEFAULT_LANGUAGE)
     private val errorMessage = MutableStateFlow<String?>(null)
     private val refreshTrigger = MutableStateFlow(0)
+    private val statisticsIndex = MutableStateFlow(StatisticsIndex(generatedAtMillis = 0L, parks = emptyList()))
+    private val isStatisticsIndexLoading = MutableStateFlow(false)
     private var refreshJob: Job? = null
     private var recommendationRefreshJob: Job? = null
 
-    private val allParks = query.flatMapLatest { repository.observeParks(it) }
+    private val allParks = repository.observeParks(null)
+    private val currentAttractions = repository.observeCurrentAttractions()
     private val latestOpenParkKeys = repository.observeLatestOpenParkKeys()
     private val recommendations = repository.observeParkRecommendations(limit = 5)
 
     val uiState = combine(
         allParks,
+        currentAttractions,
         latestOpenParkKeys,
         query,
         selectedCountry,
@@ -90,32 +110,62 @@ class ParkListViewModel @Inject constructor(
         currentLanguage,
         isLoading,
         errorMessage,
-        refreshTrigger
+        refreshTrigger,
+        statisticsIndex,
+        isStatisticsIndexLoading
     ) { args: Array<Any?> ->
         @Suppress("UNCHECKED_CAST")
         val parks = args[0] as List<Park>
-        val openParkKeys = args[1] as Set<String>
-        val q = args[2] as String
-        val country = args[3] as String?
-        val openOnly = args[4] as Boolean
-        val favoritesOnly = args[5] as Boolean
-        val currentSort = args[6] as ParkSort
-        val currentRecommendations = args[7] as List<ParkRecommendation>
-        val recommendationLoading = args[8] as Boolean
-        val scanProgress = args[9] as ParkRecommendationScanProgress?
-        val language = args[10] as String
-        val loading = args[11] as Boolean
-        val error = args[12] as String?
-        val trigger = args[13] as Int
+        val currentAttractionEntries = args[1] as List<CurrentAttractionSearchEntry>
+        val openParkKeys = args[2] as Set<String>
+        val q = args[3] as String
+        val country = args[4] as String?
+        val openOnly = args[5] as Boolean
+        val favoritesOnly = args[6] as Boolean
+        val currentSort = args[7] as ParkSort
+        val currentRecommendations = args[8] as List<ParkRecommendation>
+        val recommendationLoading = args[9] as Boolean
+        val scanProgress = args[10] as ParkRecommendationScanProgress?
+        val language = args[11] as String
+        val loading = args[12] as Boolean
+        val error = args[13] as String?
+        val trigger = args[14] as Int
+        val statsIndex = args[15] as StatisticsIndex
+        val statsLoading = args[16] as Boolean
 
         val favorites = parks.filter { it.isFavorite }
         val countries = parks.map { it.country }.distinct().sorted()
+        val parksByKey = parks
+            .flatMap { park -> listOf(park.id to park, park.uuid to park) }
+            .toMap()
         
+        val normalizedQuery = q.normalizedSearchText()
         var filtered = parks
+        if (normalizedQuery.isNotBlank()) {
+            filtered = filtered.filter { park ->
+                park.name.normalizedSearchText().contains(normalizedQuery) ||
+                    park.country.normalizedSearchText().contains(normalizedQuery)
+            }
+        }
         if (country != null) filtered = filtered.filter { it.country == country }
         if (openOnly) filtered = filtered.filter { it.id in openParkKeys || it.uuid in openParkKeys }
         if (favoritesOnly) filtered = filtered.filter { it.isFavorite }
         filtered = filtered.sortedBy(currentSort)
+        val currentAttractionResults = currentAttractionEntries.toSearchResults(
+            query = q,
+            parksByKey = parksByKey,
+            selectedCountry = country,
+            openOnly = openOnly,
+        )
+        val statisticsAttractionResults = statsIndex.toSearchResults(
+            query = q,
+            parksByKey = parksByKey,
+            selectedCountry = country,
+            openOnly = openOnly,
+        )
+        val attractionResults = (currentAttractionResults + statisticsAttractionResults)
+            .distinctBy { "${it.parkKey}_${it.attractionId}" }
+            .take(20)
         
         ParkListUiState(
             parks = filtered,
@@ -136,7 +186,9 @@ class ParkListViewModel @Inject constructor(
             isShowingOfflineData = error != null && parks.isNotEmpty(),
             isLoading = loading,
             errorMessage = error,
-            refreshTrigger = trigger
+            refreshTrigger = trigger,
+            attractionSearchResults = attractionResults,
+            isStatisticsIndexLoading = statsLoading,
         )
     }.stateIn(
         scope = viewModelScope,
@@ -147,6 +199,7 @@ class ParkListViewModel @Inject constructor(
     init {
         observeLanguage()
         startAutoRefresh()
+        refreshStatisticsIndex()
     }
 
     private fun observeLanguage() {
@@ -233,6 +286,17 @@ class ParkListViewModel @Inject constructor(
         }
     }
 
+    private fun refreshStatisticsIndex() {
+        viewModelScope.launch {
+            isStatisticsIndexLoading.value = true
+            when (val result = repository.getStatisticsIndex()) {
+                is ApiResult.Success -> statisticsIndex.value = result.data
+                is ApiResult.Error -> Unit
+            }
+            isStatisticsIndexLoading.value = false
+        }
+    }
+
     private fun refreshRecommendationsInBackground(language: String) {
         recommendationRefreshJob?.cancel()
         recommendationRefreshJob = viewModelScope.launch {
@@ -281,4 +345,100 @@ class ParkListViewModel @Inject constructor(
             )
         }
     }
+
+    private fun StatisticsIndex.toSearchResults(
+        query: String,
+        parksByKey: Map<String, Park>,
+        selectedCountry: String?,
+        openOnly: Boolean,
+    ): List<AttractionSearchResult> {
+        val normalizedQuery = query.normalizedSearchText()
+        if (normalizedQuery.length < 2) return emptyList()
+        return parks
+            .flatMap { parkIndex ->
+                val park = parksByKey[parkIndex.parkKey]
+                parkIndex.attractions.map { attraction ->
+                    AttractionSearchResult(
+                        parkKey = parkIndex.parkKey,
+                        parkName = park?.name ?: parkIndex.parkKey,
+                        parkCountry = park?.country,
+                        attractionId = attraction.id,
+                        attractionName = attraction.name,
+                        latestDate = attraction.latestDate ?: parkIndex.latestDate,
+                        averageWaitMinutes = attraction.averageWaitMinutes,
+                        lastValue = attraction.lastValue,
+                        lastStatusCode = attraction.lastStatusCode,
+                    )
+                }
+            }
+            .filter { result -> selectedCountry == null || result.parkCountry == selectedCountry }
+            .filter { result -> !openOnly || result.lastStatusCode == 0 }
+            .filter { result ->
+                result.attractionName.normalizedSearchText().contains(normalizedQuery) ||
+                    result.parkName.normalizedSearchText().contains(normalizedQuery)
+            }
+            .sortedWith(
+                compareBy<AttractionSearchResult> {
+                    !it.attractionName.normalizedSearchText().startsWith(normalizedQuery)
+                }.thenBy { it.attractionName.lowercase() }
+            )
+            .take(20)
+    }
+
+    private fun List<CurrentAttractionSearchEntry>.toSearchResults(
+        query: String,
+        parksByKey: Map<String, Park>,
+        selectedCountry: String?,
+        openOnly: Boolean,
+    ): List<AttractionSearchResult> {
+        val normalizedQuery = query.normalizedSearchText()
+        if (normalizedQuery.length < 2) return emptyList()
+        return asSequence()
+            .mapNotNull { entry ->
+                val park = parksByKey[entry.parkKey] ?: return@mapNotNull null
+                val statusCode = entry.status.toSearchStatusCode()
+                AttractionSearchResult(
+                    parkKey = entry.parkKey,
+                    parkName = park.name,
+                    parkCountry = park.country,
+                    attractionId = entry.attractionId,
+                    attractionName = entry.name,
+                    latestDate = null,
+                    averageWaitMinutes = null,
+                    lastValue = if (statusCode == 0) entry.waitingTime ?: 0 else statusCode,
+                    lastStatusCode = statusCode,
+                )
+            }
+            .filter { result -> selectedCountry == null || result.parkCountry == selectedCountry }
+            .filter { result -> !openOnly || result.lastStatusCode == 0 }
+            .filter { result ->
+                result.attractionName.normalizedSearchText().contains(normalizedQuery) ||
+                    result.parkName.normalizedSearchText().contains(normalizedQuery)
+            }
+            .sortedWith(
+                compareBy<AttractionSearchResult> {
+                    !it.attractionName.normalizedSearchText().startsWith(normalizedQuery)
+                }.thenBy { it.attractionName.lowercase() }
+            )
+            .take(20)
+            .toList()
+    }
+
+    private fun AttractionStatus.toSearchStatusCode(): Int {
+        return when (this) {
+            AttractionStatus.Opened -> 0
+            AttractionStatus.Closed -> -1
+            AttractionStatus.ClosedWeather -> -2
+            AttractionStatus.Maintenance -> -3
+            AttractionStatus.Unknown -> -4
+        }
+    }
+}
+
+private fun String.normalizedSearchText(): String {
+    return lowercase()
+        .replace("ä", "ae")
+        .replace("ö", "oe")
+        .replace("ü", "ue")
+        .replace("ß", "ss")
 }

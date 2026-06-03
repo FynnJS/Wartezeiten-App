@@ -1,5 +1,14 @@
 # Changelog
 
+## v1.0.4 - 2026-06-03
+
+- Added a combined park and attraction search on the start page with direct attraction deep links.
+- Removed share actions from park and attraction views to keep the UI calmer.
+- Improved the statistics page with stable park, date, and attraction selection even when a day has no stored data yet.
+- Added current attraction data to the public app-data feed so attraction search can work without visiting each park first.
+- Fixed German umlaut rendering in affected UI and release texts.
+- Prepared central attraction history charts and statistics for future daily/monthly review.
+
 ## v1.0.3 - 2026-06-03
 
 - Added Cloudflare Worker app-data endpoints with Cron/KV setup for central park snapshots, recommendations, and trend history.

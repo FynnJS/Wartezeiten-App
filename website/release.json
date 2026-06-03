@@ -1,16 +1,16 @@
 {
-  "versionName": "1.0.3",
-  "versionCode": 10003,
+  "versionName": "1.0.4",
+  "versionCode": 10004,
   "releaseDate": "2026-06-03",
-  "releasePageUrl": "https://github.com/FynnJS/Wartezeiten-App/releases/tag/v1.0.3",
-  "apkUrl": "https://github.com/FynnJS/Wartezeiten-App/releases/download/v1.0.3/wartezeiten-app-1.0.3.apk",
+  "releasePageUrl": "https://github.com/FynnJS/Wartezeiten-App/releases/tag/v1.0.4",
+  "apkUrl": "https://github.com/FynnJS/Wartezeiten-App/releases/download/v1.0.4/wartezeiten-app-1.0.4.apk",
   "apkSize": "",
   "releaseNotes": [
-    "Zentrale Cloudflare App-Daten mit Cron für Empfehlungen und Trendverläufe vorbereitet.",
-    "Neues Ranking \"Bester Wert heute\" und Schnellzugriff auf Favoriten ergänzt.",
-    "Share-Funktion für Parkstatus und einzelne Attraktionen hinzugefügt.",
-    "Watchlist-Benachrichtigungen mit Presets, besseren Details und Deep Links verbessert.",
-    "Attribution an feste Inhaltsstellen verschoben statt als permanente Footer-Leiste."
+    "Startseitensuche findet jetzt Parks und Attraktionen gemeinsam mit direktem Sprung zur passenden Attraktion.",
+    "Statistik-Seite zeigt ausgewählte Parks und Attraktionen stabil mit Namen statt IDs und schließt Auswahlmenüs sofort.",
+    "Aktuelle Attraktionsdaten werden zentral über die öffentlichen App-Daten bereitgestellt.",
+    "Teilen-Funktionen entfernt und mehrere UI-Texte mit Umlauten korrigiert.",
+    "Attraktionsstatistiken und Tagesverläufe für zukünftige historische Auswertungen vorbereitet."
   ],
   "showBanner": true
 }

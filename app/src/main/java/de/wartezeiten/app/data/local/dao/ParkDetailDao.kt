@@ -23,6 +23,9 @@ interface ParkDetailDao {
     @Query("SELECT * FROM waiting_times WHERE parkKey = :parkKey")
     fun observeWaitingTimes(parkKey: String): Flow<List<WaitingTimeEntity>>
 
+    @Query("SELECT * FROM waiting_times")
+    fun observeAllWaitingTimes(): Flow<List<WaitingTimeEntity>>
+
     @Query("SELECT * FROM weather WHERE parkKey = :parkKey LIMIT 1")
     fun observeWeather(parkKey: String): Flow<WeatherEntity?>
 

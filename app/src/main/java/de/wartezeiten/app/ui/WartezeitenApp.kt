@@ -67,6 +67,9 @@ fun WartezeitenApp(
                     },
                     onStatisticsClick = {
                         navController.navigate("statistics")
+                    },
+                    onAttractionClick = { parkKey, attractionId ->
+                        navController.navigate("parks/${Uri.encode(parkKey)}?attractionId=${Uri.encode(attractionId)}")
                     }
                 )
             }

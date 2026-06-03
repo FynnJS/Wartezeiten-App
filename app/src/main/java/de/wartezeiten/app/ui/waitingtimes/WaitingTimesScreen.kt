@@ -1,7 +1,5 @@
 package de.wartezeiten.app.ui.waitingtimes
 
-import android.content.Context
-import android.content.Intent
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
@@ -39,7 +37,6 @@ import androidx.compose.material.icons.filled.Insights
 import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Search
-import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
@@ -74,7 +71,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.foundation.clickable
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -133,7 +129,6 @@ fun WaitingTimesScreen(
     val snackbarHostState = remember { SnackbarHostState() }
     var showAddWatchlistDialog by remember { mutableStateOf(false) }
     var selectedAttractionId by remember { mutableStateOf<String?>(null) }
-    val context = LocalContext.current
 
     LaunchedEffect(state.refreshTrigger) {
         if ((state.refreshTrigger > 0) && !state.isLoading) {
@@ -204,11 +199,6 @@ fun WaitingTimesScreen(
                         )
                         Spacer(Modifier.width(8.dp))
                     } else {
-                        state.park?.let {
-                            IconButton(onClick = { shareText(context, state.toShareText()) }) {
-                                Icon(Icons.Default.Share, contentDescription = if (state.language == "en") "Share" else "Teilen")
-                            }
-                        }
                         IconButton(onClick = onRefreshClick) {
                             Icon(Icons.Default.Refresh, contentDescription = if (state.language == "en") "Refresh" else "Aktualisieren")
                         }
@@ -267,9 +257,6 @@ fun WaitingTimesScreen(
                 onAddWatchlistForAttraction = { attractionId ->
                     selectedAttractionId = attractionId
                     showAddWatchlistDialog = true
-                },
-                onShareAttraction = { item ->
-                    shareText(context, state.toShareText(item))
                 },
                 onAttractionStatisticsClick = { attractionId ->
                     state.park?.let { park -> onAttractionStatisticsClick(park.id, attractionId) }
@@ -334,7 +321,6 @@ private fun WaitingTimesContent(
     onTogglePlannedAttraction: (String) -> Unit,
     onAddWatchlist: () -> Unit,
     onAddWatchlistForAttraction: (String) -> Unit,
-    onShareAttraction: (WaitingTime) -> Unit,
     onAttractionStatisticsClick: (String) -> Unit,
 ) {
     if (state.isLoading && (state.lastRefreshed == 0L)) {
@@ -372,7 +358,6 @@ private fun WaitingTimesContent(
                         item = highlighted,
                         language = state.language,
                         onAddWatchlist = { onAddWatchlistForAttraction(highlighted.attractionId) },
-                        onShare = { onShareAttraction(highlighted) },
                     )
                 }
             }
@@ -416,7 +401,6 @@ private fun WaitingTimesContent(
                     isPlanned = state.waitingTimes[index].attractionId in state.plannedAttractionIds,
                     onTogglePlanned = onTogglePlannedAttraction,
                     onAddWatchlist = onAddWatchlistForAttraction,
-                    onShare = onShareAttraction,
                     onStatisticsClick = onAttractionStatisticsClick,
                     language = state.language,
                 )
@@ -430,7 +414,6 @@ private fun HighlightedAttractionCard(
     item: WaitingTime,
     language: String,
     onAddWatchlist: () -> Unit,
-    onShare: () -> Unit,
 ) {
     OutlinedCard(
         modifier = Modifier.fillMaxWidth(),
@@ -453,9 +436,6 @@ private fun HighlightedAttractionCard(
                 )
                 Text(item.name, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
                 Text(plannerLine(item, language), style = MaterialTheme.typography.bodySmall)
-            }
-            IconButton(onClick = onShare) {
-                Icon(Icons.Default.Share, contentDescription = if (language == "en") "Share attraction" else "Attraktion teilen")
             }
             IconButton(onClick = onAddWatchlist) {
                 Icon(Icons.Default.Notifications, contentDescription = if (language == "en") "Add notification" else "Benachrichtigung hinzufügen")
@@ -796,7 +776,6 @@ private fun WaitingTimeRow(
     isPlanned: Boolean,
     onTogglePlanned: (String) -> Unit,
     onAddWatchlist: (String) -> Unit,
-    onShare: (WaitingTime) -> Unit,
     onStatisticsClick: (String) -> Unit,
     language: String,
 ) {
@@ -864,21 +843,6 @@ private fun WaitingTimeRow(
             }
 
             IconButton(
-                onClick = { onShare(item) },
-                modifier = Modifier.size(40.dp)
-            ) {
-                Icon(
-                    imageVector = Icons.Default.Share,
-                    contentDescription = if (language == "en") {
-                        "Share ${item.name}"
-                    } else {
-                        "${item.name} teilen"
-                    },
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
-
-            IconButton(
                 onClick = { onTogglePlanned(item.attractionId) },
                 modifier = Modifier.size(40.dp)
             ) {
@@ -935,40 +899,6 @@ private fun plannerLine(item: WaitingTime, language: String): String {
             "${item.waitingTime ?: 0} Min. Wartezeit"
         }
         else -> item.status.label(language)
-    }
-}
-
-private fun shareText(context: Context, text: String) {
-    val intent = Intent(Intent.ACTION_SEND).apply {
-        type = "text/plain"
-        putExtra(Intent.EXTRA_TEXT, text)
-    }
-    context.startActivity(Intent.createChooser(intent, null))
-}
-
-private fun WaitingTimesUiState.toShareText(attraction: WaitingTime? = null): String {
-    val parkName = park?.name ?: if (language == "en") "Theme park" else "Freizeitpark"
-    if (attraction != null) {
-        val waitText = if (attraction.status == AttractionStatus.Opened) {
-            if (language == "en") "${attraction.waitingTime ?: 0} min wait" else "${attraction.waitingTime ?: 0} Min. Wartezeit"
-        } else {
-            attraction.status.label(language)
-        }
-        return if (language == "en") {
-            "$parkName: ${attraction.name} - $waitText\nData provided by Wartezeiten.app"
-        } else {
-            "$parkName: ${attraction.name} - $waitText\nDaten bereitgestellt von Wartezeiten.app"
-        }
-    }
-
-    val openCount = allWaitingTimes.count { it.status == AttractionStatus.Opened }
-    val crowdText = crowdEstimate?.level?.let { String.format(Locale.GERMAN, "%.0f%%", it) }
-        ?: crowdLevel?.level?.let { String.format(Locale.GERMAN, "%.0f%%", it) }
-        ?: "-"
-    return if (language == "en") {
-        "$parkName: $openCount open attractions, crowd level approx. $crowdText\nData provided by Wartezeiten.app"
-    } else {
-        "$parkName: $openCount offene Attraktionen, Auslastung ca. $crowdText\nDaten bereitgestellt von Wartezeiten.app"
     }
 }
 

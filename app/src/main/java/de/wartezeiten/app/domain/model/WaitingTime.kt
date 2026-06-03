@@ -7,6 +7,15 @@ data class WaitingTime(
     val status: AttractionStatus
 )
 
+data class CurrentAttractionSearchEntry(
+    val parkKey: String,
+    val attractionId: String,
+    val name: String,
+    val waitingTime: Int?,
+    val status: AttractionStatus,
+    val updatedAtMillis: Long,
+)
+
 enum class AttractionStatus {
     Opened,
     Maintenance,

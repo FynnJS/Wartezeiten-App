@@ -52,7 +52,6 @@ import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FilterChipDefaults
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
@@ -96,6 +95,7 @@ fun ParkListRoute(
     onSettingsClick: () -> Unit,
     onWatchlistClick: () -> Unit,
     onStatisticsClick: () -> Unit,
+    onAttractionClick: (String, String) -> Unit,
     viewModel: ParkListViewModel = hiltViewModel(),
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
@@ -113,6 +113,7 @@ fun ParkListRoute(
         onSettingsClick = onSettingsClick,
         onWatchlistClick = onWatchlistClick,
         onStatisticsClick = onStatisticsClick,
+        onAttractionClick = onAttractionClick,
     )
 }
 
@@ -132,6 +133,7 @@ fun ParkListScreen(
     onSettingsClick: () -> Unit,
     onWatchlistClick: () -> Unit,
     onStatisticsClick: () -> Unit,
+    onAttractionClick: (String, String) -> Unit,
 ) {
     val snackbarHostState = remember { SnackbarHostState() }
     var showAddWatchlistDialog by remember { mutableStateOf(false) }
@@ -237,11 +239,6 @@ fun ParkListScreen(
                 }
             }
 
-            val isSearching = state.query.isNotEmpty() ||
-                    state.selectedCountry != null ||
-                    state.showOpenOnly ||
-                    state.showFavoritesOnly
-
             AnimatedContent(
                 targetState = state.isLoading && state.parks.isEmpty(),
                 transitionSpec = {
@@ -286,50 +283,6 @@ fun ParkListScreen(
                             }
                         }
 
-                        if (state.isRecommendationLoading) {
-                            item {
-                                BestParkLoadingCard(
-                                    scanStatus = state.recommendationScanStatus,
-                                    language = state.language,
-                                )
-                            }
-                        }
-
-                        state.recommendation?.let { recommendation ->
-                            item {
-                                BestParkCard(
-                                    recommendation = recommendation,
-                                    scanStatus = state.recommendationScanStatus,
-                                    language = state.language,
-                                    onClick = { onParkClick(recommendation.park) },
-                                )
-                            }
-                        }
-
-                        if (!isSearching && state.favoriteParks.isNotEmpty()) {
-                            item {
-                                QuickFavoriteParksSection(
-                                    parks = state.favoriteParks.take(3),
-                                    language = state.language,
-                                    onParkClick = onParkClick,
-                                    onQuickAddWatchlist = { park ->
-                                        selectedParkForWatchlist = park
-                                        showAddWatchlistDialog = true
-                                    },
-                                )
-                            }
-                        }
-
-                        if (state.recommendations.size > 1) {
-                            item {
-                                BestParkRankingSection(
-                                    recommendations = state.recommendations,
-                                    language = state.language,
-                                    onParkClick = { onParkClick(it.park) },
-                                )
-                            }
-                        }
-
                         item {
                             OutlinedTextField(
                                 value = state.query,
@@ -344,7 +297,7 @@ fun ParkListScreen(
                                 },
                                 placeholder = {
                                     Text(
-                                        if (state.language == "en") "Search park…" else "Park suchen…",
+                                        if (state.language == "en") "Search park or attraction…" else "Park oder Attraktion suchen…",
                                         color = MaterialTheme.colorScheme.onSurfaceVariant
                                     )
                                 },
@@ -381,6 +334,49 @@ fun ParkListScreen(
                             )
                         }
 
+                        if (state.query.length >= 2 && state.attractionSearchResults.isNotEmpty()) {
+                            item {
+                                Text(
+                                    if (state.language == "en") "Attractions" else "Attraktionen",
+                                    style = MaterialTheme.typography.titleSmall,
+                                    color = MaterialTheme.colorScheme.primary,
+                                    fontWeight = FontWeight.Bold,
+                                )
+                            }
+                            itemsIndexed(state.attractionSearchResults, key = { _, result -> "${result.parkKey}_${result.attractionId}" }) { _, result ->
+                                AttractionSearchResultCard(
+                                    result = result,
+                                    language = state.language,
+                                    onClick = { onAttractionClick(result.parkKey, result.attractionId) },
+                                )
+                            }
+                            if (state.parks.isNotEmpty()) {
+                                item {
+                                    Text(
+                                        if (state.language == "en") "Parks" else "Parks",
+                                        style = MaterialTheme.typography.titleSmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        fontWeight = FontWeight.Bold,
+                                        modifier = Modifier.padding(top = 8.dp),
+                                    )
+                                }
+                            }
+                        } else if (state.query.length >= 2 && state.isStatisticsIndexLoading) {
+                            item {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                ) {
+                                    CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
+                                    Text(
+                                        if (state.language == "en") "Loading attraction index" else "Attraktionsindex wird geladen",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    )
+                                }
+                            }
+                        }
+
                         item {
                             AttributionBanner(language = state.language)
                         }
@@ -401,43 +397,6 @@ fun ParkListScreen(
                                 }
                             }
                         } else {
-                            if (!isSearching && state.favoriteParks.isNotEmpty()) {
-                                item {
-                                    Text(
-                                        if (state.language == "en") "Your favorites" else "Deine Favoriten",
-                                        style = MaterialTheme.typography.titleSmall,
-                                        color = MaterialTheme.colorScheme.primary,
-                                        fontWeight = FontWeight.Bold,
-                                        modifier = Modifier.padding(top = 8.dp, bottom = 4.dp)
-                                    )
-                                }
-                                itemsIndexed(state.favoriteParks, key = { _, park -> "fav_${park.id}" }) { _, park ->
-                                    ParkCard(
-                                        park = park,
-                                        language = state.language,
-                                        onClick = { onParkClick(park) },
-                                        onQuickAddWatchlist = {
-                                            selectedParkForWatchlist = park
-                                            showAddWatchlistDialog = true
-                                        }
-                                    ) { onToggleFavorite(park) }
-                                }
-                                item {
-                                    HorizontalDivider(
-                                        modifier = Modifier.padding(vertical = 8.dp),
-                                        thickness = 0.5.dp,
-                                        color = MaterialTheme.colorScheme.outline.copy(alpha = 0.3f)
-                                    )
-                                    Text(
-                                        if (state.language == "en") "All parks" else "Alle Parks",
-                                        style = MaterialTheme.typography.titleSmall,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                        fontWeight = FontWeight.Bold,
-                                        modifier = Modifier.padding(bottom = 4.dp)
-                                    )
-                                }
-                            }
-
                             itemsIndexed(state.parks, key = { _, park -> park.id }) { index, park ->
                                 AnimatedVisibility(
                                     visible = true,
@@ -548,6 +507,79 @@ private fun QuickFavoriteParksSection(
                 }
             }
         }
+    }
+}
+
+@Composable
+private fun AttractionSearchResultCard(
+    result: AttractionSearchResult,
+    language: String,
+    onClick: () -> Unit,
+) {
+    OutlinedCard(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick),
+        shape = RoundedCornerShape(12.dp),
+        colors = CardDefaults.outlinedCardColors(containerColor = MaterialTheme.colorScheme.surface),
+    ) {
+        Row(
+            modifier = Modifier.padding(12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            Icon(
+                Icons.Default.Insights,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.primary,
+            )
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = result.attractionName,
+                    style = MaterialTheme.typography.bodyMedium,
+                    fontWeight = FontWeight.SemiBold,
+                    maxLines = 1,
+                    overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                )
+                Text(
+                    text = result.parkName,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
+                    overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                )
+            }
+            Column(horizontalAlignment = Alignment.End) {
+                Text(
+                    text = result.lastValue.toWaitValueLabel(language),
+                    style = MaterialTheme.typography.labelLarge,
+                    fontWeight = FontWeight.Bold,
+                    color = if (result.lastValue != null && result.lastValue >= 0) {
+                        MaterialTheme.colorScheme.primary
+                    } else {
+                        MaterialTheme.colorScheme.onSurfaceVariant
+                    },
+                )
+                result.averageWaitMinutes?.let { average ->
+                    Text(
+                        text = "Ø ${String.format(java.util.Locale.GERMAN, "%.1f", average)}",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            }
+        }
+    }
+}
+
+private fun Int?.toWaitValueLabel(language: String): String {
+    return when (this) {
+        null -> "-"
+        -1 -> if (language == "en") "Closed" else "Geschlossen"
+        -2 -> if (language == "en") "Weather" else "Wetter"
+        -3 -> if (language == "en") "Maint." else "Wartung"
+        -4 -> if (language == "en") "Unknown" else "Unbekannt"
+        else -> "$this Min."
     }
 }
 

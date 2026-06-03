@@ -12,6 +12,17 @@ data class StatisticsParkIndex(
     val attractionCount: Int,
     val sampleCount: Int,
     val updatedAtMillis: Long,
+    val attractions: List<StatisticsAttractionIndex>,
+)
+
+data class StatisticsAttractionIndex(
+    val id: String,
+    val name: String,
+    val latestDate: String?,
+    val sampleCount: Int,
+    val averageWaitMinutes: Float?,
+    val lastValue: Int?,
+    val lastStatusCode: Int?,
 )
 
 data class AttractionHistoryDay(

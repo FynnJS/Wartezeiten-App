@@ -2,6 +2,7 @@ package de.wartezeiten.app.domain.repository
 
 import de.wartezeiten.app.core.network.ApiResult
 import de.wartezeiten.app.domain.model.AttractionHistoryDay
+import de.wartezeiten.app.domain.model.CurrentAttractionSearchEntry
 import de.wartezeiten.app.domain.model.Park
 import de.wartezeiten.app.domain.model.ParkDetail
 import de.wartezeiten.app.domain.model.ParkRecommendation
@@ -17,6 +18,7 @@ data class ParkRecommendationScanProgress(
 
 interface WartezeitenRepository {
     fun observeParks(query: String?): Flow<List<Park>>
+    fun observeCurrentAttractions(): Flow<List<CurrentAttractionSearchEntry>>
     fun observeLatestOpenParkKeys(): Flow<Set<String>>
     fun observeBestParkRecommendation(): Flow<ParkRecommendation?>
     fun observeParkRecommendations(limit: Int = 5): Flow<List<ParkRecommendation>>

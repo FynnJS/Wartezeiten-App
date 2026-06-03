@@ -13,6 +13,7 @@ import de.wartezeiten.app.data.remote.dto.ParkDto
 import de.wartezeiten.app.data.remote.dto.WaitingTimeDto
 import de.wartezeiten.app.domain.model.AttractionStatus
 import de.wartezeiten.app.domain.model.CrowdLevel
+import de.wartezeiten.app.domain.model.CurrentAttractionSearchEntry
 import de.wartezeiten.app.domain.model.HolidayInfo
 import de.wartezeiten.app.domain.model.OpeningTimes
 import de.wartezeiten.app.domain.model.Park
@@ -83,6 +84,17 @@ fun WaitingTimeEntity.toDomain(): WaitingTime {
         name = name,
         waitingTime = waitingTime,
         status = AttractionStatus.fromApi(status),
+    )
+}
+
+fun WaitingTimeEntity.toCurrentAttractionSearchEntry(): CurrentAttractionSearchEntry {
+    return CurrentAttractionSearchEntry(
+        parkKey = parkKey,
+        attractionId = attractionId,
+        name = name,
+        waitingTime = waitingTime,
+        status = AttractionStatus.fromApi(status),
+        updatedAtMillis = updatedAtMillis,
     )
 }
 

@@ -9,9 +9,11 @@ import de.wartezeiten.app.data.local.dao.ParkDetailDao
 import de.wartezeiten.app.data.local.dao.ParkSnapshotDao
 import de.wartezeiten.app.data.local.entity.HolidayEntity
 import de.wartezeiten.app.data.local.entity.ParkSnapshotEntity
+import de.wartezeiten.app.data.local.entity.WaitingTimeEntity
 import de.wartezeiten.app.data.local.entity.WeatherEntity
 import de.wartezeiten.app.data.local.entity.WeatherForecastEntity
 import de.wartezeiten.app.data.mapper.toDomain
+import de.wartezeiten.app.data.mapper.toCurrentAttractionSearchEntry
 import de.wartezeiten.app.data.mapper.toEntity
 import de.wartezeiten.app.data.remote.HolidayApiService
 import de.wartezeiten.app.data.remote.PublicAppDataApiService
@@ -60,6 +62,11 @@ class DefaultWartezeitenRepository @Inject constructor(
             .map { parks -> parks.map { it.toDomain() } }
             .flowOn(ioDispatcher)
     }
+
+    override fun observeCurrentAttractions() =
+        parkDetailDao.observeAllWaitingTimes()
+            .map { attractions -> attractions.map { it.toCurrentAttractionSearchEntry() } }
+            .flowOn(ioDispatcher)
 
     override fun observeLatestOpenParkKeys(): Flow<Set<String>> {
         return parkSnapshotDao.observeLatestOpenParkKeys()
@@ -477,9 +484,36 @@ class DefaultWartezeitenRepository @Inject constructor(
                 if (snapshots.isNotEmpty()) {
                     parkSnapshotDao.insertAll(snapshots)
                 }
+                result.data.parks.forEach { snapshot ->
+                    if (snapshot.attractions.isNotEmpty()) {
+                        parkDetailDao.replaceWaitingTimes(
+                            parkKey = snapshot.parkKey,
+                            waitingTimes = snapshot.attractions.map { attraction ->
+                                WaitingTimeEntity(
+                                    parkKey = snapshot.parkKey,
+                                    attractionId = attraction.id,
+                                    name = attraction.name,
+                                    waitingTime = attraction.value?.takeIf { (attraction.statusCode ?: 0) == 0 },
+                                    status = attraction.status ?: statusCodeToApiStatus(attraction.statusCode),
+                                    updatedAtMillis = snapshot.capturedAtMillis,
+                                )
+                            },
+                        )
+                    }
+                }
                 ApiResult.Success(Unit)
             }
             is ApiResult.Error -> result
+        }
+    }
+
+    private fun statusCodeToApiStatus(statusCode: Int?): String {
+        return when (statusCode) {
+            0 -> "opened"
+            -1 -> "closed"
+            -2 -> "closed_weather"
+            -3 -> "maintenance"
+            else -> "unknown"
         }
     }
 

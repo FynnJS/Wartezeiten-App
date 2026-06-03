@@ -8,6 +8,7 @@ import de.wartezeiten.app.core.network.ApiResult
 import de.wartezeiten.app.core.network.toUserMessage
 import de.wartezeiten.app.domain.model.AttractionHistoryDay
 import de.wartezeiten.app.domain.model.AttractionHistorySummary
+import de.wartezeiten.app.domain.model.CurrentAttractionSearchEntry
 import de.wartezeiten.app.domain.model.Park
 import de.wartezeiten.app.domain.model.StatisticsIndex
 import de.wartezeiten.app.domain.repository.WartezeitenRepository
@@ -22,6 +23,7 @@ import javax.inject.Inject
 
 data class StatisticsUiState(
     val parks: List<Park> = emptyList(),
+    val currentAttractions: List<CurrentAttractionSearchEntry> = emptyList(),
     val index: StatisticsIndex = StatisticsIndex(generatedAtMillis = 0L, parks = emptyList()),
     val selectedParkKey: String? = null,
     val selectedDate: String = LocalDate.now().toString(),
@@ -31,13 +33,44 @@ data class StatisticsUiState(
     val errorMessage: String? = null,
 ) {
     val availableDates: List<String>
-        get() = index.parks.firstOrNull { it.parkKey == selectedParkKey }?.dates.orEmpty()
+        get() = index.parks.firstOrNull { it.parkKey == selectedParkKey }?.dates
+            ?.takeIf { it.isNotEmpty() }
+            ?: listOf(selectedDate)
 
     val selectedPark: Park?
         get() = parks.firstOrNull { it.id == selectedParkKey || it.uuid == selectedParkKey }
 
     val selectedAttraction: AttractionHistorySummary?
         get() = day?.attractions?.firstOrNull { it.id == selectedAttractionId }
+
+    val selectedAttractionName: String?
+        get() = selectedAttraction?.name
+            ?: index.parks
+                .firstOrNull { it.parkKey == selectedParkKey }
+                ?.attractions
+                ?.firstOrNull { it.id == selectedAttractionId }
+                ?.name
+            ?: currentAttractions
+                .firstOrNull { it.parkKey == selectedParkKey && it.attractionId == selectedAttractionId }
+                ?.name
+
+    val attractionOptions: List<StatisticsAttractionOption>
+        get() {
+            val dayOptions = day?.attractions.orEmpty().map {
+                    StatisticsAttractionOption(id = it.id, name = it.name)
+            }
+            val indexOptions = index.parks
+                .firstOrNull { it.parkKey == selectedParkKey }
+                ?.attractions
+                .orEmpty()
+                .map { StatisticsAttractionOption(id = it.id, name = it.name) }
+            val currentOptions = currentAttractions
+                .filter { it.parkKey == selectedParkKey }
+                .map { StatisticsAttractionOption(id = it.attractionId, name = it.name) }
+            return (dayOptions + indexOptions + currentOptions)
+                .distinctBy { it.id }
+                .sortedBy { it.name.lowercase() }
+        }
 
     val selectedSeries: List<AttractionChartPoint>
         get() {
@@ -70,6 +103,11 @@ data class StatisticsMonthBucket(
     val dayCount: Int,
 )
 
+data class StatisticsAttractionOption(
+    val id: String,
+    val name: String,
+)
+
 @HiltViewModel
 class StatisticsViewModel @Inject constructor(
     private val repository: WartezeitenRepository,
@@ -78,10 +116,16 @@ class StatisticsViewModel @Inject constructor(
     private val initialParkKey: String? = savedStateHandle["parkKey"]
     private val initialAttractionId: String? = savedStateHandle["attractionId"]
     private val parks = repository.observeParks(null)
+    private val currentAttractions = repository.observeCurrentAttractions()
+        .stateIn(
+            scope = viewModelScope,
+            started = SharingStarted.WhileSubscribed(5_000),
+            initialValue = emptyList(),
+        )
     private val mutableState = MutableStateFlow(StatisticsUiState(isLoading = true))
 
-    val uiState = combine(parks, mutableState) { parkList, state ->
-        state.copy(parks = parkList)
+    val uiState = combine(parks, currentAttractions, mutableState) { parkList, attractionList, state ->
+        state.copy(parks = parkList, currentAttractions = attractionList)
     }.stateIn(
         scope = viewModelScope,
         started = SharingStarted.WhileSubscribed(5_000),
@@ -99,19 +143,36 @@ class StatisticsViewModel @Inject constructor(
                 is ApiResult.Success -> {
                     val current = mutableState.value
                     val selectedParkKey = current.selectedParkKey
-                        ?.takeIf { key -> result.data.parks.any { it.parkKey == key } }
-                        ?: initialParkKey?.takeIf { key -> result.data.parks.any { it.parkKey == key } }
+                        ?: initialParkKey
                         ?: result.data.parks.firstOrNull()?.parkKey
                     val selectedDate = selectedParkKey
                         ?.let { key -> result.data.parks.firstOrNull { it.parkKey == key }?.latestDate }
                         ?: LocalDate.now().toString()
+                    if (selectedParkKey == null) {
+                        mutableState.update {
+                            it.copy(
+                                index = result.data,
+                                selectedParkKey = initialParkKey,
+                                selectedDate = selectedDate,
+                                day = null,
+                                selectedAttractionId = initialAttractionId,
+                                isLoading = false,
+                            )
+                        }
+                        return@launch
+                    }
                     mutableState.update {
                         it.copy(
                             index = result.data,
                             selectedParkKey = selectedParkKey,
                             selectedDate = selectedDate,
                             day = null,
-                            selectedAttractionId = current.selectedAttractionId ?: initialAttractionId,
+                            selectedAttractionId = selectKnownAttractionId(
+                                parkKey = selectedParkKey,
+                                preferredId = current.selectedAttractionId ?: initialAttractionId,
+                                index = result.data,
+                                currentAttractions = currentAttractions.value,
+                            ),
                         )
                     }
                     loadSelectedDay()
@@ -124,12 +185,18 @@ class StatisticsViewModel @Inject constructor(
     }
 
     fun selectPark(parkKey: String) {
-        val parkIndex = mutableState.value.index.parks.firstOrNull { it.parkKey == parkKey }
+        val state = mutableState.value
+        val parkIndex = state.index.parks.firstOrNull { it.parkKey == parkKey }
         mutableState.update {
             it.copy(
                 selectedParkKey = parkKey,
                 selectedDate = parkIndex?.latestDate ?: LocalDate.now().toString(),
-                selectedAttractionId = null,
+                selectedAttractionId = selectKnownAttractionId(
+                    parkKey = parkKey,
+                    preferredId = null,
+                    index = state.index,
+                    currentAttractions = currentAttractions.value,
+                ),
                 day = null,
                 errorMessage = null,
             )
@@ -139,7 +206,7 @@ class StatisticsViewModel @Inject constructor(
 
     fun selectDate(date: String) {
         mutableState.update {
-            it.copy(selectedDate = date, selectedAttractionId = null, day = null, errorMessage = null)
+            it.copy(selectedDate = date, day = null, errorMessage = null)
         }
         loadSelectedDay()
     }
@@ -158,9 +225,13 @@ class StatisticsViewModel @Inject constructor(
                     mutableState.update { state ->
                         state.copy(
                             day = result.data,
-                            selectedAttractionId = state.selectedAttractionId
-                                ?.takeIf { id -> result.data.attractions.any { it.id == id } }
-                                ?: result.data.attractions.maxByOrNull { it.sampleCount }?.id,
+                            selectedAttractionId = selectKnownAttractionId(
+                                parkKey = parkKey,
+                                preferredId = state.selectedAttractionId,
+                                index = state.index,
+                                currentAttractions = currentAttractions.value,
+                                day = result.data,
+                            ),
                             isLoading = false,
                         )
                     }
@@ -170,5 +241,37 @@ class StatisticsViewModel @Inject constructor(
                 }
             }
         }
+    }
+
+    private fun selectKnownAttractionId(
+        parkKey: String?,
+        preferredId: String?,
+        index: StatisticsIndex,
+        currentAttractions: List<CurrentAttractionSearchEntry>,
+        day: AttractionHistoryDay? = null,
+    ): String? {
+        if (parkKey == null) return preferredId
+        val availableIds = buildSet {
+            day?.attractions.orEmpty().forEach { add(it.id) }
+            index.parks
+                .firstOrNull { it.parkKey == parkKey }
+                ?.attractions
+                .orEmpty()
+                .forEach { add(it.id) }
+            currentAttractions
+                .filter { it.parkKey == parkKey }
+                .forEach { add(it.attractionId) }
+        }
+        if (preferredId != null && preferredId in availableIds) return preferredId
+        return day?.attractions?.maxByOrNull { it.sampleCount }?.id
+            ?: index.parks
+                .firstOrNull { it.parkKey == parkKey }
+                ?.attractions
+                ?.firstOrNull()
+                ?.id
+            ?: currentAttractions
+                .firstOrNull { it.parkKey == parkKey }
+                ?.attractionId
+            ?: preferredId
     }
 }

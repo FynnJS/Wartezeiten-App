@@ -174,7 +174,7 @@ fun StatisticsScreen(
                         )
                     }
                 } else if (!state.isLoading) {
-                    item { EmptyStatisticsState() }
+                    item { EmptyStatisticsState(state.selectedAttractionName) }
                 }
 
                 if (state.monthBuckets.isNotEmpty()) {
@@ -227,12 +227,22 @@ private fun StatisticsControlPanel(
                     label = "Park",
                     value = state.selectedPark?.name ?: state.selectedParkKey ?: "-",
                     modifier = Modifier.weight(1f),
-                ) {
-                    state.index.parks.forEach { parkIndex ->
+                ) { close ->
+                    val indexedParkKeys = state.index.parks.map { it.parkKey }.toSet()
+                    val indexedItems = state.index.parks.map { parkIndex ->
                         val park = state.parks.firstOrNull { it.id == parkIndex.parkKey || it.uuid == parkIndex.parkKey }
+                        parkIndex.parkKey to (park?.name ?: parkIndex.parkKey)
+                    }
+                    val fallbackItems = state.parks
+                        .filter { it.id !in indexedParkKeys && it.uuid !in indexedParkKeys }
+                        .map { it.id to it.name }
+                    (indexedItems + fallbackItems).forEach { (parkKey, parkName) ->
                         DropdownMenuItem(
-                            text = { Text(park?.name ?: parkIndex.parkKey) },
-                            onClick = { onParkSelected(parkIndex.parkKey) },
+                            text = { Text(parkName) },
+                            onClick = {
+                                onParkSelected(parkKey)
+                                close()
+                            },
                         )
                     }
                 }
@@ -240,26 +250,31 @@ private fun StatisticsControlPanel(
                     label = "Datum",
                     value = formatDateLabel(state.selectedDate),
                     modifier = Modifier.weight(1f),
-                ) {
+                ) { close ->
                     state.availableDates.sortedDescending().forEach { date ->
                         DropdownMenuItem(
                             text = { Text(formatDateLabel(date)) },
-                            onClick = { onDateSelected(date) },
+                            onClick = {
+                                onDateSelected(date)
+                                close()
+                            },
                         )
                     }
                 }
             }
 
-            val attractions = state.day?.attractions.orEmpty()
             DropdownField(
                 label = "Attraktion",
-                value = state.selectedAttraction?.name ?: "-",
+                value = state.selectedAttractionName ?: "Attraktion auswählen",
                 modifier = Modifier.fillMaxWidth(),
-            ) {
-                attractions.forEach { attraction ->
+            ) { close ->
+                state.attractionOptions.forEach { attraction ->
                     DropdownMenuItem(
                         text = { Text(attraction.name, maxLines = 1, overflow = TextOverflow.Ellipsis) },
-                        onClick = { onAttractionSelected(attraction.id) },
+                        onClick = {
+                            onAttractionSelected(attraction.id)
+                            close()
+                        },
                     )
                 }
             }
@@ -285,7 +300,7 @@ private fun DropdownField(
     label: String,
     value: String,
     modifier: Modifier = Modifier,
-    content: @Composable () -> Unit,
+    content: @Composable (() -> Unit) -> Unit,
 ) {
     var expanded by remember { mutableStateOf(false) }
     Box(modifier = modifier) {
@@ -310,7 +325,7 @@ private fun DropdownField(
         DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
             Box(modifier = Modifier.width(320.dp)) {
                 Column {
-                    content()
+                    content { expanded = false }
                 }
             }
         }
@@ -541,10 +556,22 @@ private fun ErrorCard(message: String, onRetry: () -> Unit) {
 }
 
 @Composable
-private fun EmptyStatisticsState() {
+private fun EmptyStatisticsState(selectedAttractionName: String?) {
     OutlinedCard(modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(14.dp)) {
-        Box(modifier = Modifier.padding(24.dp), contentAlignment = Alignment.Center) {
-            Text("Für diese Auswahl liegen noch keine zentralen Statistikdaten vor.")
+        Column(
+            modifier = Modifier.padding(18.dp),
+            verticalArrangement = Arrangement.spacedBy(6.dp),
+        ) {
+            Text(
+                text = selectedAttractionName ?: "Keine Attraktion ausgewählt",
+                style = MaterialTheme.typography.titleSmall,
+                fontWeight = FontWeight.Bold,
+            )
+            Text(
+                text = "Für diese Auswahl liegen noch keine zentralen Tagesdaten vor. Sobald der Worker Messpunkte gesammelt hat, erscheint hier der Verlauf.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
         }
     }
 }

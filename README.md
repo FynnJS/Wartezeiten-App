@@ -13,12 +13,11 @@ Die Website liest `website/release.json` und verlinkt auf den neuesten GitHub Re
 ## Funktionen
 
 - Parkliste mit Länder-, Favoriten- und Öffnungsstatus-Filter
+- Gemeinsame Suche nach Parks und Attraktionen mit direktem Sprung zur passenden Attraktion
 - Parkdetails mit Wartezeiten, Öffnungszeiten, Wetter, Feiertagen, Auslastung und Trend-Chart
 - Zentrale Cloudflare App-Daten für Ranking-, Trend- und Attraktionsstatistik-Snapshots
 - Statistikbereich mit Park-, Datum- und Attraktionsauswahl für zentrale Tagesverläufe
 - Watchlist-Alarme für Wartezeiten, Attraktionsstatus, Parkstatus und Crowd-Level
-- Schnellzugriff auf Favoriten und Ranking "Bester Wert heute"
-- Teilen von Parkstatus und einzelnen Attraktionen
 - In-App-Hinweis und Benachrichtigung bei neuer APK-Version
 - Offline-First-Datenhaltung über Room und automatische Aktualisierung für Live-Daten
 
