@@ -12,6 +12,17 @@ data class ParkCrowdSnapshot(
     val totalAttractions: Int,
 )
 
+data class ParkTrendPoint(
+    val capturedAtMillis: Long,
+    val crowdLevel: Float,
+    val source: ParkTrendSource,
+)
+
+enum class ParkTrendSource {
+    Local,
+    PublicHistory,
+}
+
 data class ParkTrendSummary(
     val latestSnapshotAtMillis: Long?,
     val isFresh: Boolean,
@@ -25,6 +36,8 @@ data class ParkTrendSummary(
     val percentile75CrowdLevel: Float?,
     val percentile90CrowdLevel: Float?,
     val volatility: Float?,
+    val points: List<ParkTrendPoint>,
+    val hasPublicHistory: Boolean,
 ) {
     companion object {
         val Empty = ParkTrendSummary(
@@ -40,6 +53,8 @@ data class ParkTrendSummary(
             percentile75CrowdLevel = null,
             percentile90CrowdLevel = null,
             volatility = null,
+            points = emptyList(),
+            hasPublicHistory = false,
         )
     }
 }
@@ -55,10 +70,18 @@ fun buildParkTrendSummary(
         return ParkTrendSummary.Empty
     }
 
-    val values = sortedSnapshots
+    val points = sortedSnapshots
         .filter { it.openedToday != false }
-        .mapNotNull { it.displayCrowdLevel }
-        .sorted()
+        .mapNotNull { snapshot ->
+            snapshot.displayCrowdLevel?.let { level ->
+                ParkTrendPoint(
+                    capturedAtMillis = snapshot.capturedAtMillis,
+                    crowdLevel = level.coerceIn(0f, 100f),
+                    source = ParkTrendSource.Local,
+                )
+            }
+        }
+    val values = points.map { it.crowdLevel }.sorted()
     val latestAgeMillis = nowMillis - latest.capturedAtMillis
 
     return ParkTrendSummary(
@@ -74,6 +97,8 @@ fun buildParkTrendSummary(
         percentile75CrowdLevel = values.percentile(0.75f),
         percentile90CrowdLevel = values.percentile(0.9f),
         volatility = values.meanAbsoluteChange(),
+        points = points.takeLast(48),
+        hasPublicHistory = false,
     )
 }
 

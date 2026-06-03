@@ -73,10 +73,6 @@ try {
         $fileSize = (Get-Item $apkPath).Length / 1MB
         Write-Status "APK erfolgreich heruntergeladen: $apkPath ($([Math]::Round($fileSize, 2)) MB)" "Success"
 
-        # Berechne SHA-256 Hash
-        $sha256 = (Get-FileHash -Path $apkPath -Algorithm SHA256).Hash.ToLower()
-        Write-Status "SHA-256: $sha256" "Info"
-
         # Aktualisiere release.json
         $releaseJsonPath = Join-Path $PSScriptRoot "release.json"
         
@@ -92,7 +88,6 @@ try {
         $gitHubDownloadUrl = "https://github.com/$Owner/$Repo/releases/download/$($response.tag_name)/$apkName"
         $releaseJson | Add-Member -NotePropertyName "releasePageUrl" -NotePropertyValue $response.html_url -Force
         $releaseJson | Add-Member -NotePropertyName "apkUrl" -NotePropertyValue $gitHubDownloadUrl -Force
-        $releaseJson | Add-Member -NotePropertyName "sha256" -NotePropertyValue $sha256 -Force
         $releaseJson | Add-Member -NotePropertyName "apkSize" -NotePropertyValue "$([Math]::Round($fileSize, 2))" -Force
         $releaseJson | Add-Member -NotePropertyName "releaseDate" -NotePropertyValue ($response.published_at -split "T")[0] -Force
         

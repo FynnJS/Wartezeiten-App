@@ -1,6 +1,7 @@
 package de.wartezeiten.app.ui.waitingtimes
 
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -13,6 +14,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import de.wartezeiten.app.domain.model.ParkTrendSummary
@@ -35,7 +39,7 @@ fun ParkTrendDashboard(
 
     val ageMinutes = TimeUnit.MILLISECONDS.toMinutes(System.currentTimeMillis() - summary.latestSnapshotAtMillis)
     val trend = when {
-        summary.displayCrowdLevel == null || summary.medianCrowdLevel == null -> 0
+        summary.medianCrowdLevel == null -> 0
         summary.displayCrowdLevel > summary.medianCrowdLevel + 0.5f -> 1
         summary.displayCrowdLevel < summary.medianCrowdLevel - 0.5f -> -1
         else -> 0
@@ -132,10 +136,76 @@ fun ParkTrendDashboard(
                 )
             }
 
+            TrendLineChart(
+                points = summary.points,
+                color = crowdStatus.color,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(112.dp),
+            )
+
             Text(
-                text = "${summary.sampleCount} Messpunkte im lokalen Verlauf",
+                text = if (summary.hasPublicHistory) {
+                    "${summary.sampleCount} Messpunkte aus lokalem und oeffentlichem Verlauf"
+                } else {
+                    "${summary.sampleCount} Messpunkte im lokalen Verlauf"
+                },
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+    }
+}
+
+@Composable
+private fun TrendLineChart(
+    points: List<de.wartezeiten.app.domain.model.ParkTrendPoint>,
+    color: Color,
+    modifier: Modifier = Modifier,
+) {
+    if (points.size < 2) return
+
+    Canvas(modifier = modifier) {
+        val horizontalPadding = 8.dp.toPx()
+        val verticalPadding = 12.dp.toPx()
+        val width = size.width - (horizontalPadding * 2)
+        val height = size.height - (verticalPadding * 2)
+        val minTime = points.minOf { it.capturedAtMillis }
+        val maxTime = points.maxOf { it.capturedAtMillis }.coerceAtLeast(minTime + 1)
+
+        repeat(4) { index ->
+            val y = verticalPadding + (height * index / 3f)
+            drawLine(
+                color = Color.Gray.copy(alpha = 0.18f),
+                start = androidx.compose.ui.geometry.Offset(horizontalPadding, y),
+                end = androidx.compose.ui.geometry.Offset(horizontalPadding + width, y),
+                strokeWidth = 1.dp.toPx(),
+            )
+        }
+
+        val path = Path()
+        points.sortedBy { it.capturedAtMillis }.forEachIndexed { index, point ->
+            val x = horizontalPadding + ((point.capturedAtMillis - minTime).toFloat() / (maxTime - minTime).toFloat()) * width
+            val y = verticalPadding + (1f - (point.crowdLevel / 100f).coerceIn(0f, 1f)) * height
+            if (index == 0) path.moveTo(x, y) else path.lineTo(x, y)
+        }
+        drawPath(
+            path = path,
+            color = color,
+            style = Stroke(width = 3.dp.toPx(), cap = StrokeCap.Round),
+        )
+
+        points.takeLast(12).forEach { point ->
+            val x = horizontalPadding + ((point.capturedAtMillis - minTime).toFloat() / (maxTime - minTime).toFloat()) * width
+            val y = verticalPadding + (1f - (point.crowdLevel / 100f).coerceIn(0f, 1f)) * height
+            drawCircle(
+                color = if (point.source == de.wartezeiten.app.domain.model.ParkTrendSource.PublicHistory) {
+                    Color(0xFF1565C0)
+                } else {
+                    color
+                },
+                radius = 3.dp.toPx(),
+                center = androidx.compose.ui.geometry.Offset(x, y),
             )
         }
     }

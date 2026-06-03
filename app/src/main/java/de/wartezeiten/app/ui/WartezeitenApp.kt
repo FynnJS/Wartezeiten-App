@@ -24,7 +24,10 @@ import de.wartezeiten.app.ui.watchlist.WatchlistRoute
 import de.wartezeiten.app.ui.waitingtimes.WaitingTimesRoute
 
 @Composable
-fun WartezeitenApp(notificationParkKey: String? = null) {
+fun WartezeitenApp(
+    notificationParkKey: String? = null,
+    notificationAttractionId: String? = null,
+) {
     val navController = rememberNavController()
     val context = LocalContext.current
     val updateViewModel: UpdateViewModel = hiltViewModel()
@@ -32,9 +35,14 @@ fun WartezeitenApp(notificationParkKey: String? = null) {
     val updateState by updateViewModel.uiState.collectAsStateWithLifecycle()
     val settingsState by settingsViewModel.uiState.collectAsStateWithLifecycle()
 
-    LaunchedEffect(notificationParkKey) {
+    LaunchedEffect(notificationParkKey, notificationAttractionId) {
         notificationParkKey?.let { parkKey ->
-            navController.navigate("parks/$parkKey") {
+            val route = if (notificationAttractionId.isNullOrBlank()) {
+                "parks/$parkKey"
+            } else {
+                "parks/$parkKey?attractionId=${Uri.encode(notificationAttractionId)}"
+            }
+            navController.navigate(route) {
                 launchSingleTop = true
             }
         }

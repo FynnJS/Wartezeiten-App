@@ -2,6 +2,8 @@ package de.wartezeiten.app.di
 
 import android.content.Context
 import androidx.room.Room
+import androidx.room.migration.Migration
+import androidx.sqlite.db.SupportSQLiteDatabase
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
@@ -22,7 +24,10 @@ object DatabaseModule {
             context,
             WartezeitenDatabase::class.java,
             "wartezeiten.db"
-        ).fallbackToDestructiveMigration(true).build()
+        )
+            .addMigrations(MIGRATION_5_6)
+            .fallbackToDestructiveMigration(true)
+            .build()
     }
 
     @Provides
@@ -39,4 +44,10 @@ object DatabaseModule {
 
     @Provides
     fun provideAlertHistoryDao(database: WartezeitenDatabase) = database.alertHistoryDao()
+
+    private val MIGRATION_5_6 = object : Migration(5, 6) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            db.execSQL("ALTER TABLE park_snapshots ADD COLUMN source TEXT NOT NULL DEFAULT 'local'")
+        }
+    }
 }

@@ -12,6 +12,9 @@ interface ParkSnapshotDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insert(snapshot: ParkSnapshotEntity)
 
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertAll(snapshots: List<ParkSnapshotEntity>)
+
     @Query("SELECT * FROM park_snapshots WHERE parkKey = :parkKey ORDER BY capturedAtMillis DESC")
     fun getSnapshotsByParkKey(parkKey: String): Flow<List<ParkSnapshotEntity>>
 

@@ -34,6 +34,7 @@ data class ParkListUiState(
     val showFavoritesOnly: Boolean = false,
     val sort: ParkSort = ParkSort.FavoritesFirst,
     val recommendation: ParkRecommendation? = null,
+    val recommendations: List<ParkRecommendation> = emptyList(),
     val isRecommendationLoading: Boolean = false,
     val recommendationScanStatus: String? = null,
     val language: String = PreferencesDataSource.DEFAULT_LANGUAGE,
@@ -73,7 +74,7 @@ class ParkListViewModel @Inject constructor(
 
     private val allParks = query.flatMapLatest { repository.observeParks(it) }
     private val latestOpenParkKeys = repository.observeLatestOpenParkKeys()
-    private val recommendation = repository.observeBestParkRecommendation()
+    private val recommendations = repository.observeParkRecommendations(limit = 5)
 
     val uiState = combine(
         allParks,
@@ -83,7 +84,7 @@ class ParkListViewModel @Inject constructor(
         showOpenOnly,
         showFavoritesOnly,
         sort,
-        recommendation,
+        recommendations,
         isRecommendationLoading,
         recommendationScanProgress,
         currentLanguage,
@@ -99,7 +100,7 @@ class ParkListViewModel @Inject constructor(
         val openOnly = args[4] as Boolean
         val favoritesOnly = args[5] as Boolean
         val currentSort = args[6] as ParkSort
-        val currentRecommendation = args[7] as ParkRecommendation?
+        val currentRecommendations = args[7] as List<ParkRecommendation>
         val recommendationLoading = args[8] as Boolean
         val scanProgress = args[9] as ParkRecommendationScanProgress?
         val language = args[10] as String
@@ -125,8 +126,9 @@ class ParkListViewModel @Inject constructor(
             showOpenOnly = openOnly,
             showFavoritesOnly = favoritesOnly,
             sort = currentSort,
-            recommendation = currentRecommendation,
-            isRecommendationLoading = recommendationLoading && currentRecommendation == null,
+            recommendation = currentRecommendations.firstOrNull(),
+            recommendations = currentRecommendations,
+            isRecommendationLoading = recommendationLoading && currentRecommendations.isEmpty(),
             recommendationScanStatus = scanProgress?.toStatusText(language),
             language = language,
             totalParkCount = parks.size,

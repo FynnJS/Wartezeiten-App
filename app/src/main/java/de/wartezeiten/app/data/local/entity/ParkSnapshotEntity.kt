@@ -17,4 +17,5 @@ data class ParkSnapshotEntity(
     val closedFrom: String?,
     val openAttractions: Int,
     val totalAttractions: Int,
+    val source: String = "local",
 )

@@ -2,12 +2,15 @@
 
 ## Unreleased
 
-- Fixed release metadata so the website and in-app update check can detect version 1.0.2.
-- Restored the Gradle wrapper JAR for GitHub Actions release builds.
-- Added an immediate app update check on startup in addition to periodic checks.
-- Fixed WorkManager initialization so Hilt-backed notification and update workers can run correctly.
-- Prevented pre-opening park recommendation scans from using waiting-time or crowd-level data before a park is currently open.
-- Removed duplicate crowd-level text from the park detail header.
+## v1.0.3 - 2026-06-03
+
+- Added Cloudflare Worker app-data endpoints with Cron/KV setup for central park snapshots, recommendations, and trend history.
+- Added "Best value today" ranking, quick access to favorite parks, and share actions for park status and attractions.
+- Improved watchlist notifications with presets, richer watchlist details, and notification deep links to parks/attractions.
+- Added trend chart points with support for public history plus local fallback.
+- Moved API attribution from persistent bottom bars to fixed content placements.
+- Removed SHA-256/VirusTotal display and metadata from the website release flow.
+- Hardened opening-time, crowd-level, notification, and cancellation handling.
 
 ## v1.0.2 - 2026-06-02
 

@@ -4,7 +4,6 @@ const downloadButton2 = document.getElementById('downloadButton2');
 const versionNameEl = document.getElementById('versionName');
 const releaseDateEl = document.getElementById('releaseDate');
 const apkSizeEl = document.getElementById('apkSize');
-const apkHashEl = document.getElementById('apkHash');
 const releaseNotesEl = document.getElementById('releaseNotes');
 
 const defaultReleasePageUrl = 'https://github.com/FynnJS/Wartezeiten-App/releases/latest';
@@ -42,54 +41,26 @@ async function loadRelease() {
     }
     const data = await response.json();
 
-    // Version und Datum
-    versionNameEl.textContent = data.versionName || '–';
-    releaseDateEl.textContent = data.releaseDate || '–';
-    
-    // APK-Größe
+    versionNameEl.textContent = data.versionName || '-';
+    releaseDateEl.textContent = data.releaseDate || '-';
+
     if (data.apkSize) {
       apkSizeEl.textContent = formatApkSize(data.apkSize) || data.apkSize;
-    }
-
-    // SHA-256 Hash mit Fallback
-    const sha256 = data.sha256 || data.apkHash;
-    if (sha256) {
-      apkHashEl.textContent = sha256;
     } else {
-      apkHashEl.textContent = 'Noch nicht verfügbar';
-      apkHashEl.style.color = '#999';
+      apkSizeEl.textContent = '-';
     }
 
     setDownloadLinks(data.releasePageUrl || defaultReleasePageUrl);
 
-    // Release Notes
     if (data.releaseNotes && Array.isArray(data.releaseNotes)) {
       releaseNotesEl.innerHTML = data.releaseNotes.map(note => `<li>${note}</li>`).join('');
     }
 
-    console.log('✓ Release-Informationen erfolgreich geladen');
+    console.log('Release-Informationen erfolgreich geladen');
   } catch (error) {
-    console.error('✗ Fehler beim Laden der Release-Informationen:', error);
-    apkHashEl.textContent = 'Fehler beim Laden';
-    apkHashEl.style.color = '#d32f2f';
+    console.error('Fehler beim Laden der Release-Informationen:', error);
     setDownloadLinks();
   }
 }
 
-function copyToClipboard() {
-  const text = apkHashEl.textContent;
-  if (!text || text.includes('–') || text.includes('Fehler')) {
-    alert('SHA-256 nicht verfügbar');
-    return;
-  }
-  
-  navigator.clipboard.writeText(text).then(() => {
-    alert('✓ SHA-256 Hash kopiert!');
-  }).catch(err => {
-    console.error('Fehler beim Kopieren:', err);
-    alert('Fehler beim Kopieren der Zwischenablage');
-  });
-}
-
-// Laden beim Start
 loadRelease();

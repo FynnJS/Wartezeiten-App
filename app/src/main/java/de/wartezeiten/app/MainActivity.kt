@@ -21,10 +21,12 @@ import de.wartezeiten.app.ui.theme.WartezeitenTheme
 @AndroidEntryPoint
 class MainActivity : ComponentActivity() {
     private var notificationParkKey by mutableStateOf<String?>(null)
+    private var notificationAttractionId by mutableStateOf<String?>(null)
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         notificationParkKey = intent.notificationParkKey()
+        notificationAttractionId = intent.notificationAttractionId()
         setContent {
             val settingsViewModel: SettingsViewModel = hiltViewModel()
             val settingsState by settingsViewModel.uiState.collectAsStateWithLifecycle()
@@ -33,7 +35,10 @@ class MainActivity : ComponentActivity() {
                 darkTheme = settingsState.darkMode ?: isSystemInDarkTheme()
             ) {
                 Surface(modifier = Modifier.fillMaxSize()) {
-                    WartezeitenApp(notificationParkKey = notificationParkKey)
+                    WartezeitenApp(
+                        notificationParkKey = notificationParkKey,
+                        notificationAttractionId = notificationAttractionId,
+                    )
                 }
             }
         }
@@ -43,11 +48,18 @@ class MainActivity : ComponentActivity() {
         super.onNewIntent(intent)
         setIntent(intent)
         notificationParkKey = intent.notificationParkKey()
+        notificationAttractionId = intent.notificationAttractionId()
     }
 
     private fun Intent?.notificationParkKey(): String? {
         val uri = this?.data ?: return null
         return uri.takeIf { it.scheme == "wartezeiten" && it.host == "parks" }
             ?.lastPathSegment
+    }
+
+    private fun Intent?.notificationAttractionId(): String? {
+        val uri = this?.data ?: return null
+        return uri.takeIf { it.scheme == "wartezeiten" && it.host == "parks" }
+            ?.getQueryParameter("attractionId")
     }
 }

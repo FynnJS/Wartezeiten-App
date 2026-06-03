@@ -1,18 +1,16 @@
 {
-  "versionName": "1.0.2",
-  "versionCode": 10002,
-  "releaseDate": "2026-06-02",
-  "releasePageUrl": "https://github.com/FynnJS/Wartezeiten-App/releases/tag/v1.0.2",
-  "apkUrl": "https://github.com/FynnJS/Wartezeiten-App/releases/download/v1.0.2/wartezeiten-app-1.0.2.apk",
-  "sha256": "ec3be2d4ee1edf942c30d9bda9e2274885b24bf8a547ae2ad73ee111cf77eb5d",
-  "apkSize": "19.40",
+  "versionName": "1.0.3",
+  "versionCode": 10003,
+  "releaseDate": "2026-06-03",
+  "releasePageUrl": "https://github.com/FynnJS/Wartezeiten-App/releases/tag/v1.0.3",
+  "apkUrl": "https://github.com/FynnJS/Wartezeiten-App/releases/download/v1.0.3/wartezeiten-app-1.0.3.apk",
+  "apkSize": "",
   "releaseNotes": [
-    "Added German/English language setting and refreshed API calls when the language changes.",
-    "Localized the main park list, park detail controls, watchlist, attribution, update banner, and best-park scan status.",
-    "Added background recommendation scans via WorkManager so \"Best park today\" can stay warm while the app is closed.",
-    "Improved \"Best park today\" with scan progress and estimated remaining time.",
-    "Reworked visitor-focused notification categories and notification copy."
+    "Zentrale Cloudflare App-Daten mit Cron fuer Empfehlungen und Trendverlaeufe vorbereitet.",
+    "Neues Ranking \"Bester Wert heute\" und Schnellzugriff auf Favoriten ergaenzt.",
+    "Share-Funktion fuer Parkstatus und einzelne Attraktionen hinzugefuegt.",
+    "Watchlist-Benachrichtigungen mit Presets, besseren Details und Deep Links verbessert.",
+    "Attribution an feste Inhaltsstellen verschoben statt als permanente Footer-Leiste."
   ],
-  "showBanner": true,
-  "virusTotalUrl": ""
+  "showBanner": true
 }

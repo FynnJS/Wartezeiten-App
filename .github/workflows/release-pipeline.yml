@@ -89,7 +89,6 @@ jobs:
           apk_release_asset = apk_source.with_name(apk_file_name)
           apk_release_asset.write_bytes(apk_source.read_bytes())
           apk_url = f'https://github.com/{github_repo}/releases/download/{release_tag}/{apk_file_name}'
-          sha256 = subprocess.check_output(['sha256sum', str(apk_source)], text=True).split()[0]
           size_bytes = apk_source.stat().st_size
           size_label = f'{size_bytes / (1024 * 1024):.2f}'
           release_date = subprocess.check_output(['date', '-u', '+%Y-%m-%d'], text=True).strip()
@@ -104,11 +103,9 @@ jobs:
               'releaseDate': release_date,
               'releasePageUrl': f'https://github.com/{github_repo}/releases/tag/{release_tag}',
               'apkUrl': apk_url,
-              'sha256': sha256,
               'apkSize': size_label,
               'releaseNotes': release_notes,
-              'showBanner': True,
-              'virusTotalUrl': ''
+              'showBanner': True
           }
 
           website_dir = pathlib.Path('website')
@@ -123,7 +120,6 @@ jobs:
               output.write(f"apk_file_name={apk_file_name}\n")
               output.write(f"apk_release_asset={apk_release_asset}\n")
               output.write(f"apk_url={apk_url}\n")
-              output.write(f"sha256={sha256}\n")
               output.write(f"apk_size={size_label}\n")
         shell: bash
 

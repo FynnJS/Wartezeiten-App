@@ -73,7 +73,7 @@ fun AddWatchlistDialog(
     var selectedType by remember(attractionId) {
         mutableStateOf(
             if (attractionId != null) WatchlistType.WAIT_TIME_BELOW
-            else WatchlistType.WAIT_TIME_BELOW
+            else WatchlistType.NOW_OPENED
         )
     }
 
@@ -120,6 +120,13 @@ fun AddWatchlistDialog(
     val thresholdValue = threshold.toIntOrNull()
     val effectiveThreshold = if (showThresholdField) thresholdValue ?: 0 else 0
     val canSave = permissionGranted.value && (!showThresholdField || thresholdValue != null)
+    val thresholdPresets = when (selectedType) {
+        WatchlistType.WAIT_TIME_BELOW -> listOf(15, 30, 45)
+        WatchlistType.WAIT_TIME_ABOVE -> listOf(45, 60, 90)
+        WatchlistType.CROWD_LEVEL_BELOW -> listOf(30, 50, 70)
+        WatchlistType.CROWD_LEVEL_ABOVE -> listOf(60, 75, 90)
+        else -> emptyList()
+    }
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -156,6 +163,27 @@ fun AddWatchlistDialog(
                         onValueChange = { threshold = it.filter { char -> char.isDigit() } },
                         label = { Text(thresholdLabel) }
                     )
+                    Row(
+                        modifier = Modifier.horizontalScroll(rememberScrollState()),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        thresholdPresets.forEach { preset ->
+                            AssistChip(
+                                onClick = { threshold = preset.toString() },
+                                label = {
+                                    Text(
+                                        if (selectedType == WatchlistType.CROWD_LEVEL_BELOW ||
+                                            selectedType == WatchlistType.CROWD_LEVEL_ABOVE
+                                        ) {
+                                            "$preset%"
+                                        } else {
+                                            "$preset Min"
+                                        }
+                                    )
+                                },
+                            )
+                        }
+                    }
                 }
 
                 if (isNotificationPermissionRequired && !permissionGranted.value) {

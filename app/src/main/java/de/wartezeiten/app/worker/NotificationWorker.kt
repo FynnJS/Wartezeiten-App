@@ -45,6 +45,7 @@ private data class WatchlistNotification(
     val content: String,
     val parkKey: String,
     val parkName: String,
+    val attractionId: String? = null,
 )
 
 @HiltWorker
@@ -213,6 +214,7 @@ class NotificationWorker @AssistedInject constructor(
                         content = "${best?.safeName() ?: "Eine Attraktion"} liegt bei $waitMinutes Min. Jetzt lohnt sich der Weg.",
                         parkKey = parkKey,
                         parkName = parkName,
+                        attractionId = best?.let(::normalizeAttractionId),
                     )
                 )
             }
@@ -244,6 +246,7 @@ class NotificationWorker @AssistedInject constructor(
                         content = "${longest?.safeName() ?: "Eine Attraktion"} steht bei $waitMinutes Min. Lieber Route ändern oder später wiederkommen.",
                         parkKey = parkKey,
                         parkName = parkName,
+                        attractionId = longest?.let(::normalizeAttractionId),
                     )
                 )
             }
@@ -288,26 +291,30 @@ class NotificationWorker @AssistedInject constructor(
                             content = current.safeStatus().toReadableStatus(),
                             parkKey = parkKey,
                             parkName = parkName,
+                            attractionId = normalizeAttractionId(current),
                         )
                     )
                 }
             }
     }
 
-    private fun notificationIntent(parkKey: String): PendingIntent {
+    private fun notificationIntent(parkKey: String, attractionId: String? = null): PendingIntent {
         val intent = Intent(applicationContext, MainActivity::class.java).apply {
             action = Intent.ACTION_VIEW
-            data = Uri.Builder()
+            val uriBuilder = Uri.Builder()
                 .scheme("wartezeiten")
                 .authority("parks")
                 .appendPath(parkKey)
-                .build()
+            if (!attractionId.isNullOrBlank()) {
+                uriBuilder.appendQueryParameter("attractionId", attractionId)
+            }
+            data = uriBuilder.build()
             flags = Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP
         }
 
         return PendingIntent.getActivity(
             applicationContext,
-            parkKey.notificationId(),
+            (parkKey + (attractionId ?: "")).notificationId(),
             intent,
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
         )
@@ -348,7 +355,7 @@ class NotificationWorker @AssistedInject constructor(
                 .setSmallIcon(de.wartezeiten.app.R.mipmap.ic_launcher)
                 .setContentTitle(title)
                 .setContentText(content)
-                .setContentIntent(notificationIntent(parkKey))
+                .setContentIntent(notificationIntent(parkKey, first.attractionId))
                 .setStyle(NotificationCompat.BigTextStyle().bigText(content))
                 .setPriority(NotificationCompat.PRIORITY_HIGH)
                 .setCategory(NotificationCompat.CATEGORY_REMINDER)
@@ -368,7 +375,7 @@ class NotificationWorker @AssistedInject constructor(
             .setSmallIcon(de.wartezeiten.app.R.mipmap.ic_launcher)
             .setContentTitle("${notifications.size} neue Park-Alarme")
             .setContentText(groupedByPark.size.toParkCountText())
-            .setContentIntent(notificationIntent(notifications.first().parkKey))
+            .setContentIntent(notificationIntent(notifications.first().parkKey, notifications.first().attractionId))
             .setStyle(NotificationCompat.BigTextStyle().bigText(summaryText))
             .setPriority(NotificationCompat.PRIORITY_HIGH)
             .setCategory(NotificationCompat.CATEGORY_REMINDER)

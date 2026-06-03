@@ -29,7 +29,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import de.wartezeiten.app.data.local.entity.WatchlistEntity
-import de.wartezeiten.app.ui.components.AttributionFooter
 import de.wartezeiten.app.ui.waitingtimes.WatchlistAlertWithParkName
 import de.wartezeiten.app.ui.waitingtimes.WatchlistViewModel
 import de.wartezeiten.app.ui.waitingtimes.label
@@ -57,9 +56,6 @@ fun WatchlistRoute(
                     }
                 }
             )
-        },
-        bottomBar = {
-            AttributionFooter(language = language)
         }
     ) { padding ->
         LazyColumn(
@@ -75,6 +71,15 @@ fun WatchlistRoute(
                     style = MaterialTheme.typography.titleMedium,
                 )
                 Spacer(Modifier.height(8.dp))
+                Text(
+                    text = if (language == "en") {
+                        "Checks run in the background and open the matching park from each alert."
+                    } else {
+                        "Pruefungen laufen im Hintergrund und oeffnen aus jedem Alarm direkt den passenden Park."
+                    },
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
             }
 
             if (watchlistItems.isEmpty()) {
@@ -123,6 +128,11 @@ private fun WatchlistAlertCard(
             ) {
                 Column(modifier = Modifier.weight(1f)) {
                     Text(item.type.label(language), style = MaterialTheme.typography.titleMedium)
+                    Text(
+                        text = item.statusLine(language),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
                     if (item.attractionId != null) {
                         Text(
                             text = if (language == "en") {
@@ -159,4 +169,25 @@ private fun WatchlistAlertCard(
             }
         }
     }
+}
+
+private fun WatchlistEntity.statusLine(language: String): String {
+    val thresholdTypes = setOf(
+        de.wartezeiten.app.data.local.entity.WatchlistType.WAIT_TIME_BELOW,
+        de.wartezeiten.app.data.local.entity.WatchlistType.WAIT_TIME_ABOVE,
+        de.wartezeiten.app.data.local.entity.WatchlistType.CROWD_LEVEL_BELOW,
+        de.wartezeiten.app.data.local.entity.WatchlistType.CROWD_LEVEL_ABOVE,
+    )
+    if (type !in thresholdTypes) {
+        return if (language == "en") "Status-based alert" else "Statusbasierter Alarm"
+    }
+    val unit = if (
+        type == de.wartezeiten.app.data.local.entity.WatchlistType.CROWD_LEVEL_BELOW ||
+        type == de.wartezeiten.app.data.local.entity.WatchlistType.CROWD_LEVEL_ABOVE
+    ) {
+        "%"
+    } else {
+        if (language == "en") " min" else " Min."
+    }
+    return if (language == "en") "Threshold: $threshold$unit" else "Schwelle: $threshold$unit"
 }

@@ -28,7 +28,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import de.wartezeiten.app.ui.components.AttributionFooter
+import de.wartezeiten.app.ui.components.AttributionBanner
 
 @Composable
 fun SettingsRoute(
@@ -68,9 +68,6 @@ fun SettingsScreen(
                 }
             )
         },
-        bottomBar = {
-            AttributionFooter(language = state.language)
-        }
     ) { padding ->
         Column(
             modifier = Modifier
@@ -128,6 +125,8 @@ fun SettingsScreen(
                 supportingContent = { Text(state.version) },
                 leadingContent = { Icon(Icons.Default.Info, contentDescription = null) }
             )
+            HorizontalDivider()
+            AttributionBanner(language = state.language)
         }
     }
 }

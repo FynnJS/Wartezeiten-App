@@ -74,6 +74,7 @@ data class WaitingTimesUiState(
     val holidays: List<HolidayInfo> = emptyList(),
     val trendSummary: ParkTrendSummary = ParkTrendSummary.Empty,
     val language: String = PreferencesDataSource.DEFAULT_LANGUAGE,
+    val highlightedAttractionId: String? = null,
 )
 
 @HiltViewModel
@@ -84,6 +85,7 @@ class WaitingTimesViewModel @Inject constructor(
     private val preferences: PreferencesDataSource,
 ) : ViewModel() {
     private val parkKey: String = checkNotNull(savedStateHandle["parkKey"])
+    private val highlightedAttractionId: String? = savedStateHandle["attractionId"]
     private val sort = MutableStateFlow(WaitingTimesSort.WaitDescending)
     private val filter = MutableStateFlow(AttractionFilter.All)
     private val attractionQuery = MutableStateFlow("")
@@ -161,6 +163,7 @@ class WaitingTimesViewModel @Inject constructor(
                 currentLocalTime = status.currentTime,
                 trendSummary = trendSummary,
                 language = status.language,
+                highlightedAttractionId = highlightedAttractionId,
             )
         } else {
             val hasOpenAttraction = detail.waitingTimes.any { it.status == AttractionStatus.Opened }
@@ -201,6 +204,7 @@ class WaitingTimesViewModel @Inject constructor(
                 ),
                 trendSummary = if (canCalculateCrowdLevel) trendSummary else ParkTrendSummary.Empty,
                 language = status.language,
+                highlightedAttractionId = highlightedAttractionId,
             )
         }
     }.stateIn(
@@ -212,7 +216,14 @@ class WaitingTimesViewModel @Inject constructor(
     init {
         restoreSavedFilters()
         observeLanguage()
+        refreshPublicTrendHistory()
         startAutoRefresh()
+    }
+
+    private fun refreshPublicTrendHistory() {
+        viewModelScope.launch {
+            repository.refreshPublicTrendHistory(parkKey)
+        }
     }
 
     private fun observeLanguage() {

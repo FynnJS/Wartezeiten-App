@@ -31,7 +31,7 @@ import de.wartezeiten.app.data.local.entity.AlertHistoryEntity
         HolidayEntity::class,
         AlertHistoryEntity::class
     ],
-    version = 5,
+    version = 6,
     exportSchema = true
 )
 @TypeConverters(WatchlistTypeConverter::class)

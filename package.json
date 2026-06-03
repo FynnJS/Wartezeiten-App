@@ -1,0 +1,10 @@
+{
+  "scripts": {
+    "worker:dev": "wrangler dev --test-scheduled",
+    "worker:deploy": "wrangler deploy",
+    "worker:tail": "wrangler tail"
+  },
+  "devDependencies": {
+    "wrangler": "^4.0.0"
+  }
+}

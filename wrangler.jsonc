@@ -1,12 +1,24 @@
 {
   "$schema": "node_modules/wrangler/config-schema.json",
   "name": "wartezeiten-app",
+  "main": "worker/src/index.js",
   "compatibility_date": "2026-05-30",
   "observability": {
     "enabled": true
   },
   "assets": {
     "directory": "website"
+  },
+  "kv_namespaces": [
+    {
+      "binding": "APP_DATA",
+      "id": "31da31b0b6b8407983691eb9216c8f37"
+    }
+  ],
+  "triggers": {
+    "crons": [
+      "*/10 * * * *"
+    ]
   },
   "compatibility_flags": [
     "nodejs_compat"

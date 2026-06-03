@@ -14,6 +14,7 @@ import de.wartezeiten.app.data.local.entity.WeatherForecastEntity
 import de.wartezeiten.app.data.mapper.toDomain
 import de.wartezeiten.app.data.mapper.toEntity
 import de.wartezeiten.app.data.remote.HolidayApiService
+import de.wartezeiten.app.data.remote.PublicAppDataApiService
 import de.wartezeiten.app.data.remote.WartezeitenApiService
 import de.wartezeiten.app.data.remote.WeatherApiService
 import de.wartezeiten.app.domain.model.Park
@@ -49,6 +50,7 @@ class DefaultWartezeitenRepository @Inject constructor(
     private val parkSnapshotDao: ParkSnapshotDao,
     private val weatherApi: WeatherApiService,
     private val holidayApi: HolidayApiService,
+    private val publicAppDataApi: PublicAppDataApiService,
     @param:IoDispatcher private val ioDispatcher: CoroutineDispatcher,
 ) : WartezeitenRepository {
 
@@ -65,6 +67,12 @@ class DefaultWartezeitenRepository @Inject constructor(
     }
 
     override fun observeBestParkRecommendation(): Flow<ParkRecommendation?> {
+        return observeParkRecommendations(limit = 1)
+            .map { it.firstOrNull() }
+            .flowOn(ioDispatcher)
+    }
+
+    override fun observeParkRecommendations(limit: Int): Flow<List<ParkRecommendation>> {
         return combine(
             parkDao.observeParks(null),
             parkSnapshotDao.observeLatestSnapshots(),
@@ -101,7 +109,9 @@ class DefaultWartezeitenRepository @Inject constructor(
                         reason = buildRecommendationReason(crowd, snapshot.openAttractions, snapshot.totalAttractions),
                     )
                 }
-                .maxByOrNull { it.score }
+                .sortedByDescending { it.score }
+                .take(limit.coerceAtLeast(1))
+                .toList()
         }.flowOn(ioDispatcher)
     }
 
@@ -126,6 +136,12 @@ class DefaultWartezeitenRepository @Inject constructor(
         language: String,
         onProgress: (ParkRecommendationScanProgress) -> Unit,
     ): ApiResult<Unit> = withContext(ioDispatcher) {
+        val publicResult = refreshPublicAppData()
+        if (publicResult is ApiResult.Success) {
+            onProgress(ParkRecommendationScanProgress(completedParks = 0, totalParks = 0, estimatedRemainingMillis = 0L))
+            return@withContext publicResult
+        }
+
         val parks = parkDao.observeParks(null).first()
         if (parks.isEmpty()) return@withContext ApiResult.Success(Unit)
         val now = System.currentTimeMillis()
@@ -434,6 +450,38 @@ class DefaultWartezeitenRepository @Inject constructor(
         }
     }
 
+    override suspend fun refreshPublicAppData(): ApiResult<Unit> = withContext(ioDispatcher) {
+        when (val result = safeApiCall { publicAppDataApi.getLatestAppData() }) {
+            is ApiResult.Success -> {
+                val snapshots = result.data.parks.mapNotNull { snapshot ->
+                    val capturedAt = snapshot.capturedAtMillis.takeIf { it > 0L }
+                        ?: result.data.generatedAtMillis
+                        ?: return@mapNotNull null
+                    ParkSnapshotEntity(
+                        parkKey = snapshot.parkKey,
+                        capturedAtMillis = capturedAt,
+                        apiCrowdLevel = snapshot.apiCrowdLevel,
+                        calculatedCrowdLevel = snapshot.calculatedCrowdLevel,
+                        displayCrowdLevel = snapshot.displayCrowdLevel?.takeIf {
+                            snapshot.openedToday == true && it in 0f..100f
+                        },
+                        openedToday = snapshot.openedToday,
+                        openFrom = snapshot.openFrom,
+                        closedFrom = snapshot.closedFrom,
+                        openAttractions = snapshot.openAttractions,
+                        totalAttractions = snapshot.totalAttractions,
+                        source = "public",
+                    )
+                }
+                if (snapshots.isNotEmpty()) {
+                    parkSnapshotDao.insertAll(snapshots)
+                }
+                ApiResult.Success(Unit)
+            }
+            is ApiResult.Error -> result
+        }
+    }
+
     private fun isParkCurrentlyOpen(
         openedToday: Boolean?,
         openFrom: String?,
@@ -542,8 +590,59 @@ class DefaultWartezeitenRepository @Inject constructor(
                         totalAttractions = it.totalAttractions
                     )
                 }
-                de.wartezeiten.app.domain.model.buildParkTrendSummary(crowdSnapshots, System.currentTimeMillis())
+                val summary = de.wartezeiten.app.domain.model.buildParkTrendSummary(crowdSnapshots, System.currentTimeMillis())
+                summary.copy(
+                    points = summary.points.map { point ->
+                        val source = snapshots.firstOrNull { it.capturedAtMillis == point.capturedAtMillis }?.source
+                        point.copy(
+                            source = if (source == "public") {
+                                de.wartezeiten.app.domain.model.ParkTrendSource.PublicHistory
+                            } else {
+                                de.wartezeiten.app.domain.model.ParkTrendSource.Local
+                            }
+                        )
+                    },
+                    hasPublicHistory = snapshots.any { it.source == "public" },
+                )
             }
             .flowOn(ioDispatcher)
+    }
+
+    override suspend fun refreshPublicTrendHistory(parkKey: String): ApiResult<Unit> = withContext(ioDispatcher) {
+        when (val result = safeApiCall { publicAppDataApi.getTrendHistory() }) {
+            is ApiResult.Success -> {
+                val remoteParks = result.data.parks
+                    .filter { it.parkKey == parkKey }
+                if (remoteParks.isEmpty()) return@withContext ApiResult.Success(Unit)
+
+                val snapshots = remoteParks
+                    .flatMap { parkHistory ->
+                        parkHistory.snapshots.mapNotNull { snapshot ->
+                            val displayLevel = snapshot.displayCrowdLevel?.takeIf {
+                                snapshot.openedToday == true && it in 0f..100f
+                            }
+                            if (displayLevel == null) return@mapNotNull null
+                            ParkSnapshotEntity(
+                                parkKey = parkHistory.parkKey,
+                                capturedAtMillis = snapshot.capturedAtMillis,
+                                apiCrowdLevel = snapshot.apiCrowdLevel,
+                                calculatedCrowdLevel = snapshot.calculatedCrowdLevel,
+                                displayCrowdLevel = displayLevel,
+                                openedToday = snapshot.openedToday,
+                                openFrom = null,
+                                closedFrom = null,
+                                openAttractions = snapshot.openAttractions,
+                                totalAttractions = snapshot.totalAttractions,
+                                source = "public",
+                            )
+                        }
+                    }
+                if (snapshots.isNotEmpty()) {
+                    parkSnapshotDao.insertAll(snapshots)
+                }
+                ApiResult.Success(Unit)
+            }
+            is ApiResult.Error -> result
+        }
     }
 }

@@ -75,13 +75,14 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import de.wartezeiten.app.domain.model.Park
 import de.wartezeiten.app.domain.model.ParkRecommendation
-import de.wartezeiten.app.ui.components.AttributionFooter
+import de.wartezeiten.app.ui.components.AttributionBanner
 import de.wartezeiten.app.ui.waitingtimes.AddWatchlistDialog
 import java.time.LocalTime
 import java.time.format.DateTimeFormatter
@@ -194,9 +195,6 @@ fun ParkListScreen(
                     containerColor = MaterialTheme.colorScheme.background,
                 ),
             )
-        },
-        bottomBar = {
-            AttributionFooter(language = state.language)
         }
     ) { padding ->
         Column(
@@ -299,6 +297,30 @@ fun ParkListScreen(
                             }
                         }
 
+                        if (!isSearching && state.favoriteParks.isNotEmpty()) {
+                            item {
+                                QuickFavoriteParksSection(
+                                    parks = state.favoriteParks.take(3),
+                                    language = state.language,
+                                    onParkClick = onParkClick,
+                                    onQuickAddWatchlist = { park ->
+                                        selectedParkForWatchlist = park
+                                        showAddWatchlistDialog = true
+                                    },
+                                )
+                            }
+                        }
+
+                        if (state.recommendations.size > 1) {
+                            item {
+                                BestParkRankingSection(
+                                    recommendations = state.recommendations,
+                                    language = state.language,
+                                    onParkClick = { onParkClick(it.park) },
+                                )
+                            }
+                        }
+
                         item {
                             OutlinedTextField(
                                 value = state.query,
@@ -348,6 +370,10 @@ fun ParkListScreen(
                                 state = state,
                                 onClearFilters = onClearFilters,
                             )
+                        }
+
+                        item {
+                            AttributionBanner(language = state.language)
                         }
 
                         if (state.parks.isEmpty()) {
@@ -461,6 +487,111 @@ private fun OfflineDataBanner(language: String) {
                 style = MaterialTheme.typography.bodySmall,
                 fontWeight = FontWeight.SemiBold,
             )
+        }
+    }
+}
+
+@Composable
+private fun QuickFavoriteParksSection(
+    parks: List<Park>,
+    language: String,
+    onParkClick: (Park) -> Unit,
+    onQuickAddWatchlist: (Park) -> Unit,
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Text(
+            text = if (language == "en") "Quick access" else "Schnellzugriff",
+            style = MaterialTheme.typography.titleSmall,
+            color = MaterialTheme.colorScheme.primary,
+            fontWeight = FontWeight.Bold,
+        )
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .horizontalScroll(rememberScrollState()),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            parks.forEach { park ->
+                OutlinedCard(
+                    modifier = Modifier
+                        .width(220.dp)
+                        .clickable { onParkClick(park) },
+                    shape = RoundedCornerShape(12.dp),
+                    colors = CardDefaults.outlinedCardColors(
+                        containerColor = MaterialTheme.colorScheme.tertiaryContainer,
+                        contentColor = MaterialTheme.colorScheme.onTertiaryContainer,
+                    ),
+                ) {
+                    Row(
+                        modifier = Modifier.padding(12.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        Icon(Icons.Default.Favorite, contentDescription = null, modifier = Modifier.size(20.dp))
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(park.name, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold, maxLines = 1)
+                            Text("${countryToFlag(park.country)} ${park.country}", style = MaterialTheme.typography.labelSmall, maxLines = 1)
+                        }
+                        IconButton(onClick = { onQuickAddWatchlist(park) }, modifier = Modifier.size(32.dp)) {
+                            Icon(Icons.Default.Notifications, contentDescription = null, modifier = Modifier.size(18.dp))
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun BestParkRankingSection(
+    recommendations: List<ParkRecommendation>,
+    language: String,
+    onParkClick: (ParkRecommendation) -> Unit,
+) {
+    OutlinedCard(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(14.dp),
+        colors = CardDefaults.outlinedCardColors(
+            containerColor = MaterialTheme.colorScheme.surface,
+        ),
+    ) {
+        Column(
+            modifier = Modifier.padding(14.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            Text(
+                text = if (language == "en") "Best value today" else "Bester Wert heute",
+                style = MaterialTheme.typography.titleSmall,
+                fontWeight = FontWeight.Bold,
+            )
+            recommendations.forEachIndexed { index, recommendation ->
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(10.dp))
+                        .clickable { onParkClick(recommendation) }
+                        .padding(vertical = 6.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                ) {
+                    Text(
+                        text = "#${index + 1}",
+                        style = MaterialTheme.typography.labelLarge,
+                        fontWeight = FontWeight.Black,
+                        color = MaterialTheme.colorScheme.primary,
+                    )
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(recommendation.park.name, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
+                        Text(recommendation.localizedReason(language), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                    Text(
+                        text = recommendation.score.toString(),
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Black,
+                        color = MaterialTheme.colorScheme.primary,
+                    )
+                }
+            }
         }
     }
 }
