@@ -15,11 +15,11 @@ Die Website stellt die aktuelle APK bereit und dient gleichzeitig als Cloudflare
 
 ```json
 {
-  "versionName": "1.0.4",
-  "versionCode": 10004,
-  "releaseDate": "2026-06-03",
-  "releasePageUrl": "https://github.com/FynnJS/Wartezeiten-App/releases/tag/v1.0.4",
-  "apkUrl": "https://github.com/FynnJS/Wartezeiten-App/releases/download/v1.0.4/wartezeiten-app-1.0.4.apk",
+  "versionName": "1.0.5",
+  "versionCode": 10005,
+  "releaseDate": "2026-06-04",
+  "releasePageUrl": "https://github.com/FynnJS/Wartezeiten-App/releases/tag/v1.0.5",
+  "apkUrl": "https://github.com/FynnJS/Wartezeiten-App/releases/download/v1.0.5/wartezeiten-app-1.0.5.apk",
   "apkSize": "",
   "releaseNotes": [],
   "showBanner": true

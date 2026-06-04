@@ -94,6 +94,7 @@ import java.util.Locale
 @Composable
 fun WaitingTimesRoute(
     onBackClick: () -> Unit,
+    onParkStatisticsClick: (String) -> Unit,
     onAttractionStatisticsClick: (String, String) -> Unit,
     viewModel: WaitingTimesViewModel = hiltViewModel(),
 ) {
@@ -108,6 +109,7 @@ fun WaitingTimesRoute(
         onAttractionQueryChange = viewModel::setAttractionQuery,
         onMaxWaitChange = viewModel::setMaxWait,
         onTogglePlannedAttraction = viewModel::togglePlannedAttraction,
+        onParkStatisticsClick = onParkStatisticsClick,
         onAttractionStatisticsClick = onAttractionStatisticsClick,
     )
 }
@@ -124,6 +126,7 @@ fun WaitingTimesScreen(
     onAttractionQueryChange: (String) -> Unit,
     onMaxWaitChange: (Int?) -> Unit,
     onTogglePlannedAttraction: (String) -> Unit,
+    onParkStatisticsClick: (String) -> Unit,
     onAttractionStatisticsClick: (String, String) -> Unit,
 ) {
     val snackbarHostState = remember { SnackbarHostState() }
@@ -178,6 +181,19 @@ fun WaitingTimesScreen(
                     }
                 },
                 actions = {
+                    state.park?.let { park ->
+                        IconButton(onClick = { onParkStatisticsClick(park.id) }) {
+                            Icon(
+                                Icons.Default.Insights,
+                                contentDescription = if (state.language == "en") {
+                                    "Show park statistics"
+                                } else {
+                                    "Parkstatistik anzeigen"
+                                },
+                                tint = MaterialTheme.colorScheme.primary,
+                            )
+                        }
+                    }
                     val isFavorite = state.park?.isFavorite == true
                     IconButton(onClick = onToggleFavorite) {
                         Icon(

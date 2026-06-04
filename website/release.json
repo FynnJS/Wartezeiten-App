@@ -1,16 +1,16 @@
 {
-  "versionName": "1.0.4",
-  "versionCode": 10004,
-  "releaseDate": "2026-06-03",
-  "releasePageUrl": "https://github.com/FynnJS/Wartezeiten-App/releases/tag/v1.0.4",
-  "apkUrl": "https://github.com/FynnJS/Wartezeiten-App/releases/download/v1.0.4/wartezeiten-app-1.0.4.apk",
+  "versionName": "1.0.5",
+  "versionCode": 10005,
+  "releaseDate": "2026-06-04",
+  "releasePageUrl": "https://github.com/FynnJS/Wartezeiten-App/releases/tag/v1.0.5",
+  "apkUrl": "https://github.com/FynnJS/Wartezeiten-App/releases/download/v1.0.5/wartezeiten-app-1.0.5.apk",
   "apkSize": "",
   "releaseNotes": [
-    "Startseitensuche findet jetzt Parks und Attraktionen gemeinsam mit direktem Sprung zur passenden Attraktion.",
-    "Statistik-Seite zeigt ausgewählte Parks und Attraktionen stabil mit Namen statt IDs und schließt Auswahlmenüs sofort.",
-    "Aktuelle Attraktionsdaten werden zentral über die öffentlichen App-Daten bereitgestellt.",
-    "Teilen-Funktionen entfernt und mehrere UI-Texte mit Umlauten korrigiert.",
-    "Attraktionsstatistiken und Tagesverläufe für zukünftige historische Auswertungen vorbereitet."
+    "Parkstatistiken lassen sich jetzt direkt von der Startseite und aus der Parkansicht öffnen.",
+    "Park- und Attraktionsstatistiken sind getrennt auswählbar und zeigen Durchschnittswerte mit passenden Graphen.",
+    "Attraktionsstatistiken laden wieder Daten und die Y-Achse skaliert Wartezeiten und Statusmarker sinnvoller.",
+    "Auslastungsgraphen zeigen nur noch einen Parktag beziehungsweise die Öffnungszeit des Parks.",
+    "Refresh und Statistikdaten wurden stabilisiert, damit optionale Serverfehler die App nicht mehr unnötig blockieren."
   ],
   "showBanner": true
 }

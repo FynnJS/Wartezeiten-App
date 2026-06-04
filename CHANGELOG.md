@@ -1,5 +1,15 @@
 # Changelog
 
+## v1.0.5 - 2026-06-04
+
+- Fixed park statistics deep links from the start page so the selected park opens directly in the statistics view.
+- Added direct park statistics access from park cards and park detail pages.
+- Separated park statistics from attraction statistics and added park-level average wait time charts.
+- Fixed attraction statistics data loading and improved chart scaling for wait times versus closed/status markers.
+- Limited utilization charts to one park day or the park opening window instead of spanning multiple days.
+- Improved refresh stability so optional server errors no longer block core park and wait-time data.
+- Updated build configuration to remove deprecated Android Gradle options for the v1.0.5 build.
+
 ## v1.0.4 - 2026-06-03
 
 - Added a combined park and attraction search on the start page with direct attraction deep links.

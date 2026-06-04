@@ -27,14 +27,15 @@ import de.wartezeiten.app.domain.repository.ParkRecommendationScanProgress
 import de.wartezeiten.app.domain.repository.WartezeitenRepository
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.async
-import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.supervisorScope
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
 import java.time.Instant
 import java.time.OffsetDateTime
 import javax.inject.Inject
@@ -44,6 +45,7 @@ private const val RECOMMENDATION_CURRENT_MAX_AGE_MILLIS = 30 * 60 * 1000L
 private const val RECOMMENDATION_SNAPSHOT_MAX_AGE_MILLIS = 6 * 60 * 60 * 1000L
 private const val RECOMMENDATION_REQUEST_DELAY_MILLIS = 1_500L
 private const val RECOMMENDATION_ESTIMATED_PARK_SCAN_MILLIS = 4_500L
+private const val OPTIONAL_DETAIL_TIMEOUT_MILLIS = 3_000L
 
 @Singleton
 class DefaultWartezeitenRepository @Inject constructor(
@@ -324,15 +326,23 @@ class DefaultWartezeitenRepository @Inject constructor(
         parkKey: String,
         language: String,
     ): ApiResult<Unit> = withContext(ioDispatcher) {
-        coroutineScope {
+        supervisorScope {
             // FIX: openingTimes now returns List<OpeningTimesDto> - matches updated API service
             val openingTimes = async { safeApiCall { api.getOpeningTimes(parkKey) } }
             val waitingTimes = async { safeApiCall { api.getWaitingTimes(parkKey, language) } }
             val crowdLevel = async { safeApiCall { api.getCrowdLevel(parkKey) } }
             val park = parkDao.observePark(parkKey).first()
             val (latitude, longitude) = park?.let { countryToCoordinates(it.id, it.country) } ?: Pair(48.137, 11.575)
-            val weather = async { safeApiCall { weatherApi.getForecast(latitude, longitude) } }
-            val holidays = async { safeApiCall { holidayApi.getNextHolidays(park?.country?.let(::countryToIsoCode) ?: "DE") } }
+            val weather = async {
+                withTimeoutOrNull(OPTIONAL_DETAIL_TIMEOUT_MILLIS) {
+                    safeApiCall { weatherApi.getForecast(latitude, longitude) }
+                }
+            }
+            val holidays = async {
+                withTimeoutOrNull(OPTIONAL_DETAIL_TIMEOUT_MILLIS) {
+                    safeApiCall { holidayApi.getNextHolidays(park?.country?.let(::countryToIsoCode) ?: "DE") }
+                }
+            }
 
             val now = System.currentTimeMillis()
             val openingResult = openingTimes.await()
@@ -438,12 +448,19 @@ class DefaultWartezeitenRepository @Inject constructor(
                 )
             }
 
-            listOf(openingResult, waitingResult, crowdResult, weatherResult, holidayResult)
-                .asSequence()
-                .filterIsInstance<ApiResult.Error>()
-                .sortedBy { errorPriority(it.type) }
-                .firstOrNull()
-                ?: ApiResult.Success(Unit)
+            val hasUsableCoreData = openingResult is ApiResult.Success ||
+                    waitingResult is ApiResult.Success ||
+                    crowdResult is ApiResult.Success
+            if (hasUsableCoreData) {
+                ApiResult.Success(Unit)
+            } else {
+                listOf(openingResult, waitingResult, crowdResult)
+                    .asSequence()
+                    .filterIsInstance<ApiResult.Error>()
+                    .sortedBy { errorPriority(it.type) }
+                    .firstOrNull()
+                    ?: ApiResult.Success(Unit)
+            }
         }
     }
 
@@ -621,6 +638,8 @@ class DefaultWartezeitenRepository @Inject constructor(
                         calculatedCrowdLevel = it.calculatedCrowdLevel,
                         displayCrowdLevel = it.displayCrowdLevel,
                         openedToday = it.openedToday,
+                        openFrom = it.openFrom,
+                        closedFrom = it.closedFrom,
                         openAttractions = it.openAttractions,
                         totalAttractions = it.totalAttractions
                     )

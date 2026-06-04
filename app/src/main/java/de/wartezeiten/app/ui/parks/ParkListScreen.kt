@@ -28,6 +28,8 @@ import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.List
+import androidx.compose.material.icons.automirrored.filled.Sort
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.CheckCircle
@@ -37,12 +39,10 @@ import androidx.compose.material.icons.filled.FavoriteBorder
 import androidx.compose.material.icons.filled.Insights
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
-import androidx.compose.material.icons.filled.List
 import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Settings
-import androidx.compose.material.icons.filled.Sort
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.CardDefaults
@@ -95,6 +95,7 @@ fun ParkListRoute(
     onSettingsClick: () -> Unit,
     onWatchlistClick: () -> Unit,
     onStatisticsClick: () -> Unit,
+    onParkStatisticsClick: (String) -> Unit,
     onAttractionClick: (String, String) -> Unit,
     viewModel: ParkListViewModel = hiltViewModel(),
 ) {
@@ -113,6 +114,7 @@ fun ParkListRoute(
         onSettingsClick = onSettingsClick,
         onWatchlistClick = onWatchlistClick,
         onStatisticsClick = onStatisticsClick,
+        onParkStatisticsClick = onParkStatisticsClick,
         onAttractionClick = onAttractionClick,
     )
 }
@@ -133,6 +135,7 @@ fun ParkListScreen(
     onSettingsClick: () -> Unit,
     onWatchlistClick: () -> Unit,
     onStatisticsClick: () -> Unit,
+    onParkStatisticsClick: (String) -> Unit,
     onAttractionClick: (String, String) -> Unit,
 ) {
     val snackbarHostState = remember { SnackbarHostState() }
@@ -195,7 +198,7 @@ fun ParkListScreen(
                             Icon(Icons.Default.Settings, contentDescription = if (state.language == "en") "Settings" else "Einstellungen")
                         }
                         IconButton(onClick = onWatchlistClick) {
-                            Icon(Icons.Default.List, contentDescription = "Watchlist")
+                            Icon(Icons.AutoMirrored.Filled.List, contentDescription = "Watchlist")
                         }
                         IconButton(onClick = onStatisticsClick) {
                             Icon(Icons.Default.Insights, contentDescription = if (state.language == "en") "Statistics" else "Statistik")
@@ -334,34 +337,22 @@ fun ParkListScreen(
                             )
                         }
 
-                        if (state.query.length >= 2 && state.attractionSearchResults.isNotEmpty()) {
+                        if (
+                            state.query.length >= 2 &&
+                            state.parks.isNotEmpty() &&
+                            state.attractionSearchResults.isNotEmpty()
+                        ) {
                             item {
                                 Text(
-                                    if (state.language == "en") "Attractions" else "Attraktionen",
+                                    if (state.language == "en") "Parks" else "Parks",
                                     style = MaterialTheme.typography.titleSmall,
-                                    color = MaterialTheme.colorScheme.primary,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                                     fontWeight = FontWeight.Bold,
                                 )
                             }
-                            itemsIndexed(state.attractionSearchResults, key = { _, result -> "${result.parkKey}_${result.attractionId}" }) { _, result ->
-                                AttractionSearchResultCard(
-                                    result = result,
-                                    language = state.language,
-                                    onClick = { onAttractionClick(result.parkKey, result.attractionId) },
-                                )
-                            }
-                            if (state.parks.isNotEmpty()) {
-                                item {
-                                    Text(
-                                        if (state.language == "en") "Parks" else "Parks",
-                                        style = MaterialTheme.typography.titleSmall,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                        fontWeight = FontWeight.Bold,
-                                        modifier = Modifier.padding(top = 8.dp),
-                                    )
-                                }
-                            }
-                        } else if (state.query.length >= 2 && state.isStatisticsIndexLoading) {
+                        }
+
+                        if (state.query.length >= 2 && state.isStatisticsIndexLoading && state.attractionSearchResults.isEmpty()) {
                             item {
                                 Row(
                                     verticalAlignment = Alignment.CenterVertically,
@@ -375,10 +366,6 @@ fun ParkListScreen(
                                     )
                                 }
                             }
-                        }
-
-                        item {
-                            AttributionBanner(language = state.language)
                         }
 
                         if (state.parks.isEmpty()) {
@@ -410,9 +397,39 @@ fun ParkListScreen(
                                         onQuickAddWatchlist = {
                                             selectedParkForWatchlist = park
                                             showAddWatchlistDialog = true
-                                        }
+                                        },
+                                        onStatisticsClick = {
+                                            onParkStatisticsClick(
+                                                state.statisticsParkKeys[park.id]
+                                                    ?: state.statisticsParkKeys[park.uuid]
+                                                    ?: park.id
+                                            )
+                                        },
                                     ) { onToggleFavorite(park) }
                                 }
+                            }
+                        }
+
+                        item {
+                            AttributionBanner(language = state.language)
+                        }
+
+                        if (state.query.length >= 2 && state.attractionSearchResults.isNotEmpty()) {
+                            item {
+                                Text(
+                                    if (state.language == "en") "Attractions" else "Attraktionen",
+                                    style = MaterialTheme.typography.titleSmall,
+                                    color = MaterialTheme.colorScheme.primary,
+                                    fontWeight = FontWeight.Bold,
+                                    modifier = Modifier.padding(top = 8.dp),
+                                )
+                            }
+                            itemsIndexed(state.attractionSearchResults, key = { _, result -> "${result.parkKey}_${result.attractionId}" }) { _, result ->
+                                AttractionSearchResultCard(
+                                    result = result,
+                                    language = state.language,
+                                    onClick = { onAttractionClick(result.parkKey, result.attractionId) },
+                                )
                             }
                         }
                     }
@@ -846,7 +863,7 @@ private fun CountryFilterRow(
                 onClick = { sortExpanded = true },
                 label = { Text(sort.label(language), style = MaterialTheme.typography.labelMedium) },
                 leadingIcon = {
-                    Icon(Icons.Default.Sort, contentDescription = null, modifier = Modifier.size(16.dp))
+                    Icon(Icons.AutoMirrored.Filled.Sort, contentDescription = null, modifier = Modifier.size(16.dp))
                 },
                 shape = RoundedCornerShape(12.dp),
                 colors = FilterChipDefaults.filterChipColors(
@@ -1080,6 +1097,7 @@ private fun ParkCard(
     language: String,
     onClick: () -> Unit,
     onQuickAddWatchlist: () -> Unit,
+    onStatisticsClick: () -> Unit,
     onToggleFavorite: () -> Unit
 ) {
     OutlinedCard(
@@ -1150,6 +1168,18 @@ private fun ParkCard(
                     } else {
                         "Parkweite Benachrichtigung hinzufügen"
                     },
+                )
+            }
+
+            IconButton(onClick = onStatisticsClick) {
+                Icon(
+                    Icons.Default.Insights,
+                    contentDescription = if (language == "en") {
+                        "Show park statistics"
+                    } else {
+                        "Parkstatistik anzeigen"
+                    },
+                    tint = MaterialTheme.colorScheme.primary,
                 )
             }
 

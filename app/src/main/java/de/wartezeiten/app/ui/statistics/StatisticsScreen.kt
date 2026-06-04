@@ -69,7 +69,6 @@ import java.time.format.DateTimeFormatter
 import java.time.format.TextStyle
 import java.util.Locale
 import kotlin.math.ceil
-import kotlin.math.floor
 
 @Composable
 fun StatisticsRoute(
@@ -84,6 +83,7 @@ fun StatisticsRoute(
         onParkSelected = viewModel::selectPark,
         onDateSelected = viewModel::selectDate,
         onAttractionSelected = viewModel::selectAttraction,
+        onParkStatisticsSelected = viewModel::selectParkStatistics,
     )
 }
 
@@ -96,6 +96,7 @@ fun StatisticsScreen(
     onParkSelected: (String) -> Unit,
     onDateSelected: (String) -> Unit,
     onAttractionSelected: (String) -> Unit,
+    onParkStatisticsSelected: () -> Unit,
 ) {
     Scaffold(
         topBar = {
@@ -150,11 +151,31 @@ fun StatisticsScreen(
                         onParkSelected = onParkSelected,
                         onDateSelected = onDateSelected,
                         onAttractionSelected = onAttractionSelected,
+                        onParkStatisticsSelected = onParkStatisticsSelected,
                     )
                 }
 
                 state.errorMessage?.let { message ->
                     item { ErrorCard(message = message, onRetry = onRefreshClick) }
+                }
+
+                if (state.selectedAttractionId == null) {
+                    state.parkStatistics?.let { parkStatistics ->
+                        item {
+                            SelectedParkSummary(
+                                summary = parkStatistics,
+                                series = state.parkSeries,
+                            )
+                        }
+                        item {
+                            ParkAverageWaitChart(
+                                points = state.parkSeries,
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(220.dp),
+                            )
+                        }
+                    }
                 }
 
                 val selectedAttraction = state.selectedAttraction
@@ -173,8 +194,8 @@ fun StatisticsScreen(
                                 .height(220.dp),
                         )
                     }
-                } else if (!state.isLoading) {
-                    item { EmptyStatisticsState(state.selectedAttractionName) }
+                } else if (!state.isLoading && state.day == null) {
+                    item { EmptyStatisticsState(state.selectedAttractionName ?: state.selectedPark?.name) }
                 }
 
                 if (state.monthBuckets.isNotEmpty()) {
@@ -212,6 +233,7 @@ private fun StatisticsControlPanel(
     onParkSelected: (String) -> Unit,
     onDateSelected: (String) -> Unit,
     onAttractionSelected: (String) -> Unit,
+    onParkStatisticsSelected: () -> Unit,
 ) {
     OutlinedCard(
         modifier = Modifier.fillMaxWidth(),
@@ -230,7 +252,7 @@ private fun StatisticsControlPanel(
                 ) { close ->
                     val indexedParkKeys = state.index.parks.map { it.parkKey }.toSet()
                     val indexedItems = state.index.parks.map { parkIndex ->
-                        val park = state.parks.firstOrNull { it.id == parkIndex.parkKey || it.uuid == parkIndex.parkKey }
+                        val park = state.parks.firstOrNull { it.matchesParkKey(parkIndex.parkKey) }
                         parkIndex.parkKey to (park?.name ?: parkIndex.parkKey)
                     }
                     val fallbackItems = state.parks
@@ -264,10 +286,17 @@ private fun StatisticsControlPanel(
             }
 
             DropdownField(
-                label = "Attraktion",
-                value = state.selectedAttractionName ?: "Attraktion auswählen",
+                label = "Ansicht",
+                value = state.selectedAttractionName ?: "Parkstatistik",
                 modifier = Modifier.fillMaxWidth(),
             ) { close ->
+                DropdownMenuItem(
+                    text = { Text("Parkstatistik") },
+                    onClick = {
+                        onParkStatisticsSelected()
+                        close()
+                    },
+                )
                 state.attractionOptions.forEach { attraction ->
                     DropdownMenuItem(
                         text = { Text(attraction.name, maxLines = 1, overflow = TextOverflow.Ellipsis) },
@@ -374,11 +403,46 @@ private fun StatTile(label: String, value: String, modifier: Modifier = Modifier
 }
 
 @Composable
+private fun SelectedParkSummary(
+    summary: ParkStatisticsSummary,
+    series: List<ParkChartPoint>,
+) {
+    OutlinedCard(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(14.dp),
+        colors = CardDefaults.outlinedCardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer),
+    ) {
+        Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Text("Parkdurchschnitt", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+            Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxWidth()) {
+                StatTile("Ø Wartezeit", summary.averageWaitMinutes.minutesText(), Modifier.weight(1f))
+                StatTile(
+                    "Min/Max",
+                    "${summary.minAverageWaitMinutes.minutesText()} / ${summary.maxAverageWaitMinutes.minutesText()}",
+                    Modifier.weight(1f),
+                )
+                StatTile("Zuletzt", summary.latestAverageWaitMinutes.minutesText(), Modifier.weight(1f))
+            }
+            Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxWidth()) {
+                StatTile("Messpunkte", series.size.toString(), Modifier.weight(1f))
+                StatTile("Offen zuletzt", summary.latestOpenAttractionCount.toString(), Modifier.weight(1f))
+                StatTile("Attraktionen", series.maxOfOrNull { it.openAttractionCount }?.toString() ?: "-", Modifier.weight(1f))
+            }
+        }
+    }
+}
+
+@Composable
 private fun AttractionHistoryChart(
     points: List<AttractionChartPoint>,
     modifier: Modifier = Modifier,
 ) {
-    if (points.size < 2) {
+    val waitPoints = remember(points) {
+        points
+            .filter { it.value >= 0 }
+            .sortedBy { it.capturedAtMillis }
+    }
+    if (waitPoints.size < 2) {
         OutlinedCard(modifier = modifier, shape = RoundedCornerShape(14.dp)) {
             Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                 Text("Noch zu wenige Messpunkte", color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -391,9 +455,10 @@ private fun AttractionHistoryChart(
     val minTime = sortedPoints.first().capturedAtMillis
     val maxTime = sortedPoints.last().capturedAtMillis.coerceAtLeast(minTime + 1)
     val midTime = minTime + ((maxTime - minTime) / 2)
-    val maxWait = sortedPoints.maxOf { it.value.coerceAtLeast(0) }
+    val maxWait = waitPoints.maxOf { it.value }
     val yMax = ceil(maxWait / 10f).toInt().times(10).coerceAtLeast(10)
-    val yMin = sortedPoints.minOf { it.value }.coerceAtMost(0)
+    val yMid = (yMax / 2f).roundToNiceLabel()
+    val statusPoints = remember(points) { points.filter { it.value < 0 } }
     val timeFormatter = remember { DateTimeFormatter.ofPattern("HH:mm").withZone(ZoneId.systemDefault()) }
 
     OutlinedCard(modifier = modifier, shape = RoundedCornerShape(14.dp)) {
@@ -410,8 +475,8 @@ private fun AttractionHistoryChart(
                     horizontalAlignment = Alignment.End,
                 ) {
                     Text("$yMax", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text("$yMid", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     Text("0", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    Text(yMin.toString(), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
                 Canvas(
                     modifier = Modifier
@@ -422,7 +487,117 @@ private fun AttractionHistoryChart(
                     val verticalPadding = 8.dp.toPx()
                     val width = size.width - horizontalPadding * 2
                     val height = size.height - verticalPadding * 2
-                    val range = (yMax - yMin).coerceAtLeast(1).toFloat()
+                    val range = yMax.coerceAtLeast(1).toFloat()
+
+                    repeat(4) { index ->
+                        val y = verticalPadding + (height * index / 3f)
+                        drawLine(
+                            color = Color.Gray.copy(alpha = 0.18f),
+                            start = Offset(horizontalPadding, y),
+                            end = Offset(horizontalPadding + width, y),
+                            strokeWidth = 1.dp.toPx(),
+                        )
+                    }
+
+                    val path = Path()
+                    waitPoints.forEachIndexed { index, point ->
+                        val x = horizontalPadding + ((point.capturedAtMillis - minTime).toFloat() / (maxTime - minTime).toFloat()) * width
+                        val y = verticalPadding + (1f - (point.value / range).coerceIn(0f, 1f)) * height
+                        if (index == 0) path.moveTo(x, y) else path.lineTo(x, y)
+                    }
+                    drawPath(
+                        path = path,
+                        color = Color(0xFF1565C0),
+                        style = Stroke(width = 3.dp.toPx(), cap = StrokeCap.Round),
+                    )
+                    waitPoints.forEach { point ->
+                        val x = horizontalPadding + ((point.capturedAtMillis - minTime).toFloat() / (maxTime - minTime).toFloat()) * width
+                        val y = verticalPadding + (1f - (point.value / range).coerceIn(0f, 1f)) * height
+                        drawCircle(
+                            color = Color(0xFF1565C0),
+                            radius = 3.dp.toPx(),
+                            center = Offset(x, y),
+                        )
+                    }
+                    statusPoints.forEach { point ->
+                        val x = horizontalPadding + ((point.capturedAtMillis - minTime).toFloat() / (maxTime - minTime).toFloat()) * width
+                        drawCircle(
+                            color = Color(0xFFC62828),
+                            radius = 3.dp.toPx(),
+                            center = Offset(x, verticalPadding + height),
+                        )
+                    }
+                }
+            }
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(start = 34.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+            ) {
+                Text("${timeFormatter.format(Instant.ofEpochMilli(minTime))} Uhr", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text("${timeFormatter.format(Instant.ofEpochMilli(midTime))} Uhr", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text("${timeFormatter.format(Instant.ofEpochMilli(maxTime))} Uhr", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+            Text(
+                "Statuspunkte unten: geschlossen, wetterbedingt oder Wartung",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+    }
+}
+
+@Composable
+private fun ParkAverageWaitChart(
+    points: List<ParkChartPoint>,
+    modifier: Modifier = Modifier,
+) {
+    if (points.size < 2) {
+        OutlinedCard(modifier = modifier, shape = RoundedCornerShape(14.dp)) {
+            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                Text("Noch zu wenige Messpunkte", color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+        }
+        return
+    }
+
+    val sortedPoints = remember(points) { points.sortedBy { it.capturedAtMillis } }
+    val minTime = sortedPoints.first().capturedAtMillis
+    val maxTime = sortedPoints.last().capturedAtMillis.coerceAtLeast(minTime + 1)
+    val midTime = minTime + ((maxTime - minTime) / 2)
+    val maxWait = sortedPoints.maxOf { it.averageWaitMinutes }
+    val yMax = ceil(maxWait / 10f).toInt().times(10).coerceAtLeast(10)
+    val yMid = (yMax / 2f).roundToNiceLabel()
+    val timeFormatter = remember { DateTimeFormatter.ofPattern("HH:mm").withZone(ZoneId.systemDefault()) }
+
+    OutlinedCard(modifier = modifier, shape = RoundedCornerShape(14.dp)) {
+        Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .weight(1f),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                Column(
+                    modifier = Modifier.fillMaxHeight(),
+                    verticalArrangement = Arrangement.SpaceBetween,
+                    horizontalAlignment = Alignment.End,
+                ) {
+                    Text("$yMax", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text("$yMid", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text("0", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+                Canvas(
+                    modifier = Modifier
+                        .weight(1f)
+                        .fillMaxHeight(),
+                ) {
+                    val horizontalPadding = 4.dp.toPx()
+                    val verticalPadding = 8.dp.toPx()
+                    val width = size.width - horizontalPadding * 2
+                    val height = size.height - verticalPadding * 2
+                    val range = yMax.coerceAtLeast(1).toFloat()
 
                     repeat(4) { index ->
                         val y = verticalPadding + (height * index / 3f)
@@ -437,19 +612,19 @@ private fun AttractionHistoryChart(
                     val path = Path()
                     sortedPoints.forEachIndexed { index, point ->
                         val x = horizontalPadding + ((point.capturedAtMillis - minTime).toFloat() / (maxTime - minTime).toFloat()) * width
-                        val y = verticalPadding + (1f - ((point.value - yMin) / range).coerceIn(0f, 1f)) * height
+                        val y = verticalPadding + (1f - (point.averageWaitMinutes / range).coerceIn(0f, 1f)) * height
                         if (index == 0) path.moveTo(x, y) else path.lineTo(x, y)
                     }
                     drawPath(
                         path = path,
-                        color = Color(0xFF1565C0),
+                        color = Color(0xFF2E7D32),
                         style = Stroke(width = 3.dp.toPx(), cap = StrokeCap.Round),
                     )
                     sortedPoints.forEach { point ->
                         val x = horizontalPadding + ((point.capturedAtMillis - minTime).toFloat() / (maxTime - minTime).toFloat()) * width
-                        val y = verticalPadding + (1f - ((point.value - yMin) / range).coerceIn(0f, 1f)) * height
+                        val y = verticalPadding + (1f - (point.averageWaitMinutes / range).coerceIn(0f, 1f)) * height
                         drawCircle(
-                            color = if (point.value >= 0) Color(0xFF1565C0) else Color(0xFFC62828),
+                            color = Color(0xFF2E7D32),
                             radius = 3.dp.toPx(),
                             center = Offset(x, y),
                         )
@@ -467,7 +642,7 @@ private fun AttractionHistoryChart(
                 Text("${timeFormatter.format(Instant.ofEpochMilli(maxTime))} Uhr", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
             Text(
-                "-1 geschlossen, -2 wetterbedingt, -3 Wartung",
+                "Durchschnittliche Wartezeit aller geöffneten Attraktionen",
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -587,6 +762,14 @@ private fun valueLabel(value: Int?): String {
     }
 }
 
+private fun Float?.minutesText(): String {
+    return this?.let { "${String.format(Locale.GERMAN, "%.1f", it)} Min." } ?: "-"
+}
+
+private fun Float.roundToNiceLabel(): Int {
+    return ceil(this / 5f).toInt().times(5).coerceAtLeast(5)
+}
+
 private fun formatDateLabel(value: String): String {
     return runCatching {
         LocalDate.parse(value).format(DateTimeFormatter.ofPattern("dd.MM.yyyy", Locale.GERMAN))
@@ -605,4 +788,22 @@ private fun formatMonthLabel(value: String): String {
         val name = month.month.getDisplayName(TextStyle.SHORT, Locale.GERMAN)
         "$name ${month.year}"
     }.getOrElse { value }
+}
+
+private fun Park.matchesParkKey(parkKey: String): Boolean {
+    val normalizedKey = parkKey.normalizedParkKey()
+    return id == parkKey ||
+            uuid == parkKey ||
+            id.normalizedParkKey() == normalizedKey ||
+            uuid.normalizedParkKey() == normalizedKey ||
+            name.normalizedParkKey() == normalizedKey
+}
+
+private fun String.normalizedParkKey(): String {
+    return lowercase()
+        .replace("ä", "ae")
+        .replace("ö", "oe")
+        .replace("ü", "ue")
+        .replace("ß", "ss")
+        .filter { it.isLetterOrDigit() }
 }

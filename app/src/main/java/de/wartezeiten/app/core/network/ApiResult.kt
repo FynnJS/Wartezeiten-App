@@ -1,5 +1,6 @@
 package de.wartezeiten.app.core.network
 
+import com.google.gson.JsonParseException
 import retrofit2.HttpException
 import retrofit2.Response
 import java.io.IOException
@@ -69,6 +70,8 @@ suspend fun <T> safeApiCall(call: suspend () -> Response<T>): ApiResult<T> {
         }
     } catch (exception: IOException) {
         ApiResult.Error(NetworkError.Network, "Keine Netzwerkverbindung.", cause = exception)
+    } catch (exception: JsonParseException) {
+        ApiResult.Error(NetworkError.Unknown, "Die Serverantwort konnte nicht gelesen werden.", cause = exception)
     } catch (exception: HttpException) {
         ApiResult.Error(NetworkError.Unknown, exception.message(), cause = exception)
     }

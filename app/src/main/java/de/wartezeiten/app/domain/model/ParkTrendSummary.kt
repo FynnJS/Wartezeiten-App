@@ -1,5 +1,9 @@
 package de.wartezeiten.app.domain.model
 
+import java.time.Instant
+import java.time.LocalDate
+import java.time.OffsetDateTime
+import java.time.ZoneId
 import kotlin.math.abs
 
 data class ParkCrowdSnapshot(
@@ -8,6 +12,8 @@ data class ParkCrowdSnapshot(
     val calculatedCrowdLevel: Float?,
     val displayCrowdLevel: Float?,
     val openedToday: Boolean?,
+    val openFrom: String? = null,
+    val closedFrom: String? = null,
     val openAttractions: Int,
     val totalAttractions: Int,
 )
@@ -69,8 +75,13 @@ fun buildParkTrendSummary(
     if (latest.openedToday == false || latest.displayCrowdLevel == null) {
         return ParkTrendSummary.Empty
     }
+    val trendWindow = latest.trendWindow()
+    val snapshotsInWindow = sortedSnapshots.filter { snapshot ->
+        snapshot.capturedAtMillis in trendWindow.first until trendWindow.second
+    }
+    val latestInWindow = snapshotsInWindow.lastOrNull() ?: latest
 
-    val points = sortedSnapshots
+    val points = snapshotsInWindow
         .filter { it.openedToday != false }
         .mapNotNull { snapshot ->
             snapshot.displayCrowdLevel?.let { level ->
@@ -82,14 +93,14 @@ fun buildParkTrendSummary(
             }
         }
     val values = points.map { it.crowdLevel }.sorted()
-    val latestAgeMillis = nowMillis - latest.capturedAtMillis
+    val latestAgeMillis = nowMillis - latestInWindow.capturedAtMillis
 
     return ParkTrendSummary(
-        latestSnapshotAtMillis = latest.capturedAtMillis,
+        latestSnapshotAtMillis = latestInWindow.capturedAtMillis,
         isFresh = latestAgeMillis in 0..freshAfterMillis,
-        apiCrowdLevel = latest.apiCrowdLevel,
-        calculatedCrowdLevel = latest.calculatedCrowdLevel,
-        displayCrowdLevel = latest.displayCrowdLevel,
+        apiCrowdLevel = latestInWindow.apiCrowdLevel,
+        calculatedCrowdLevel = latestInWindow.calculatedCrowdLevel,
+        displayCrowdLevel = latestInWindow.displayCrowdLevel,
         sampleCount = values.size,
         minCrowdLevel = values.firstOrNull(),
         medianCrowdLevel = values.percentile(0.5f),
@@ -97,10 +108,41 @@ fun buildParkTrendSummary(
         percentile75CrowdLevel = values.percentile(0.75f),
         percentile90CrowdLevel = values.percentile(0.9f),
         volatility = values.meanAbsoluteChange(),
-        points = points.takeLast(48),
+        points = points,
         hasPublicHistory = false,
     )
 }
+
+private fun ParkCrowdSnapshot.trendWindow(): Pair<Long, Long> {
+    val openedAt = openFrom?.toInstantOrNull()
+    val closedAt = closedFrom?.toInstantOrNull()
+    if (openedAt != null && closedAt != null && closedAt.isAfter(openedAt)) {
+        val maxEnd = openedAt.plusMillis(MAX_TREND_WINDOW_MILLIS)
+        return openedAt.toEpochMilli() to minOf(closedAt.toEpochMilli(), maxEnd.toEpochMilli())
+    }
+
+    val zoneId = openFrom?.toOffsetZoneId()
+        ?: closedFrom?.toOffsetZoneId()
+        ?: ZoneId.systemDefault()
+    val day = Instant.ofEpochMilli(capturedAtMillis).atZone(zoneId).toLocalDate()
+    return day.dayWindowMillis(zoneId)
+}
+
+private fun LocalDate.dayWindowMillis(zoneId: ZoneId): Pair<Long, Long> {
+    val start = atStartOfDay(zoneId).toInstant()
+    return start.toEpochMilli() to start.plusMillis(MAX_TREND_WINDOW_MILLIS).toEpochMilli()
+}
+
+private fun String.toInstantOrNull(): Instant? {
+    return runCatching { OffsetDateTime.parse(this).toInstant() }
+        .getOrElse { runCatching { Instant.parse(this) }.getOrNull() }
+}
+
+private fun String.toOffsetZoneId(): ZoneId? {
+    return runCatching { OffsetDateTime.parse(this).offset }.getOrNull()
+}
+
+private const val MAX_TREND_WINDOW_MILLIS = 24 * 60 * 60 * 1000L
 
 private fun List<Float>.percentile(percentile: Float): Float? {
     if (isEmpty()) return null

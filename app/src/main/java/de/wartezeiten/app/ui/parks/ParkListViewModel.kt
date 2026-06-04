@@ -47,6 +47,7 @@ data class ParkListUiState(
     val errorMessage: String? = null,
     val refreshTrigger: Int = 0,
     val attractionSearchResults: List<AttractionSearchResult> = emptyList(),
+    val statisticsParkKeys: Map<String, String> = emptyMap(),
     val isStatisticsIndexLoading: Boolean = false,
 )
 
@@ -66,6 +67,15 @@ enum class ParkSort {
     FavoritesFirst,
     Name,
     Country
+}
+
+private fun String.normalizedParkKey(): String {
+    return lowercase()
+        .replace("\u00e4", "ae")
+        .replace("\u00f6", "oe")
+        .replace("\u00fc", "ue")
+        .replace("\u00df", "ss")
+        .filter { it.isLetterOrDigit() }
 }
 
 @OptIn(ExperimentalCoroutinesApi::class)
@@ -95,6 +105,7 @@ class ParkListViewModel @Inject constructor(
     private val latestOpenParkKeys = repository.observeLatestOpenParkKeys()
     private val recommendations = repository.observeParkRecommendations(limit = 5)
 
+    @Suppress("UNCHECKED_CAST")
     val uiState = combine(
         allParks,
         currentAttractions,
@@ -114,7 +125,6 @@ class ParkListViewModel @Inject constructor(
         statisticsIndex,
         isStatisticsIndexLoading
     ) { args: Array<Any?> ->
-        @Suppress("UNCHECKED_CAST")
         val parks = args[0] as List<Park>
         val currentAttractionEntries = args[1] as List<CurrentAttractionSearchEntry>
         val openParkKeys = args[2] as Set<String>
@@ -138,6 +148,7 @@ class ParkListViewModel @Inject constructor(
         val parksByKey = parks
             .flatMap { park -> listOf(park.id to park, park.uuid to park) }
             .toMap()
+        val statisticsParkKeys = parks.toStatisticsParkKeyMap(statsIndex)
         
         val normalizedQuery = q.normalizedSearchText()
         var filtered = parks
@@ -188,6 +199,7 @@ class ParkListViewModel @Inject constructor(
             errorMessage = error,
             refreshTrigger = trigger,
             attractionSearchResults = attractionResults,
+            statisticsParkKeys = statisticsParkKeys,
             isStatisticsIndexLoading = statsLoading,
         )
     }.stateIn(
@@ -383,6 +395,35 @@ class ParkListViewModel @Inject constructor(
                 }.thenBy { it.attractionName.lowercase() }
             )
             .take(20)
+    }
+
+    private fun List<Park>.toStatisticsParkKeyMap(index: StatisticsIndex): Map<String, String> {
+        val indexedByNormalizedKey = index.parks.associateBy { it.parkKey.normalizedParkKey() }
+        return buildMap {
+            this@toStatisticsParkKeyMap.forEach { park ->
+                val directMatch = index.parks.firstOrNull { parkIndex ->
+                    parkIndex.parkKey == park.id || parkIndex.parkKey == park.uuid
+                }
+                val normalizedCandidates = listOf(park.id, park.uuid, park.name)
+                    .map { it.normalizedParkKey() }
+                    .filter { it.isNotBlank() }
+                    .distinct()
+                val normalizedMatch = normalizedCandidates.firstNotNullOfOrNull { candidate ->
+                    indexedByNormalizedKey[candidate]
+                }
+                val containedMatch = index.parks.firstOrNull { parkIndex ->
+                    val indexKey = parkIndex.parkKey.normalizedParkKey()
+                    normalizedCandidates.any { candidate ->
+                        candidate.length >= 4 && (indexKey.contains(candidate) || candidate.contains(indexKey))
+                    }
+                }
+                val statisticsKey = directMatch?.parkKey ?: normalizedMatch?.parkKey ?: containedMatch?.parkKey
+                if (statisticsKey != null) {
+                    put(park.id, statisticsKey)
+                    put(park.uuid, statisticsKey)
+                }
+            }
+        }
     }
 
     private fun List<CurrentAttractionSearchEntry>.toSearchResults(

@@ -15,6 +15,7 @@ import de.wartezeiten.app.domain.repository.WartezeitenRepository
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
@@ -38,7 +39,7 @@ data class StatisticsUiState(
             ?: listOf(selectedDate)
 
     val selectedPark: Park?
-        get() = parks.firstOrNull { it.id == selectedParkKey || it.uuid == selectedParkKey }
+        get() = parks.firstOrNull { park -> park.matchesParkKey(selectedParkKey) }
 
     val selectedAttraction: AttractionHistorySummary?
         get() = day?.attractions?.firstOrNull { it.id == selectedAttractionId }
@@ -85,6 +86,34 @@ data class StatisticsUiState(
             }
         }
 
+    val parkSeries: List<ParkChartPoint>
+        get() = day?.snapshots.orEmpty().mapNotNull { snapshot ->
+            val openValues = snapshot.attractions
+                .filter { it.statusCode == 0 && it.value >= 0 }
+                .map { it.value }
+            if (openValues.isEmpty()) return@mapNotNull null
+            ParkChartPoint(
+                capturedAtMillis = snapshot.capturedAtMillis,
+                averageWaitMinutes = openValues.average().toFloat(),
+                openAttractionCount = openValues.size,
+            )
+        }
+
+    val parkStatistics: ParkStatisticsSummary?
+        get() {
+            val series = parkSeries
+            if (series.isEmpty()) return null
+            val averages = series.map { it.averageWaitMinutes }
+            return ParkStatisticsSummary(
+                averageWaitMinutes = averages.average().toFloat(),
+                minAverageWaitMinutes = averages.minOrNull(),
+                maxAverageWaitMinutes = averages.maxOrNull(),
+                latestAverageWaitMinutes = series.lastOrNull()?.averageWaitMinutes,
+                latestOpenAttractionCount = series.lastOrNull()?.openAttractionCount ?: 0,
+                sampleCount = series.size,
+            )
+        }
+
     val monthBuckets: List<StatisticsMonthBucket>
         get() = availableDates
             .groupBy { it.take(7) }
@@ -96,6 +125,21 @@ data class AttractionChartPoint(
     val capturedAtMillis: Long,
     val value: Int,
     val statusCode: Int,
+)
+
+data class ParkChartPoint(
+    val capturedAtMillis: Long,
+    val averageWaitMinutes: Float,
+    val openAttractionCount: Int,
+)
+
+data class ParkStatisticsSummary(
+    val averageWaitMinutes: Float,
+    val minAverageWaitMinutes: Float?,
+    val maxAverageWaitMinutes: Float?,
+    val latestAverageWaitMinutes: Float?,
+    val latestOpenAttractionCount: Int,
+    val sampleCount: Int,
 )
 
 data class StatisticsMonthBucket(
@@ -142,20 +186,23 @@ class StatisticsViewModel @Inject constructor(
             when (val result = repository.getStatisticsIndex()) {
                 is ApiResult.Success -> {
                     val current = mutableState.value
+                    val parkList = parks.first()
                     val selectedParkKey = current.selectedParkKey
                         ?: initialParkKey
                         ?: result.data.parks.firstOrNull()?.parkKey
+                    val resolvedParkKey = selectedParkKey.resolveIndexedParkKey(result.data, parkList)
                     val selectedDate = selectedParkKey
+                        ?.let { resolvedParkKey }
                         ?.let { key -> result.data.parks.firstOrNull { it.parkKey == key }?.latestDate }
                         ?: LocalDate.now().toString()
-                    if (selectedParkKey == null) {
+                    if (resolvedParkKey == null) {
                         mutableState.update {
                             it.copy(
                                 index = result.data,
-                                selectedParkKey = initialParkKey,
+                                selectedParkKey = null,
                                 selectedDate = selectedDate,
                                 day = null,
-                                selectedAttractionId = initialAttractionId,
+                                selectedAttractionId = null,
                                 isLoading = false,
                             )
                         }
@@ -164,11 +211,11 @@ class StatisticsViewModel @Inject constructor(
                     mutableState.update {
                         it.copy(
                             index = result.data,
-                            selectedParkKey = selectedParkKey,
+                            selectedParkKey = resolvedParkKey,
                             selectedDate = selectedDate,
                             day = null,
                             selectedAttractionId = selectKnownAttractionId(
-                                parkKey = selectedParkKey,
+                                parkKey = resolvedParkKey,
                                 preferredId = current.selectedAttractionId ?: initialAttractionId,
                                 index = result.data,
                                 currentAttractions = currentAttractions.value,
@@ -186,17 +233,13 @@ class StatisticsViewModel @Inject constructor(
 
     fun selectPark(parkKey: String) {
         val state = mutableState.value
-        val parkIndex = state.index.parks.firstOrNull { it.parkKey == parkKey }
+        val resolvedParkKey = parkKey.resolveIndexedParkKey(state.index, state.parks) ?: parkKey
+        val parkIndex = state.index.parks.firstOrNull { it.parkKey == resolvedParkKey }
         mutableState.update {
             it.copy(
-                selectedParkKey = parkKey,
+                selectedParkKey = resolvedParkKey,
                 selectedDate = parkIndex?.latestDate ?: LocalDate.now().toString(),
-                selectedAttractionId = selectKnownAttractionId(
-                    parkKey = parkKey,
-                    preferredId = null,
-                    index = state.index,
-                    currentAttractions = currentAttractions.value,
-                ),
+                selectedAttractionId = null,
                 day = null,
                 errorMessage = null,
             )
@@ -213,6 +256,10 @@ class StatisticsViewModel @Inject constructor(
 
     fun selectAttraction(attractionId: String) {
         mutableState.update { it.copy(selectedAttractionId = attractionId) }
+    }
+
+    fun selectParkStatistics() {
+        mutableState.update { it.copy(selectedAttractionId = null) }
     }
 
     private fun loadSelectedDay() {
@@ -251,6 +298,7 @@ class StatisticsViewModel @Inject constructor(
         day: AttractionHistoryDay? = null,
     ): String? {
         if (parkKey == null) return preferredId
+        if (preferredId == null) return null
         val availableIds = buildSet {
             day?.attractions.orEmpty().forEach { add(it.id) }
             index.parks
@@ -262,16 +310,40 @@ class StatisticsViewModel @Inject constructor(
                 .filter { it.parkKey == parkKey }
                 .forEach { add(it.attractionId) }
         }
-        if (preferredId != null && preferredId in availableIds) return preferredId
-        return day?.attractions?.maxByOrNull { it.sampleCount }?.id
-            ?: index.parks
-                .firstOrNull { it.parkKey == parkKey }
-                ?.attractions
-                ?.firstOrNull()
-                ?.id
-            ?: currentAttractions
-                .firstOrNull { it.parkKey == parkKey }
-                ?.attractionId
-            ?: preferredId
+        return preferredId.takeIf { it in availableIds }
     }
+
+    private fun String?.resolveIndexedParkKey(
+        index: StatisticsIndex,
+        parks: List<Park>,
+    ): String? {
+        if (this == null) return null
+        if (index.parks.any { it.parkKey == this }) return this
+        val park = parks.firstOrNull { it.id == this || it.uuid == this }
+        val candidates = listOfNotNull(this, park?.id, park?.uuid, park?.name)
+            .map { it.normalizedParkKey() }
+            .toSet()
+        return index.parks.firstOrNull { parkIndex ->
+            parkIndex.parkKey.normalizedParkKey() in candidates
+        }?.parkKey
+    }
+}
+
+private fun Park.matchesParkKey(parkKey: String?): Boolean {
+    if (parkKey == null) return false
+    val normalizedKey = parkKey.normalizedParkKey()
+    return id == parkKey ||
+            uuid == parkKey ||
+            id.normalizedParkKey() == normalizedKey ||
+            uuid.normalizedParkKey() == normalizedKey ||
+            name.normalizedParkKey() == normalizedKey
+}
+
+private fun String.normalizedParkKey(): String {
+    return lowercase()
+        .replace("ä", "ae")
+        .replace("ö", "oe")
+        .replace("ü", "ue")
+        .replace("ß", "ss")
+        .filter { it.isLetterOrDigit() }
 }
