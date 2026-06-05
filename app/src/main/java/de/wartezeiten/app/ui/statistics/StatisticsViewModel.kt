@@ -6,8 +6,11 @@ import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
 import de.wartezeiten.app.core.network.ApiResult
 import de.wartezeiten.app.core.network.toUserMessage
+import de.wartezeiten.app.domain.model.AttractionHistoryPoint
 import de.wartezeiten.app.domain.model.AttractionHistoryDay
+import de.wartezeiten.app.domain.model.AttractionHistorySnapshot
 import de.wartezeiten.app.domain.model.AttractionHistorySummary
+import de.wartezeiten.app.domain.model.AttractionStatus
 import de.wartezeiten.app.domain.model.CurrentAttractionSearchEntry
 import de.wartezeiten.app.domain.model.Park
 import de.wartezeiten.app.domain.model.StatisticsIndex
@@ -34,9 +37,12 @@ data class StatisticsUiState(
     val errorMessage: String? = null,
 ) {
     val availableDates: List<String>
-        get() = index.parks.firstOrNull { it.parkKey == selectedParkKey }?.dates
-            ?.takeIf { it.isNotEmpty() }
-            ?: listOf(selectedDate)
+        get() {
+            val indexedDates = index.parks.firstOrNull { it.parkKey == selectedParkKey }?.dates.orEmpty()
+            return (indexedDates + selectedDate)
+                .filter { it.isNotBlank() }
+                .distinct()
+        }
 
     val selectedPark: Park?
         get() = parks.firstOrNull { park -> park.matchesParkKey(selectedParkKey) }
@@ -89,7 +95,7 @@ data class StatisticsUiState(
     val parkSeries: List<ParkChartPoint>
         get() = day?.snapshots.orEmpty().mapNotNull { snapshot ->
             val openValues = snapshot.attractions
-                .filter { it.statusCode == 0 && it.value >= 0 }
+                .filter { it.isOpenWaitPoint }
                 .map { it.value }
             if (openValues.isEmpty()) return@mapNotNull null
             ParkChartPoint(
@@ -183,6 +189,7 @@ class StatisticsViewModel @Inject constructor(
     fun refresh() {
         viewModelScope.launch {
             mutableState.update { it.copy(isLoading = true, errorMessage = null) }
+            repository.refreshPublicAppData()
             when (val result = repository.getStatisticsIndex()) {
                 is ApiResult.Success -> {
                     val current = mutableState.value
@@ -193,7 +200,16 @@ class StatisticsViewModel @Inject constructor(
                     val resolvedParkKey = selectedParkKey.resolveIndexedParkKey(result.data, parkList)
                     val selectedDate = selectedParkKey
                         ?.let { resolvedParkKey }
-                        ?.let { key -> result.data.parks.firstOrNull { it.parkKey == key }?.latestDate }
+                        ?.let { key ->
+                            val parkIndex = result.data.parks.firstOrNull { it.parkKey == key }
+                            chooseInitialDate(
+                                parkKey = key,
+                                parkIndexDates = parkIndex?.dates.orEmpty(),
+                                latestDate = parkIndex?.latestDate,
+                                currentDate = current.selectedDate,
+                                currentAttractions = currentAttractions.value,
+                            )
+                        }
                         ?: LocalDate.now().toString()
                     if (resolvedParkKey == null) {
                         mutableState.update {
@@ -238,7 +254,13 @@ class StatisticsViewModel @Inject constructor(
         mutableState.update {
             it.copy(
                 selectedParkKey = resolvedParkKey,
-                selectedDate = parkIndex?.latestDate ?: LocalDate.now().toString(),
+                selectedDate = chooseInitialDate(
+                    parkKey = resolvedParkKey,
+                    parkIndexDates = parkIndex?.dates.orEmpty(),
+                    latestDate = parkIndex?.latestDate,
+                    currentDate = null,
+                    currentAttractions = currentAttractions.value,
+                ),
                 selectedAttractionId = null,
                 day = null,
                 errorMessage = null,
@@ -270,14 +292,21 @@ class StatisticsViewModel @Inject constructor(
             when (val result = repository.getAttractionHistoryDay(parkKey, date)) {
                 is ApiResult.Success -> {
                     mutableState.update { state ->
+                        val day = result.data.takeIf { it.hasMeasurements() }
+                            ?: buildCurrentDaySnapshot(
+                                parkKey = parkKey,
+                                date = date,
+                                parks = state.parks,
+                                currentAttractions = currentAttractions.value,
+                            )
                         state.copy(
-                            day = result.data,
+                            day = day,
                             selectedAttractionId = selectKnownAttractionId(
                                 parkKey = parkKey,
                                 preferredId = state.selectedAttractionId,
                                 index = state.index,
                                 currentAttractions = currentAttractions.value,
-                                day = result.data,
+                                day = day,
                             ),
                             isLoading = false,
                         )
@@ -328,6 +357,112 @@ class StatisticsViewModel @Inject constructor(
         }?.parkKey
     }
 }
+
+private fun chooseInitialDate(
+    parkKey: String,
+    parkIndexDates: List<String>,
+    latestDate: String?,
+    currentDate: String?,
+    currentAttractions: List<CurrentAttractionSearchEntry>,
+): String {
+    val today = LocalDate.now().toString()
+    val hasCurrentAttractions = currentAttractions.any { it.matchesParkKey(parkKey) }
+    return when {
+        currentDate != null && currentDate in parkIndexDates -> currentDate
+        today in parkIndexDates -> today
+        hasCurrentAttractions && latestDate == null -> today
+        latestDate != null -> latestDate
+        else -> today
+    }
+}
+
+private fun AttractionHistoryDay.hasMeasurements(): Boolean {
+    return snapshots.any { snapshot -> snapshot.attractions.isNotEmpty() }
+}
+
+private fun buildCurrentDaySnapshot(
+    parkKey: String,
+    date: String,
+    parks: List<Park>,
+    currentAttractions: List<CurrentAttractionSearchEntry>,
+): AttractionHistoryDay? {
+    val today = LocalDate.now().toString()
+    if (date != today) return null
+    val selectedPark = parks.firstOrNull { it.matchesParkKey(parkKey) }
+    val entries = currentAttractions
+        .filter { entry ->
+            entry.matchesParkKey(parkKey) ||
+                    selectedPark?.let { park -> entry.matchesParkKey(park.id) || entry.matchesParkKey(park.uuid) } == true
+        }
+        .sortedBy { it.name.lowercase() }
+    if (entries.isEmpty()) return null
+
+    val capturedAtMillis = entries.maxOf { it.updatedAtMillis }
+    val points = entries.map { entry ->
+        val statusCode = entry.status.toStatusCode()
+        AttractionHistoryPoint(
+            id = entry.attractionId,
+            name = entry.name,
+            value = if (statusCode == 0) entry.waitingTime?.coerceAtLeast(0) ?: 0 else statusCode,
+            statusCode = statusCode,
+            status = entry.status.toApiStatus(),
+        )
+    }
+    return AttractionHistoryDay(
+        generatedAtMillis = capturedAtMillis,
+        parkKey = parkKey,
+        date = date,
+        snapshots = listOf(
+            AttractionHistorySnapshot(
+                capturedAtMillis = capturedAtMillis,
+                attractions = points,
+            ),
+        ),
+        attractions = points.map { point ->
+            val openValue = point.value.takeIf { point.statusCode == 0 && it >= 0 }
+            AttractionHistorySummary(
+                id = point.id,
+                name = point.name,
+                sampleCount = 1,
+                openSampleCount = if (openValue != null) 1 else 0,
+                closedSampleCount = if (openValue == null) 1 else 0,
+                averageWaitMinutes = openValue?.toFloat(),
+                minWaitMinutes = openValue,
+                maxWaitMinutes = openValue,
+                lastValue = point.value,
+                lastStatusCode = point.statusCode,
+            )
+        },
+    )
+}
+
+private fun CurrentAttractionSearchEntry.matchesParkKey(parkKey: String): Boolean {
+    val normalizedKey = parkKey.normalizedParkKey()
+    return this.parkKey == parkKey || this.parkKey.normalizedParkKey() == normalizedKey
+}
+
+private fun AttractionStatus.toStatusCode(): Int {
+    return when (this) {
+        AttractionStatus.Opened -> 0
+        AttractionStatus.Closed -> -1
+        AttractionStatus.ClosedWeather -> -2
+        AttractionStatus.Maintenance -> -3
+        AttractionStatus.Unknown -> -4
+    }
+}
+
+private fun AttractionStatus.toApiStatus(): String {
+    return when (this) {
+        AttractionStatus.Opened -> "opened"
+        AttractionStatus.Closed -> "closed"
+        AttractionStatus.ClosedWeather -> "closed_weather"
+        AttractionStatus.Maintenance -> "maintenance"
+        AttractionStatus.Unknown -> "unknown"
+    }
+}
+
+private val de.wartezeiten.app.domain.model.AttractionHistoryPoint.isOpenWaitPoint: Boolean
+    get() = value >= 0 && (statusCode == 0 || status.equals("opened", ignoreCase = true) || status.equals("open", ignoreCase = true))
 
 private fun Park.matchesParkKey(parkKey: String?): Boolean {
     if (parkKey == null) return false

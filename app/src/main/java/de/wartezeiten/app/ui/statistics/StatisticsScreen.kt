@@ -160,7 +160,8 @@ fun StatisticsScreen(
                 }
 
                 if (state.selectedAttractionId == null) {
-                    state.parkStatistics?.let { parkStatistics ->
+                    val parkStatistics = state.parkStatistics
+                    if (parkStatistics != null) {
                         item {
                             SelectedParkSummary(
                                 summary = parkStatistics,
@@ -175,6 +176,8 @@ fun StatisticsScreen(
                                     .height(220.dp),
                             )
                         }
+                    } else if (!state.isLoading && state.day != null) {
+                        item { EmptyStatisticsState(state.selectedPark?.name) }
                     }
                 }
 
@@ -194,7 +197,7 @@ fun StatisticsScreen(
                                 .height(220.dp),
                         )
                     }
-                } else if (!state.isLoading && state.day == null) {
+                } else if (state.selectedAttractionId != null && !state.isLoading && (state.day == null || state.day.snapshots.isEmpty())) {
                     item { EmptyStatisticsState(state.selectedAttractionName ?: state.selectedPark?.name) }
                 }
 
@@ -458,7 +461,7 @@ private fun AttractionHistoryChart(
     val maxWait = waitPoints.maxOf { it.value }
     val yMax = ceil(maxWait / 10f).toInt().times(10).coerceAtLeast(10)
     val yMid = (yMax / 2f).roundToNiceLabel()
-    val statusPoints = remember(points) { points.filter { it.value < 0 } }
+    val statusPoints = remember(points) { points.filter { it.value < 0 || it.statusCode < 0 } }
     val timeFormatter = remember { DateTimeFormatter.ofPattern("HH:mm").withZone(ZoneId.systemDefault()) }
 
     OutlinedCard(modifier = modifier, shape = RoundedCornerShape(14.dp)) {
@@ -522,7 +525,7 @@ private fun AttractionHistoryChart(
                     statusPoints.forEach { point ->
                         val x = horizontalPadding + ((point.capturedAtMillis - minTime).toFloat() / (maxTime - minTime).toFloat()) * width
                         drawCircle(
-                            color = Color(0xFFC62828),
+                            color = statusColor(point.statusCode),
                             radius = 3.dp.toPx(),
                             center = Offset(x, verticalPadding + height),
                         )
@@ -539,12 +542,32 @@ private fun AttractionHistoryChart(
                 Text("${timeFormatter.format(Instant.ofEpochMilli(midTime))} Uhr", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 Text("${timeFormatter.format(Instant.ofEpochMilli(maxTime))} Uhr", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
-            Text(
-                "Statuspunkte unten: geschlossen, wetterbedingt oder Wartung",
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
+            StatusLegend()
         }
+    }
+}
+
+@Composable
+private fun StatusLegend() {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(10.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        StatusLegendItem("Geschlossen", statusColor(-1))
+        StatusLegendItem("Wetter", statusColor(-2))
+        StatusLegendItem("Wartung", statusColor(-3))
+    }
+}
+
+@Composable
+private fun StatusLegendItem(label: String, color: Color) {
+    Row(
+        horizontalArrangement = Arrangement.spacedBy(4.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Surface(modifier = Modifier.size(8.dp), shape = RoundedCornerShape(4.dp), color = color) {}
+        Text(label, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
     }
 }
 
@@ -759,6 +782,15 @@ private fun valueLabel(value: Int?): String {
         -3 -> "Wartung"
         -4 -> "unbekannt"
         else -> "$value Min."
+    }
+}
+
+private fun statusColor(statusCode: Int): Color {
+    return when (statusCode) {
+        -3 -> Color(0xFF9E7D00)
+        -2 -> Color(0xFFEF6C00)
+        -1 -> Color(0xFFC62828)
+        else -> Color(0xFF616161)
     }
 }
 

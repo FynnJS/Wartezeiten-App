@@ -116,6 +116,10 @@ async function updateAppData(env) {
         await updateAttractionHistory(env, snapshot, now);
       }
 
+      if (snapshot.errors.length > 0) {
+        errors.push(...snapshot.errors.map((message) => ({ parkKey, message })));
+      }
+
       await delay(REQUEST_DELAY_MILLIS);
     } catch (error) {
       errors.push({ parkKey, message: error instanceof Error ? error.message : String(error) });
@@ -143,19 +147,32 @@ async function updateAppData(env) {
 }
 
 async function collectParkSnapshot(parkKey, now) {
-  const [openingTimes, waitingTimes, crowdLevel] = await Promise.all([
+  const [openingResult, waitingResult, crowdResult] = await Promise.allSettled([
     apiJson("/openingtimes", { park: parkKey }),
     apiJson("/waitingtimes", { park: parkKey, language: "de" }),
     apiJson("/crowdlevel", { park: parkKey }),
   ]);
 
+  const openingTimes = settledValue(openingResult);
+  const waitingTimes = settledValue(waitingResult);
+  const crowdLevel = settledValue(crowdResult);
   const opening = Array.isArray(openingTimes) ? openingTimes[0] : null;
   const waitingItems = Array.isArray(waitingTimes) ? waitingTimes : [];
+  const attractionItems = waitingItems.map((item) => toAttractionSnapshotItem(item));
   const openedToday = opening?.opened_today === true;
-  const openAttractions = waitingItems.filter((item) => String(item.status ?? "").toLowerCase() === "opened").length;
+  const openAttractions = attractionItems.filter((item) => item.statusCode === 0).length;
   const totalAttractions = waitingItems.length;
   const apiCrowdLevel = parseCrowdLevel(crowdLevel?.crowd_level);
   const displayCrowdLevel = openedToday && openAttractions > 0 ? apiCrowdLevel : null;
+  const errors = [
+    settledError("/openingtimes", openingResult),
+    settledError("/waitingtimes", waitingResult),
+    settledError("/crowdlevel", crowdResult),
+  ].filter(Boolean);
+
+  if (openingResult.status === "rejected" && waitingResult.status === "rejected" && crowdResult.status === "rejected") {
+    throw new Error(errors.join("; ") || "all upstream requests failed");
+  }
 
   return {
     parkKey,
@@ -168,8 +185,19 @@ async function collectParkSnapshot(parkKey, now) {
     closedFrom: opening?.closed_from ?? opening?.closing ?? null,
     openAttractions,
     totalAttractions,
-    attractions: waitingItems.map((item) => toAttractionSnapshotItem(item)),
+    attractions: attractionItems,
+    errors,
   };
+}
+
+function settledValue(result) {
+  return result.status === "fulfilled" ? result.value : null;
+}
+
+function settledError(label, result) {
+  if (result.status === "fulfilled") return null;
+  const message = result.reason instanceof Error ? result.reason.message : String(result.reason);
+  return `${label}: ${message}`;
 }
 
 async function apiJson(path, headers) {
@@ -327,8 +355,8 @@ function buildAttractionDayData(parkKey, date, snapshots, generatedAtMillis) {
 function toAttractionSnapshotItem(item) {
   const id = item.id || item.uuid || stableAttractionId(item.name);
   const status = String(item.status ?? "").toLowerCase();
-  const statusCode = attractionStatusCode(status);
   const waitingTime = Number(item.waitingtime ?? item.waitingTime ?? item.wait_time);
+  const statusCode = attractionStatusCode(status, waitingTime);
   const openValue = Number.isFinite(waitingTime) ? Math.max(0, Math.round(waitingTime)) : 0;
   return {
     id,
@@ -339,11 +367,12 @@ function toAttractionSnapshotItem(item) {
   };
 }
 
-function attractionStatusCode(status) {
+function attractionStatusCode(status, waitingTime = NaN) {
   if (status === "opened" || status === "open") return 0;
   if (status === "closedweather" || status === "closed_weather" || status === "weather") return -2;
   if (status === "maintenance") return -3;
   if (status === "closed") return -1;
+  if (Number.isFinite(waitingTime) && waitingTime >= 0) return 0;
   return -4;
 }
 

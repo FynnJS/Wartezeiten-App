@@ -69,7 +69,7 @@ fun WartezeitenApp(
                         navController.navigate("statistics")
                     },
                     onParkStatisticsClick = { parkKey ->
-                        navController.navigate("statistics?parkKey=${Uri.encode(parkKey)}&attractionId=")
+                        navController.navigate("statistics/${Uri.encode(parkKey)}")
                     },
                     onAttractionClick = { parkKey, attractionId ->
                         navController.navigate("parks/${Uri.encode(parkKey)}?attractionId=${Uri.encode(attractionId)}")
@@ -86,11 +86,26 @@ fun WartezeitenApp(
                     onBackClick = { navController.popBackStack() }
                 )
             }
+            composable("statistics") {
+                StatisticsRoute(
+                    onBackClick = { navController.popBackStack() }
+                )
+            }
             composable(
-                route = "statistics?parkKey={parkKey}&attractionId={attractionId}",
+                route = "statistics/{parkKey}",
                 arguments = listOf(
-                    navArgument("parkKey") { type = NavType.StringType; nullable = true; defaultValue = null },
-                    navArgument("attractionId") { type = NavType.StringType; nullable = true; defaultValue = null }
+                    navArgument("parkKey") { type = NavType.StringType }
+                )
+            ) {
+                StatisticsRoute(
+                    onBackClick = { navController.popBackStack() }
+                )
+            }
+            composable(
+                route = "statistics/{parkKey}/{attractionId}",
+                arguments = listOf(
+                    navArgument("parkKey") { type = NavType.StringType },
+                    navArgument("attractionId") { type = NavType.StringType }
                 )
             ) {
                 StatisticsRoute(
@@ -107,10 +122,10 @@ fun WartezeitenApp(
                 WaitingTimesRoute(
                     onBackClick = { navController.popBackStack() },
                     onParkStatisticsClick = { parkKey ->
-                        navController.navigate("statistics?parkKey=${Uri.encode(parkKey)}&attractionId=")
+                        navController.navigate("statistics/${Uri.encode(parkKey)}")
                     },
                     onAttractionStatisticsClick = { parkKey, attractionId ->
-                        navController.navigate("statistics?parkKey=${Uri.encode(parkKey)}&attractionId=${Uri.encode(attractionId)}")
+                        navController.navigate("statistics/${Uri.encode(parkKey)}/${Uri.encode(attractionId)}")
                     }
                 )
             }

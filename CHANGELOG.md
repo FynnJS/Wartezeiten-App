@@ -1,5 +1,13 @@
 # Changelog
 
+## v1.0.6 - 2026-06-05
+
+- Fixed park statistics navigation from the start page so the selected park is reliably applied.
+- Stabilized central statistics loading with safer date fallback when today's central snapshots are not available yet.
+- Improved Worker app-data collection so partial API failures no longer prevent usable attraction snapshots from being stored.
+- Added separate status colors for closed, weather-related closures, and maintenance in attraction statistics charts.
+- Added tests for statistics date handling and park-average calculations.
+
 ## v1.0.5 - 2026-06-04
 
 - Fixed park statistics deep links from the start page so the selected park opens directly in the statistics view.
