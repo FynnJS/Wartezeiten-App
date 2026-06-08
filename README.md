@@ -18,8 +18,13 @@ Die Website liest `website/release.json` und verlinkt auf den neuesten GitHub Re
 - Zentrale Cloudflare App-Daten für Ranking-, Trend- und Attraktionsstatistik-Snapshots
 - Statistikbereich mit Park-, Datum- und Attraktionsauswahl für zentrale Tagesverläufe
 - Watchlist-Alarme für Wartezeiten, Attraktionsstatus, Parkstatus und Crowd-Level
+- Datenbasierter Multi-Park-Vergleich mit Suche, Sortierung und direktem Sprung zur Parkübersicht
 - In-App-Hinweis und Benachrichtigung bei neuer APK-Version
-- Offline-First-Datenhaltung über Room und automatische Aktualisierung für Live-Daten
+- Offline-First-Datenhaltung über Room, Cache-Hinweis und automatische Aktualisierung für Live-Daten
+
+## Watchlist-Benachrichtigungen
+
+Watchlist-Alarme werden lokal über WorkManager geprüft und als Android-Benachrichtigung angezeigt. Neue Alarme starten zusätzlich einen schnellen Einmal-Check; nach Neustart oder App-Update werden Hintergrundprüfungen wieder angemeldet. Der periodische lokale Check läuft alle 30 Minuten. Es werden keine Firebase-/FCM-Konfiguration und keine Worker-Secrets benötigt. Android kann periodische Arbeit im Standby/Doze trotzdem verzögern.
 
 ## Entwicklung
 

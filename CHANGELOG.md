@@ -1,5 +1,15 @@
 # Changelog
 
+## v1.0.7 - 2026-06-08
+
+- Added a data-based multi-park comparison screen with searchable park selection, sorting, and direct navigation to park detail pages.
+- Replaced park ratings with comparison-focused decision support based on current waits, open attractions, and data freshness.
+- Added local Watchlist background notifications without Firebase/FCM setup and rescheduling after reboot or app update.
+- Added an offline/cache status badge so users can see when cached data is being shown.
+- Improved central Cloudflare app-data logging and global marker handling for free-plan-friendly operation.
+- Fixed stale attraction data so closed or currently unavailable parks no longer keep old wait-time lists from previous opening days.
+- Cleaned up start-page actions and updated the statistics/comparison icon treatment.
+
 ## v1.0.6 - 2026-06-05
 
 - Fixed park statistics navigation from the start page so the selected park is reliably applied.
