@@ -36,7 +36,6 @@ import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.FavoriteBorder
-import androidx.compose.material.icons.filled.Insights
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.Notifications
@@ -78,10 +77,12 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import de.wartezeiten.app.R
 import de.wartezeiten.app.domain.model.Park
 import de.wartezeiten.app.domain.model.ParkRecommendation
 import de.wartezeiten.app.ui.components.AttributionBanner
@@ -94,7 +95,7 @@ fun ParkListRoute(
     onParkClick: (Park) -> Unit,
     onSettingsClick: () -> Unit,
     onWatchlistClick: () -> Unit,
-    onStatisticsClick: () -> Unit,
+    onCompareClick: () -> Unit,
     onParkStatisticsClick: (String) -> Unit,
     onAttractionClick: (String, String) -> Unit,
     viewModel: ParkListViewModel = hiltViewModel(),
@@ -113,7 +114,7 @@ fun ParkListRoute(
         onParkClick = onParkClick,
         onSettingsClick = onSettingsClick,
         onWatchlistClick = onWatchlistClick,
-        onStatisticsClick = onStatisticsClick,
+        onCompareClick = onCompareClick,
         onParkStatisticsClick = onParkStatisticsClick,
         onAttractionClick = onAttractionClick,
     )
@@ -134,7 +135,7 @@ fun ParkListScreen(
     onParkClick: (Park) -> Unit,
     onSettingsClick: () -> Unit,
     onWatchlistClick: () -> Unit,
-    onStatisticsClick: () -> Unit,
+    onCompareClick: () -> Unit,
     onParkStatisticsClick: (String) -> Unit,
     onAttractionClick: (String, String) -> Unit,
 ) {
@@ -179,6 +180,9 @@ fun ParkListScreen(
                             style = MaterialTheme.typography.labelMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
+                        if (state.isShowingOfflineData) {
+                            OfflineStatusBadge(language = state.language)
+                        }
                     }
                 },
                 actions = {
@@ -200,8 +204,11 @@ fun ParkListScreen(
                         IconButton(onClick = onWatchlistClick) {
                             Icon(Icons.AutoMirrored.Filled.List, contentDescription = "Watchlist")
                         }
-                        IconButton(onClick = onStatisticsClick) {
-                            Icon(Icons.Default.Insights, contentDescription = if (state.language == "en") "Statistics" else "Statistik")
+                        IconButton(onClick = onCompareClick) {
+                            Icon(
+                                painter = painterResource(R.drawable.ic_stats_bar_chart_24),
+                                contentDescription = if (state.language == "en") "Compare parks" else "Parks vergleichen",
+                            )
                         }
                     }
                 },
@@ -546,7 +553,7 @@ private fun AttractionSearchResultCard(
             horizontalArrangement = Arrangement.spacedBy(10.dp),
         ) {
             Icon(
-                Icons.Default.Insights,
+                painter = painterResource(R.drawable.ic_stats_bar_chart_24),
                 contentDescription = null,
                 tint = MaterialTheme.colorScheme.primary,
             )
@@ -1101,9 +1108,7 @@ private fun ParkCard(
     onToggleFavorite: () -> Unit
 ) {
     OutlinedCard(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable(onClick = onClick),
+        modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(16.dp),
         colors = CardDefaults.outlinedCardColors(
             containerColor = MaterialTheme.colorScheme.surface,
@@ -1124,27 +1129,35 @@ private fun ParkCard(
             horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = park.name,
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.SemiBold,
-                    color = MaterialTheme.colorScheme.onSurface,
-                )
-                Spacer(Modifier.height(2.dp))
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    val flag = countryToFlag(park.country)
-                    if (flag.isNotEmpty()) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(10.dp))
+                        .clickable(onClick = onClick)
+                        .padding(vertical = 2.dp),
+                ) {
+                    Text(
+                        text = park.name,
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.SemiBold,
+                        color = MaterialTheme.colorScheme.onSurface,
+                    )
+                    Spacer(Modifier.height(2.dp))
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        val flag = countryToFlag(park.country)
+                        if (flag.isNotEmpty()) {
+                            Text(
+                                text = flag,
+                                style = MaterialTheme.typography.bodySmall,
+                                modifier = Modifier.padding(end = 4.dp)
+                            )
+                        }
                         Text(
-                            text = flag,
+                            text = park.country,
                             style = MaterialTheme.typography.bodySmall,
-                            modifier = Modifier.padding(end = 4.dp)
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                     }
-                    Text(
-                        text = park.country,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
                 }
             }
 
@@ -1175,7 +1188,7 @@ private fun ParkCard(
 
             CompactParkActionButton(onClick = onStatisticsClick) {
                 Icon(
-                    Icons.Default.Insights,
+                    painter = painterResource(R.drawable.ic_stats_bar_chart_24),
                     contentDescription = if (language == "en") {
                         "Show park statistics"
                     } else {
@@ -1188,9 +1201,36 @@ private fun ParkCard(
 
             Text(
                 "›",
+                modifier = Modifier
+                    .clip(RoundedCornerShape(8.dp))
+                    .clickable(onClick = onClick)
+                    .padding(horizontal = 4.dp, vertical = 10.dp),
                 style = MaterialTheme.typography.titleLarge,
                 color = MaterialTheme.colorScheme.primary,
                 fontWeight = FontWeight.Bold
+            )
+        }
+    }
+}
+
+@Composable
+private fun OfflineStatusBadge(language: String) {
+    Surface(
+        shape = RoundedCornerShape(8.dp),
+        color = MaterialTheme.colorScheme.errorContainer,
+        contentColor = MaterialTheme.colorScheme.onErrorContainer,
+        modifier = Modifier.padding(top = 3.dp),
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 7.dp, vertical = 3.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(4.dp),
+        ) {
+            Icon(Icons.Default.Warning, contentDescription = null, modifier = Modifier.size(12.dp))
+            Text(
+                text = if (language == "en") "Cached" else "Cache",
+                style = MaterialTheme.typography.labelSmall,
+                fontWeight = FontWeight.Bold,
             )
         }
     }

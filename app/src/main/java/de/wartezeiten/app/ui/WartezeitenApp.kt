@@ -17,6 +17,7 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import de.wartezeiten.app.ui.components.UpdateBanner
+import de.wartezeiten.app.ui.compare.ParkCompareRoute
 import de.wartezeiten.app.ui.parks.ParkListRoute
 import de.wartezeiten.app.ui.settings.SettingsRoute
 import de.wartezeiten.app.ui.statistics.StatisticsRoute
@@ -65,8 +66,8 @@ fun WartezeitenApp(
                     onWatchlistClick = {
                         navController.navigate("watchlist")
                     },
-                    onStatisticsClick = {
-                        navController.navigate("statistics")
+                    onCompareClick = {
+                        navController.navigate("compare")
                     },
                     onParkStatisticsClick = { parkKey ->
                         navController.navigate("statistics/${Uri.encode(parkKey)}")
@@ -84,6 +85,14 @@ fun WartezeitenApp(
             composable("watchlist") {
                 WatchlistRoute(
                     onBackClick = { navController.popBackStack() }
+                )
+            }
+            composable("compare") {
+                ParkCompareRoute(
+                    onBackClick = { navController.popBackStack() },
+                    onParkClick = { park ->
+                        navController.navigate("parks/${Uri.encode(park.id)}")
+                    },
                 )
             }
             composable("statistics") {

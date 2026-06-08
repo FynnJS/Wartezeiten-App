@@ -33,7 +33,6 @@ import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.FavoriteBorder
 import androidx.compose.material.icons.filled.FilterList
-import androidx.compose.material.icons.filled.Insights
 import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Search
@@ -71,11 +70,13 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.foundation.clickable
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import de.wartezeiten.app.R
 import de.wartezeiten.app.domain.model.AttractionStatus
 import de.wartezeiten.app.domain.model.CrowdLevel
 import de.wartezeiten.app.domain.model.HolidayInfo
@@ -184,7 +185,7 @@ fun WaitingTimesScreen(
                     state.park?.let { park ->
                         IconButton(onClick = { onParkStatisticsClick(park.id) }) {
                             Icon(
-                                Icons.Default.Insights,
+                                painter = painterResource(R.drawable.ic_stats_bar_chart_24),
                                 contentDescription = if (state.language == "en") {
                                     "Show park statistics"
                                 } else {
@@ -848,7 +849,7 @@ private fun WaitingTimeRow(
                 modifier = Modifier.size(40.dp)
             ) {
                 Icon(
-                    imageVector = Icons.Default.Insights,
+                    painter = painterResource(R.drawable.ic_stats_bar_chart_24),
                     contentDescription = if (language == "en") {
                         "Show statistics for ${item.name}"
                     } else {
