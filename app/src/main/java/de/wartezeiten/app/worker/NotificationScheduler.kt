@@ -6,6 +6,7 @@ import androidx.work.ExistingPeriodicWorkPolicy
 import androidx.work.ExistingWorkPolicy
 import androidx.work.NetworkType
 import androidx.work.OneTimeWorkRequestBuilder
+import androidx.work.OutOfQuotaPolicy
 import androidx.work.PeriodicWorkRequestBuilder
 import androidx.work.WorkManager
 import java.util.concurrent.TimeUnit
@@ -20,7 +21,7 @@ object NotificationScheduler {
 
     fun ensureBackgroundChecks(context: Context) {
         val periodicWork = PeriodicWorkRequestBuilder<NotificationWorker>(
-            repeatInterval = 15,
+            repeatInterval = 30,
             repeatIntervalTimeUnit = TimeUnit.MINUTES,
         )
             .setConstraints(networkConstraints)
@@ -28,7 +29,7 @@ object NotificationScheduler {
 
         WorkManager.getInstance(context).enqueueUniquePeriodicWork(
             WATCHLIST_PERIODIC_WORK,
-            ExistingPeriodicWorkPolicy.UPDATE,
+            ExistingPeriodicWorkPolicy.KEEP,
             periodicWork,
         )
     }
@@ -36,6 +37,7 @@ object NotificationScheduler {
     fun runSoonAndKeepChecking(context: Context) {
         val immediateWork = OneTimeWorkRequestBuilder<NotificationWorker>()
             .setConstraints(networkConstraints)
+            .setExpedited(OutOfQuotaPolicy.RUN_AS_NON_EXPEDITED_WORK_REQUEST)
             .build()
 
         WorkManager.getInstance(context).enqueueUniqueWork(

@@ -271,16 +271,25 @@ class WatchlistViewModel @Inject constructor(
 ) : ViewModel() {
     val watchlistItems: Flow<List<WatchlistAlertWithParkName>> = combine(
         watchlistDao.observeWatchlist(),
-        parkDao.observeParks(null)
-    ) { alerts, parks ->
+        parkDao.observeParks(null),
+        parkDetailDao.observeAllWaitingTimes()
+    ) { alerts, parks, waitingTimes ->
         val parkNamesById = parks.associate { it.id to it.name }
         val parkNamesByUuid = parks.associate { it.uuid to it.name }
+        val parkKeysByKey = parks.flatMap { park ->
+            listOf(
+                park.id to setOf(park.id, park.uuid),
+                park.uuid to setOf(park.id, park.uuid),
+            )
+        }.toMap()
+        val attractionNames = waitingTimes.associate { "${it.parkKey}:${it.attractionId}" to it.name }
 
         alerts.map { alert ->
             val parkName = parkNamesById[alert.parkKey] ?: parkNamesByUuid[alert.parkKey]
-
-            // Fetch waiting times to get attraction name
-            val attractionName = alert.attractionId // Need to map this correctly later
+            val attractionName = alert.attractionId?.let { attractionId ->
+                (parkKeysByKey[alert.parkKey] ?: setOf(alert.parkKey))
+                    .firstNotNullOfOrNull { parkKey -> attractionNames["$parkKey:$attractionId"] }
+            }
 
             WatchlistAlertWithParkName(alert = alert, parkName = parkName, attractionName = attractionName)
         }
