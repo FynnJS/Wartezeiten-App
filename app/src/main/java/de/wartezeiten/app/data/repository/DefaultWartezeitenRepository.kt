@@ -7,6 +7,7 @@ import de.wartezeiten.app.core.network.safeApiCall
 import de.wartezeiten.app.data.local.dao.ParkDao
 import de.wartezeiten.app.data.local.dao.ParkDetailDao
 import de.wartezeiten.app.data.local.dao.ParkSnapshotDao
+import de.wartezeiten.app.data.local.PreferencesDataSource
 import de.wartezeiten.app.data.local.entity.HolidayEntity
 import de.wartezeiten.app.data.local.entity.ParkSnapshotEntity
 import de.wartezeiten.app.data.local.entity.WaitingTimeEntity
@@ -56,6 +57,7 @@ class DefaultWartezeitenRepository @Inject constructor(
     private val weatherApi: WeatherApiService,
     private val holidayApi: HolidayApiService,
     private val publicAppDataApi: PublicAppDataApiService,
+    private val preferences: PreferencesDataSource,
     @param:IoDispatcher private val ioDispatcher: CoroutineDispatcher,
 ) : WartezeitenRepository {
 
@@ -354,26 +356,40 @@ class DefaultWartezeitenRepository @Inject constructor(
             (openingResult as? ApiResult.Success)?.let {
                 parkDetailDao.upsertOpeningTimes(it.data.toEntity(parkKey, now))
             }
-            (waitingResult as? ApiResult.Success)?.let {
-                parkDetailDao.replaceWaitingTimes(
-                    parkKey = parkKey,
-                    waitingTimes = it.data.map { dto -> dto.toEntity(parkKey, now) },
+            val openingDto = (openingResult as? ApiResult.Success)?.data?.firstOrNull()
+            val openedToday = openingDto?.openedToday
+            val openFrom = openingDto?.opening
+            val closedFrom = openingDto?.closing
+            val currentlyOpen = if (openingResult is ApiResult.Success) {
+                isParkCurrentlyOpen(
+                    openedToday = openedToday,
+                    openFrom = openFrom,
+                    closedFrom = closedFrom,
+                    nowMillis = now,
                 )
+            } else {
+                true
+            }
+            (waitingResult as? ApiResult.Success)?.let {
+                if (currentlyOpen) {
+                    parkDetailDao.replaceWaitingTimes(
+                        parkKey = parkKey,
+                        waitingTimes = it.data.map { dto -> dto.toEntity(parkKey, now) },
+                    )
+                } else {
+                    parkDetailDao.deleteWaitingTimesForPark(parkKey)
+                }
+            }
+            if (openingResult is ApiResult.Success && !currentlyOpen && waitingResult !is ApiResult.Success) {
+                parkDetailDao.deleteWaitingTimesForPark(parkKey)
             }
             (crowdResult as? ApiResult.Success)?.let {
-                val openedToday = if (openingResult is ApiResult.Success && openingResult.data.isNotEmpty()) {
-                    openingResult.data.first().openedToday
-                } else {
-                    null
-                }
-                val openFrom = if (openingResult is ApiResult.Success && openingResult.data.isNotEmpty()) openingResult.data.first().opening else null
-                val closedFrom = if (openingResult is ApiResult.Success && openingResult.data.isNotEmpty()) openingResult.data.first().closing else null
                 val openAttractions = if (waitingResult is ApiResult.Success) {
-                    waitingResult.data.count { it.status.equals("opened", ignoreCase = true) }
+                    waitingResult.data.count { currentlyOpen && it.status.equals("opened", ignoreCase = true) }
                 } else {
                     0
                 }
-                val canDisplayCrowdLevel = openedToday == true && openAttractions > 0
+                val canDisplayCrowdLevel = currentlyOpen && openAttractions > 0
                 val apiCrowdLevel = it.data.crowdLevel?.replace(",", ".")?.toFloatOrNull()
                 val displayCrowdLevel = apiCrowdLevel.takeIf { canDisplayCrowdLevel }
 
@@ -390,7 +406,7 @@ class DefaultWartezeitenRepository @Inject constructor(
                         openFrom = openFrom,
                         closedFrom = closedFrom,
                         openAttractions = openAttractions,
-                        totalAttractions = if (waitingResult is ApiResult.Success) waitingResult.data.size else 0
+                        totalAttractions = if (waitingResult is ApiResult.Success && currentlyOpen) waitingResult.data.size else 0
                     )
                 )
             }
@@ -478,6 +494,7 @@ class DefaultWartezeitenRepository @Inject constructor(
     override suspend fun refreshPublicAppData(): ApiResult<Unit> = withContext(ioDispatcher) {
         when (val result = safeApiCall { publicAppDataApi.getLatestAppData() }) {
             is ApiResult.Success -> {
+                val now = System.currentTimeMillis()
                 val snapshots = result.data.parks.mapNotNull { snapshot ->
                     val capturedAt = snapshot.capturedAtMillis.takeIf { it > 0L }
                         ?: result.data.generatedAtMillis
@@ -502,7 +519,18 @@ class DefaultWartezeitenRepository @Inject constructor(
                     parkSnapshotDao.insertAll(snapshots)
                 }
                 result.data.parks.forEach { snapshot ->
-                    if (snapshot.attractions.isNotEmpty()) {
+                    val capturedAt = snapshot.capturedAtMillis.takeIf { it > 0L }
+                        ?: result.data.generatedAtMillis
+                        ?: 0L
+                    val canUseAttractions = snapshot.attractions.isNotEmpty() &&
+                            now - capturedAt <= RECOMMENDATION_CURRENT_MAX_AGE_MILLIS &&
+                            isParkCurrentlyOpen(
+                                openedToday = snapshot.openedToday,
+                                openFrom = snapshot.openFrom,
+                                closedFrom = snapshot.closedFrom,
+                                nowMillis = now,
+                            )
+                    if (canUseAttractions) {
                         parkDetailDao.replaceWaitingTimes(
                             parkKey = snapshot.parkKey,
                             waitingTimes = snapshot.attractions.map { attraction ->
@@ -512,10 +540,12 @@ class DefaultWartezeitenRepository @Inject constructor(
                                     name = attraction.name,
                                     waitingTime = attraction.value?.takeIf { (attraction.statusCode ?: 0) == 0 },
                                     status = attraction.status ?: statusCodeToApiStatus(attraction.statusCode),
-                                    updatedAtMillis = snapshot.capturedAtMillis,
+                                    updatedAtMillis = capturedAt,
                                 )
                             },
                         )
+                    } else if (snapshot.openedToday == false || snapshot.attractions.isNotEmpty()) {
+                        parkDetailDao.deleteWaitingTimesForPark(snapshot.parkKey)
                     }
                 }
                 ApiResult.Success(Unit)

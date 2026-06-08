@@ -1,14 +1,17 @@
 const WARTEZEITEN_API_BASE = "https://api.wartezeiten.app/v1";
 const LATEST_KEY = "app-data/latest.json";
 const TREND_KEY = "app-data/trend-history.json";
+const GLOBAL_MARKERS_PATH = "/app-data/global-markers/latest.json";
 const ATTRACTION_HISTORY_INDEX_KEY = "app-data/attraction-history/index.json";
 const ATTRACTION_HISTORY_PREFIX = "app-data/attraction-history";
 const ATTRACTION_HISTORY_DAILY_PREFIX = "app-data/attraction-history-days";
 const MAX_HISTORY_AGE_MILLIS = 48 * 60 * 60 * 1000;
-const MAX_HISTORY_POINTS_PER_PARK = 96;
-const MAX_ATTRACTION_SNAPSHOTS_PER_DAY = 160;
+const MAX_HISTORY_POINTS_PER_PARK = 576;
+const MAX_ATTRACTION_SNAPSHOTS_PER_DAY = 288;
 const REQUEST_DELAY_MILLIS = 900;
-const DEFAULT_ATTRACTION_HISTORY_SHARDS = 8;
+const DEFAULT_ATTRACTION_HISTORY_SHARDS = 3;
+const DEFAULT_INDEX_UPDATE_INTERVAL_MILLIS = 60 * 60 * 1000;
+const DEFAULT_CRON_SHARDS = 3;
 
 const DEFAULT_PARK_KEYS = [
   "europapark",
@@ -30,6 +33,10 @@ export default {
 
     if (url.pathname === "/app-data/trend-history.json") {
       return jsonResponse(await readJson(env, TREND_KEY, emptyTrendHistory()));
+    }
+
+    if (url.pathname === GLOBAL_MARKERS_PATH) {
+      return jsonResponse(await readGlobalMarkers(env));
     }
 
     if (url.pathname === "/app-data/statistics/index.json") {
@@ -70,15 +77,32 @@ export default {
     return new Response("Not found", { status: 404 });
   },
 
-  async scheduled(_controller, env, ctx) {
-    ctx.waitUntil(updateAppData(env));
+  async scheduled(controller, env, ctx) {
+    ctx.waitUntil(updateScheduledAppData(controller, env));
   },
 };
 
-async function updateAppData(env) {
+async function updateScheduledAppData(controller, env) {
+  const shardCount = parsePositiveInt(env.APP_DATA_CRON_SHARDS) ?? DEFAULT_CRON_SHARDS;
+  const shardIndex = scheduledShardIndex(controller?.cron, shardCount);
+  return updateAppData(env, {
+    shardIndex,
+    shardCount,
+    writeLatest: false,
+    writeTrend: false,
+    includeCrowd: false,
+  });
+}
+
+async function updateAppData(env, options = {}) {
   const now = Date.now();
-  const parkKeys = await resolveParkKeys(env);
-  const existingHistory = await readJson(env, TREND_KEY, emptyTrendHistory());
+  const allParkKeys = await resolveParkKeys(env);
+  const parkKeys = options.shardIndex == null
+    ? allParkKeys
+    : allParkKeys.filter((parkKey) => attractionHistoryShard(env, parkKey, options.shardCount) === options.shardIndex);
+  const existingHistory = options.writeTrend === false
+    ? emptyTrendHistory()
+    : await readJson(env, TREND_KEY, emptyTrendHistory());
   const historyByPark = new Map(
     existingHistory.parks.map((park) => [park.parkKey, park.snapshots ?? []]),
   );
@@ -90,7 +114,9 @@ async function updateAppData(env) {
 
   for (const parkKey of parkKeys) {
     try {
-      const snapshot = await collectParkSnapshot(parkKey, now);
+      const snapshot = await collectParkSnapshot(parkKey, now, {
+        includeCrowd: options.includeCrowd !== false,
+      });
       parks.push(toLatestParkSnapshot(snapshot));
 
       if (snapshot.openedToday && snapshot.openAttractions > 0 && snapshot.displayCrowdLevel != null) {
@@ -144,12 +170,24 @@ async function updateAppData(env) {
       .map(([parkKey, snapshots]) => ({ parkKey, snapshots })),
   };
 
-  await env.APP_DATA.put(LATEST_KEY, JSON.stringify(latest));
-  await env.APP_DATA.put(TREND_KEY, JSON.stringify(trendHistory));
+  if (options.writeLatest !== false) {
+    await env.APP_DATA.put(LATEST_KEY, JSON.stringify(latest));
+  }
+  if (options.writeTrend !== false) {
+    await env.APP_DATA.put(TREND_KEY, JSON.stringify(trendHistory));
+  }
   if (attractionDayUpdates.length > 0) {
     await writeAttractionHistoryBatch(env, attractionDayUpdates, now);
   }
-  return { ok: true, generatedAtMillis: now, parks: parks.length, errors };
+  return {
+    ok: true,
+    generatedAtMillis: now,
+    parks: parks.length,
+    totalParks: allParkKeys.length,
+    shardIndex: options.shardIndex ?? null,
+    shardCount: options.shardCount ?? null,
+    errors,
+  };
 }
 
 async function resolveParkKeys(env) {
@@ -177,11 +215,12 @@ async function resolveParkKeys(env) {
   return maxParks == null ? DEFAULT_PARK_KEYS : DEFAULT_PARK_KEYS.slice(0, maxParks);
 }
 
-async function collectParkSnapshot(parkKey, now) {
+async function collectParkSnapshot(parkKey, now, options = {}) {
+  const includeCrowd = options.includeCrowd !== false;
   const [openingResult, waitingResult, crowdResult] = await Promise.allSettled([
     apiJson("/openingtimes", { park: parkKey }),
     apiJson("/waitingtimes", { park: parkKey, language: "de" }),
-    apiJson("/crowdlevel", { park: parkKey }),
+    includeCrowd ? apiJson("/crowdlevel", { park: parkKey }) : Promise.resolve(null),
   ]);
 
   const openingTimes = settledValue(openingResult);
@@ -198,10 +237,14 @@ async function collectParkSnapshot(parkKey, now) {
   const errors = [
     settledError("/openingtimes", openingResult),
     settledError("/waitingtimes", waitingResult),
-    settledError("/crowdlevel", crowdResult),
+    includeCrowd ? settledError("/crowdlevel", crowdResult) : null,
   ].filter(Boolean);
 
-  if (openingResult.status === "rejected" && waitingResult.status === "rejected" && crowdResult.status === "rejected") {
+  if (
+    openingResult.status === "rejected" &&
+    waitingResult.status === "rejected" &&
+    (!includeCrowd || crowdResult.status === "rejected")
+  ) {
     throw new Error(errors.join("; ") || "all upstream requests failed");
   }
 
@@ -321,11 +364,24 @@ async function writeAttractionHistoryBatch(env, dayUpdates, now) {
     await env.APP_DATA.put(attractionDailyKey(aggregate.date, aggregate.shard), JSON.stringify(aggregate));
   }
 
-  await updateAttractionHistoryIndex(env, dayUpdates, now);
+  await maybeUpdateAttractionHistoryIndex(env, dayUpdates, now);
 }
 
-async function updateAttractionHistoryIndex(env, dayUpdates, generatedAtMillis) {
+async function maybeUpdateAttractionHistoryIndex(env, dayUpdates, generatedAtMillis) {
   const index = await readJson(env, ATTRACTION_HISTORY_INDEX_KEY, emptyAttractionHistoryIndex());
+  const intervalMillis = parsePositiveInt(env.APP_DATA_INDEX_UPDATE_INTERVAL_MILLIS)
+    ?? DEFAULT_INDEX_UPDATE_INTERVAL_MILLIS;
+  const indexAgeMillis = generatedAtMillis - Number(index.generatedAtMillis ?? 0);
+  const shouldUpdate =
+    !Number.isFinite(indexAgeMillis) ||
+    indexAgeMillis >= intervalMillis ||
+    dayUpdates.some((dayData) => {
+      const park = (index.parks ?? []).find((item) => item.parkKey === dayData.parkKey);
+      return !park || !(park.dates ?? []).includes(dayData.date);
+    });
+
+  if (!shouldUpdate) return;
+
   const parks = [...(index.parks ?? [])];
 
   for (const dayData of dayUpdates) {
@@ -496,6 +552,42 @@ async function readAttractionDay(env, parkKey, date) {
   return readJson(env, attractionDayKey(parkKey, date), emptyAttractionDay(parkKey, date));
 }
 
+async function readGlobalMarkers(env) {
+  const date = isoDate(Date.now());
+  const shardCount = parsePositiveInt(env.APP_DATA_HISTORY_SHARDS) ?? DEFAULT_ATTRACTION_HISTORY_SHARDS;
+  const markers = [];
+
+  for (let shard = 0; shard < shardCount; shard += 1) {
+    const aggregate = await readJson(env, attractionDailyKey(date, shard), emptyAttractionDaily(date, shard));
+    for (const park of aggregate.parks ?? []) {
+      const latestSnapshot = (park.snapshots ?? [])
+        .slice()
+        .sort((a, b) => Number(b.capturedAtMillis) - Number(a.capturedAtMillis))[0];
+      if (!latestSnapshot) continue;
+
+      const attractions = latestSnapshot.attractions ?? [];
+      const openAttractions = attractions.filter((attraction) => Number(attraction.statusCode) === 0).length;
+      markers.push({
+        parkKey: park.parkKey,
+        capturedAtMillis: Number(latestSnapshot.capturedAtMillis) || park.generatedAtMillis || 0,
+        openedToday: latestSnapshot.openedToday === true,
+        openFrom: latestSnapshot.openFrom ?? park.openFrom ?? null,
+        closedFrom: latestSnapshot.closedFrom ?? park.closedFrom ?? null,
+        openAttractions,
+        totalAttractions: attractions.length,
+        attractionCount: attractions.length,
+      });
+    }
+  }
+
+  markers.sort((a, b) => a.parkKey.localeCompare(b.parkKey));
+  return {
+    generatedAtMillis: Date.now(),
+    date,
+    markers,
+  };
+}
+
 function emptyLatest() {
   return { generatedAtMillis: 0, parks: [], recommendations: [], errors: [] };
 }
@@ -566,9 +658,18 @@ function parsePositiveInt(value) {
   return Number.isInteger(parsed) && parsed > 0 ? parsed : null;
 }
 
-function attractionHistoryShard(env, parkKey) {
-  const shardCount = parsePositiveInt(env.APP_DATA_HISTORY_SHARDS) ?? DEFAULT_ATTRACTION_HISTORY_SHARDS;
+function attractionHistoryShard(env, parkKey, explicitShardCount = null) {
+  const shardCount = explicitShardCount
+    ?? parsePositiveInt(env.APP_DATA_HISTORY_SHARDS)
+    ?? DEFAULT_ATTRACTION_HISTORY_SHARDS;
   return hashString(parkKey) % shardCount;
+}
+
+function scheduledShardIndex(cron, shardCount) {
+  const configured = String(cron || "");
+  const offset = Number(configured.match(/^(\d+)-59\/5 /)?.[1]);
+  if (Number.isInteger(offset)) return Math.max(0, Math.min(shardCount - 1, offset));
+  return 0;
 }
 
 function hashString(value) {
