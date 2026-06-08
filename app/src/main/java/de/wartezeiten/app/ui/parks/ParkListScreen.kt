@@ -1121,14 +1121,14 @@ private fun ParkCard(
                 .fillMaxWidth()
                 .padding(horizontal = 16.dp, vertical = 14.dp),
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(14.dp)
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             Column(modifier = Modifier.weight(1f)) {
                 Text(
                     text = park.name,
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.SemiBold,
-                    color = MaterialTheme.colorScheme.onSurface
+                    color = MaterialTheme.colorScheme.onSurface,
                 )
                 Spacer(Modifier.height(2.dp))
                 Row(verticalAlignment = Alignment.CenterVertically) {
@@ -1148,7 +1148,7 @@ private fun ParkCard(
                 }
             }
 
-            IconButton(onClick = onToggleFavorite) {
+            CompactParkActionButton(onClick = onToggleFavorite) {
                 Icon(
                     imageVector = if (park.isFavorite) Icons.Default.Favorite else Icons.Default.FavoriteBorder,
                     contentDescription = if (language == "en") {
@@ -1156,11 +1156,12 @@ private fun ParkCard(
                     } else {
                         if (park.isFavorite) "Von Favoriten entfernen" else "Zu Favoriten hinzufügen"
                     },
-                    tint = if (park.isFavorite) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline
+                    tint = if (park.isFavorite) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline,
+                    modifier = Modifier.size(21.dp),
                 )
             }
 
-            IconButton(onClick = onQuickAddWatchlist) {
+            CompactParkActionButton(onClick = onQuickAddWatchlist) {
                 Icon(
                     Icons.Default.Notifications,
                     contentDescription = if (language == "en") {
@@ -1168,10 +1169,11 @@ private fun ParkCard(
                     } else {
                         "Parkweite Benachrichtigung hinzufügen"
                     },
+                    modifier = Modifier.size(21.dp),
                 )
             }
 
-            IconButton(onClick = onStatisticsClick) {
+            CompactParkActionButton(onClick = onStatisticsClick) {
                 Icon(
                     Icons.Default.Insights,
                     contentDescription = if (language == "en") {
@@ -1180,6 +1182,7 @@ private fun ParkCard(
                         "Parkstatistik anzeigen"
                     },
                     tint = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.size(21.dp),
                 )
             }
 
@@ -1191,6 +1194,18 @@ private fun ParkCard(
             )
         }
     }
+}
+
+@Composable
+private fun CompactParkActionButton(
+    onClick: () -> Unit,
+    content: @Composable () -> Unit,
+) {
+    IconButton(
+        onClick = onClick,
+        modifier = Modifier.size(38.dp),
+        content = content,
+    )
 }
 
 internal fun countryToFlag(country: String): String {

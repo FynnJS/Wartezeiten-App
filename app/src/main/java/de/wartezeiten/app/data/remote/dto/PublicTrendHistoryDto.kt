@@ -150,6 +150,10 @@ data class PublicAttractionHistoryDayDto(
     val parkKey: String,
     @SerializedName("date")
     val date: String,
+    @SerializedName("openFrom")
+    val openFrom: String?,
+    @SerializedName("closedFrom")
+    val closedFrom: String?,
     @SerializedName("snapshots")
     val snapshots: List<PublicAttractionHistorySnapshotDto> = emptyList(),
     @SerializedName("attractions")
@@ -235,6 +239,8 @@ fun PublicAttractionHistoryDayDto.toDomain(): AttractionHistoryDay {
         generatedAtMillis = generatedAtMillis ?: 0L,
         parkKey = parkKey,
         date = date,
+        openFrom = openFrom,
+        closedFrom = closedFrom,
         snapshots = snapshots.map { it.toDomain() },
         attractions = attractions.map { it.toDomain() },
     )

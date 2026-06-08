@@ -3,10 +3,12 @@ const LATEST_KEY = "app-data/latest.json";
 const TREND_KEY = "app-data/trend-history.json";
 const ATTRACTION_HISTORY_INDEX_KEY = "app-data/attraction-history/index.json";
 const ATTRACTION_HISTORY_PREFIX = "app-data/attraction-history";
+const ATTRACTION_HISTORY_DAILY_PREFIX = "app-data/attraction-history-days";
 const MAX_HISTORY_AGE_MILLIS = 48 * 60 * 60 * 1000;
 const MAX_HISTORY_POINTS_PER_PARK = 96;
 const MAX_ATTRACTION_SNAPSHOTS_PER_DAY = 160;
 const REQUEST_DELAY_MILLIS = 900;
+const DEFAULT_ATTRACTION_HISTORY_SHARDS = 8;
 
 const DEFAULT_PARK_KEYS = [
   "europapark",
@@ -50,7 +52,7 @@ export default {
     if (dayMatch) {
       const parkKey = decodeURIComponent(dayMatch[1]);
       const date = dayMatch[2];
-      return jsonResponse(await readJson(env, attractionDayKey(parkKey, date), emptyAttractionDay(parkKey, date)));
+      return jsonResponse(await readAttractionDay(env, parkKey, date));
     }
 
     if (url.pathname === "/app-data/refresh" && request.method === "POST") {
@@ -75,7 +77,7 @@ export default {
 
 async function updateAppData(env) {
   const now = Date.now();
-  const parkKeys = parseParkKeys(env.APP_DATA_PARK_KEYS);
+  const parkKeys = await resolveParkKeys(env);
   const existingHistory = await readJson(env, TREND_KEY, emptyTrendHistory());
   const historyByPark = new Map(
     existingHistory.parks.map((park) => [park.parkKey, park.snapshots ?? []]),
@@ -84,6 +86,7 @@ async function updateAppData(env) {
   const parks = [];
   const recommendations = [];
   const errors = [];
+  const attractionDayUpdates = [];
 
   for (const parkKey of parkKeys) {
     try {
@@ -113,7 +116,7 @@ async function updateAppData(env) {
       }
 
       if (snapshot.attractions.length > 0) {
-        await updateAttractionHistory(env, snapshot, now);
+        attractionDayUpdates.push(await buildUpdatedAttractionHistory(env, snapshot, now));
       }
 
       if (snapshot.errors.length > 0) {
@@ -143,7 +146,35 @@ async function updateAppData(env) {
 
   await env.APP_DATA.put(LATEST_KEY, JSON.stringify(latest));
   await env.APP_DATA.put(TREND_KEY, JSON.stringify(trendHistory));
+  if (attractionDayUpdates.length > 0) {
+    await writeAttractionHistoryBatch(env, attractionDayUpdates, now);
+  }
   return { ok: true, generatedAtMillis: now, parks: parks.length, errors };
+}
+
+async function resolveParkKeys(env) {
+  const configured = parseParkKeys(env.APP_DATA_PARK_KEYS);
+  const maxParks = parsePositiveInt(env.APP_DATA_MAX_PARKS);
+  if (configured.length > 0) {
+    return maxParks == null ? configured : configured.slice(0, maxParks);
+  }
+
+  try {
+    const parks = await apiJson("/parks", { language: "de" });
+    const discovered = Array.isArray(parks)
+      ? parks
+        .map((park) => park.id || park.uuid || stableAttractionId(park.name))
+        .filter(Boolean)
+      : [];
+    const unique = [...new Set(discovered)];
+    if (unique.length > 0) {
+      return maxParks == null ? unique : unique.slice(0, maxParks);
+    }
+  } catch (error) {
+    console.warn("Could not discover park keys", error);
+  }
+
+  return maxParks == null ? DEFAULT_PARK_KEYS : DEFAULT_PARK_KEYS.slice(0, maxParks);
 }
 
 async function collectParkSnapshot(parkKey, now) {
@@ -245,49 +276,82 @@ function toLatestParkSnapshot(snapshot) {
   return snapshot;
 }
 
-async function updateAttractionHistory(env, snapshot, now) {
+async function buildUpdatedAttractionHistory(env, snapshot, now) {
   const date = isoDate(now);
-  const key = attractionDayKey(snapshot.parkKey, date);
-  const existing = await readJson(env, key, emptyAttractionDay(snapshot.parkKey, date));
+  const existing = await readAttractionDay(env, snapshot.parkKey, date);
   const snapshots = [
     ...(existing.snapshots ?? []).filter((item) => Number(item.capturedAtMillis) !== snapshot.capturedAtMillis),
     {
       capturedAtMillis: snapshot.capturedAtMillis,
+      openedToday: snapshot.openedToday,
+      openFrom: snapshot.openFrom,
+      closedFrom: snapshot.closedFrom,
       attractions: snapshot.attractions,
     },
   ]
     .sort((a, b) => Number(a.capturedAtMillis) - Number(b.capturedAtMillis))
     .slice(-MAX_ATTRACTION_SNAPSHOTS_PER_DAY);
 
-  const dayData = buildAttractionDayData(snapshot.parkKey, date, snapshots, now);
-  await env.APP_DATA.put(key, JSON.stringify(dayData));
-  await updateAttractionHistoryIndex(env, dayData);
+  const openFrom = snapshot.openFrom ?? existing.openFrom ?? snapshots.find((item) => item.openFrom)?.openFrom ?? null;
+  const closedFrom = snapshot.closedFrom ?? existing.closedFrom ?? snapshots.find((item) => item.closedFrom)?.closedFrom ?? null;
+  const cleanedSnapshots = filterOperatingWindowSnapshots(snapshots, openFrom, closedFrom);
+
+  return buildAttractionDayData(snapshot.parkKey, date, cleanedSnapshots, now, openFrom, closedFrom);
 }
 
-async function updateAttractionHistoryIndex(env, dayData) {
+async function writeAttractionHistoryBatch(env, dayUpdates, now) {
+  const byShard = new Map();
+  for (const dayData of dayUpdates) {
+    const shard = attractionHistoryShard(env, dayData.parkKey);
+    const aggregateKey = `${dayData.date}:${shard}`;
+    const aggregate = byShard.get(aggregateKey)
+      ?? await readJson(env, attractionDailyKey(dayData.date, shard), emptyAttractionDaily(dayData.date, shard));
+    const parks = (aggregate.parks ?? []).filter((park) => park.parkKey !== dayData.parkKey);
+    parks.push(dayData);
+    parks.sort((a, b) => a.parkKey.localeCompare(b.parkKey));
+    byShard.set(aggregateKey, {
+      generatedAtMillis: now,
+      date: dayData.date,
+      shard,
+      parks,
+    });
+  }
+
+  for (const aggregate of byShard.values()) {
+    await env.APP_DATA.put(attractionDailyKey(aggregate.date, aggregate.shard), JSON.stringify(aggregate));
+  }
+
+  await updateAttractionHistoryIndex(env, dayUpdates, now);
+}
+
+async function updateAttractionHistoryIndex(env, dayUpdates, generatedAtMillis) {
   const index = await readJson(env, ATTRACTION_HISTORY_INDEX_KEY, emptyAttractionHistoryIndex());
   const parks = [...(index.parks ?? [])];
-  const existingIndex = parks.findIndex((park) => park.parkKey === dayData.parkKey);
-  const existing = existingIndex >= 0 ? parks[existingIndex] : { parkKey: dayData.parkKey, dates: [] };
-  const dates = [...new Set([...(existing.dates ?? []), dayData.date])].sort();
-  const updated = {
-    parkKey: dayData.parkKey,
-    dates,
-    latestDate: dates[dates.length - 1] ?? dayData.date,
-    attractionCount: dayData.attractions.length,
-    sampleCount: dayData.snapshots.length,
-    updatedAtMillis: dayData.generatedAtMillis,
-    attractions: mergeAttractionIndex(existing.attractions ?? [], dayData),
-  };
-  if (existingIndex >= 0) {
-    parks[existingIndex] = updated;
-  } else {
-    parks.push(updated);
+
+  for (const dayData of dayUpdates) {
+    const existingIndex = parks.findIndex((park) => park.parkKey === dayData.parkKey);
+    const existing = existingIndex >= 0 ? parks[existingIndex] : { parkKey: dayData.parkKey, dates: [] };
+    const dates = [...new Set([...(existing.dates ?? []), dayData.date])].sort();
+    const updated = {
+      parkKey: dayData.parkKey,
+      dates,
+      latestDate: dates[dates.length - 1] ?? dayData.date,
+      attractionCount: dayData.attractions.length,
+      sampleCount: dayData.snapshots.length,
+      updatedAtMillis: dayData.generatedAtMillis,
+      attractions: mergeAttractionIndex(existing.attractions ?? [], dayData),
+    };
+    if (existingIndex >= 0) {
+      parks[existingIndex] = updated;
+    } else {
+      parks.push(updated);
+    }
   }
+
   parks.sort((a, b) => a.parkKey.localeCompare(b.parkKey));
   await env.APP_DATA.put(
     ATTRACTION_HISTORY_INDEX_KEY,
-    JSON.stringify({ generatedAtMillis: dayData.generatedAtMillis, parks }),
+    JSON.stringify({ generatedAtMillis, parks }),
   );
 }
 
@@ -308,7 +372,7 @@ function mergeAttractionIndex(existingAttractions, dayData) {
   return [...byId.values()].sort((a, b) => String(a.name).localeCompare(String(b.name)));
 }
 
-function buildAttractionDayData(parkKey, date, snapshots, generatedAtMillis) {
+function buildAttractionDayData(parkKey, date, snapshots, generatedAtMillis, openFrom = null, closedFrom = null) {
   const attractionsById = new Map();
   for (const snapshot of snapshots) {
     for (const item of snapshot.attractions ?? []) {
@@ -347,9 +411,39 @@ function buildAttractionDayData(parkKey, date, snapshots, generatedAtMillis) {
     generatedAtMillis,
     parkKey,
     date,
+    openFrom: openFrom ?? snapshots.find((snapshot) => snapshot.openFrom)?.openFrom ?? null,
+    closedFrom: closedFrom ?? snapshots.find((snapshot) => snapshot.closedFrom)?.closedFrom ?? null,
     snapshots,
     attractions,
   };
+}
+
+function filterOperatingWindowSnapshots(snapshots, openFrom, closedFrom) {
+  const openAtMillis = parseDateMillis(openFrom);
+  const closeAtMillis = parseDateMillis(closedFrom);
+  if (openAtMillis == null && closeAtMillis == null) return snapshots;
+  const firstOpenAttractionMillis = snapshots
+    .filter((snapshot) => (snapshot.attractions ?? []).some((attraction) => Number(attraction.statusCode) === 0 && Number(attraction.value) >= 0))
+    .map((snapshot) => Number(snapshot.capturedAtMillis))
+    .filter(Number.isFinite)
+    .sort((a, b) => a - b)[0];
+  const startAtMillis = openAtMillis != null && firstOpenAttractionMillis != null
+    ? Math.min(openAtMillis, firstOpenAttractionMillis)
+    : (openAtMillis ?? firstOpenAttractionMillis);
+
+  return snapshots.filter((snapshot) => {
+    const capturedAtMillis = Number(snapshot.capturedAtMillis);
+    if (!Number.isFinite(capturedAtMillis)) return false;
+    if (startAtMillis != null && capturedAtMillis < startAtMillis) return false;
+    if (closeAtMillis != null && capturedAtMillis > closeAtMillis) return false;
+    return true;
+  });
+}
+
+function parseDateMillis(value) {
+  if (!value) return null;
+  const millis = Date.parse(value);
+  return Number.isFinite(millis) ? millis : null;
 }
 
 function toAttractionSnapshotItem(item) {
@@ -392,6 +486,16 @@ async function readJson(env, key, fallback) {
   }
 }
 
+async function readAttractionDay(env, parkKey, date) {
+  const aggregate = await readJson(env, attractionDailyKey(date, attractionHistoryShard(env, parkKey)), null);
+  const day = aggregate?.parks?.find((park) => park.parkKey === parkKey);
+  if (day) return day;
+  const unshardedAggregate = await readJson(env, attractionDailyKey(date), null);
+  const unshardedDay = unshardedAggregate?.parks?.find((park) => park.parkKey === parkKey);
+  if (unshardedDay) return unshardedDay;
+  return readJson(env, attractionDayKey(parkKey, date), emptyAttractionDay(parkKey, date));
+}
+
 function emptyLatest() {
   return { generatedAtMillis: 0, parks: [], recommendations: [], errors: [] };
 }
@@ -405,11 +509,21 @@ function emptyAttractionHistoryIndex() {
 }
 
 function emptyAttractionDay(parkKey, date) {
-  return { generatedAtMillis: 0, parkKey, date, snapshots: [], attractions: [] };
+  return { generatedAtMillis: 0, parkKey, date, openFrom: null, closedFrom: null, snapshots: [], attractions: [] };
+}
+
+function emptyAttractionDaily(date, shard = 0) {
+  return { generatedAtMillis: 0, date, shard, parks: [] };
 }
 
 function attractionDayKey(parkKey, date) {
   return `${ATTRACTION_HISTORY_PREFIX}/${parkKey}/${date}.json`;
+}
+
+function attractionDailyKey(date, shard = null) {
+  return shard == null
+    ? `${ATTRACTION_HISTORY_DAILY_PREFIX}/${date}.json`
+    : `${ATTRACTION_HISTORY_DAILY_PREFIX}/${date}/shard-${shard}.json`;
 }
 
 function stableAttractionId(name) {
@@ -441,10 +555,28 @@ function jsonResponse(value, status = 200) {
 }
 
 function parseParkKeys(value) {
-  return String(value || DEFAULT_PARK_KEYS.join(","))
+  return String(value || "")
     .split(",")
     .map((item) => item.trim())
     .filter(Boolean);
+}
+
+function parsePositiveInt(value) {
+  const parsed = Number(value);
+  return Number.isInteger(parsed) && parsed > 0 ? parsed : null;
+}
+
+function attractionHistoryShard(env, parkKey) {
+  const shardCount = parsePositiveInt(env.APP_DATA_HISTORY_SHARDS) ?? DEFAULT_ATTRACTION_HISTORY_SHARDS;
+  return hashString(parkKey) % shardCount;
+}
+
+function hashString(value) {
+  let hash = 0;
+  for (let index = 0; index < String(value).length; index += 1) {
+    hash = ((hash << 5) - hash + String(value).charCodeAt(index)) | 0;
+  }
+  return Math.abs(hash);
 }
 
 function delay(ms) {

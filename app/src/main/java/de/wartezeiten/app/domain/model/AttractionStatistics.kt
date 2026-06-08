@@ -29,6 +29,8 @@ data class AttractionHistoryDay(
     val generatedAtMillis: Long,
     val parkKey: String,
     val date: String,
+    val openFrom: String? = null,
+    val closedFrom: String? = null,
     val snapshots: List<AttractionHistorySnapshot>,
     val attractions: List<AttractionHistorySummary>,
 )

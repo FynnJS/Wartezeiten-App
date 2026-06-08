@@ -22,6 +22,7 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import java.time.Instant
 import java.time.LocalDate
 import javax.inject.Inject
 
@@ -82,7 +83,7 @@ data class StatisticsUiState(
     val selectedSeries: List<AttractionChartPoint>
         get() {
             val attractionId = selectedAttractionId ?: return emptyList()
-            return day?.snapshots.orEmpty().mapNotNull { snapshot ->
+            return day?.operatingSnapshots().orEmpty().mapNotNull { snapshot ->
                 val point = snapshot.attractions.firstOrNull { it.id == attractionId } ?: return@mapNotNull null
                 AttractionChartPoint(
                     capturedAtMillis = snapshot.capturedAtMillis,
@@ -93,7 +94,7 @@ data class StatisticsUiState(
         }
 
     val parkSeries: List<ParkChartPoint>
-        get() = day?.snapshots.orEmpty().mapNotNull { snapshot ->
+        get() = day?.operatingSnapshots().orEmpty().mapNotNull { snapshot ->
             val openValues = snapshot.attractions
                 .filter { it.isOpenWaitPoint }
                 .map { it.value }
@@ -380,6 +381,29 @@ private fun AttractionHistoryDay.hasMeasurements(): Boolean {
     return snapshots.any { snapshot -> snapshot.attractions.isNotEmpty() }
 }
 
+private fun AttractionHistoryDay.operatingSnapshots(): List<AttractionHistorySnapshot> {
+    val openAtMillis = openFrom?.parseInstantMillis()
+    val closeAtMillis = closedFrom?.parseInstantMillis()
+    if (openAtMillis == null && closeAtMillis == null) return snapshots
+
+    val firstOpenAttractionMillis = snapshots
+        .filter { snapshot -> snapshot.attractions.any { it.isOpenWaitPoint } }
+        .minOfOrNull { it.capturedAtMillis }
+    val startAtMillis = when {
+        openAtMillis != null && firstOpenAttractionMillis != null -> minOf(openAtMillis, firstOpenAttractionMillis)
+        openAtMillis != null -> openAtMillis
+        else -> firstOpenAttractionMillis
+    }
+    return snapshots.filter { snapshot ->
+        (startAtMillis == null || snapshot.capturedAtMillis >= startAtMillis) &&
+                (closeAtMillis == null || snapshot.capturedAtMillis <= closeAtMillis)
+    }
+}
+
+private fun String.parseInstantMillis(): Long? {
+    return runCatching { Instant.parse(this).toEpochMilli() }.getOrNull()
+}
+
 private fun buildCurrentDaySnapshot(
     parkKey: String,
     date: String,
@@ -412,6 +436,8 @@ private fun buildCurrentDaySnapshot(
         generatedAtMillis = capturedAtMillis,
         parkKey = parkKey,
         date = date,
+        openFrom = null,
+        closedFrom = null,
         snapshots = listOf(
             AttractionHistorySnapshot(
                 capturedAtMillis = capturedAtMillis,

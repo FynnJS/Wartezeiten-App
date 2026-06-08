@@ -170,6 +170,7 @@ fun StatisticsScreen(
                         }
                         item {
                             ParkAverageWaitChart(
+                                day = state.day,
                                 points = state.parkSeries,
                                 modifier = Modifier
                                     .fillMaxWidth()
@@ -191,6 +192,7 @@ fun StatisticsScreen(
                     }
                     item {
                         AttractionHistoryChart(
+                            day = state.day,
                             points = state.selectedSeries,
                             modifier = Modifier
                                 .fillMaxWidth()
@@ -369,7 +371,14 @@ private fun SelectedAttractionSummary(
     attraction: AttractionHistorySummary,
     series: List<AttractionChartPoint>,
 ) {
-    val statusText = attraction.lastValue?.let(::valueLabel) ?: "-"
+    val openValues = series.filter { it.value >= 0 }.map { it.value }
+    val statusText = series.lastOrNull()?.value?.let(::valueLabel) ?: attraction.lastValue?.let(::valueLabel) ?: "-"
+    val averageWaitText = openValues.takeIf { it.isNotEmpty() }
+        ?.let { "${String.format(Locale.GERMAN, "%.1f", it.average())} Min." }
+        ?: "-"
+    val minWaitText = openValues.minOrNull()?.toString() ?: "-"
+    val maxWaitText = openValues.maxOrNull()?.toString() ?: "-"
+    val closedCount = series.count { it.value < 0 || it.statusCode < 0 }
     OutlinedCard(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(14.dp),
@@ -378,14 +387,14 @@ private fun SelectedAttractionSummary(
         Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
             Text(attraction.name, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxWidth()) {
-                StatTile("Ø Wartezeit", attraction.averageWaitMinutes?.let { "${String.format(Locale.GERMAN, "%.1f", it)} Min." } ?: "-", Modifier.weight(1f))
-                StatTile("Min/Max", "${attraction.minWaitMinutes ?: "-"} / ${attraction.maxWaitMinutes ?: "-"}", Modifier.weight(1f))
+                StatTile("Ø Wartezeit", averageWaitText, Modifier.weight(1f))
+                StatTile("Min/Max", "$minWaitText / $maxWaitText", Modifier.weight(1f))
                 StatTile("Zuletzt", statusText, Modifier.weight(1f))
             }
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxWidth()) {
                 StatTile("Messpunkte", series.size.toString(), Modifier.weight(1f))
-                StatTile("Offen", "${attraction.openSampleCount}", Modifier.weight(1f))
-                StatTile("Geschlossen", "${attraction.closedSampleCount}", Modifier.weight(1f))
+                StatTile("Offen", openValues.size.toString(), Modifier.weight(1f))
+                StatTile("Geschlossen", closedCount.toString(), Modifier.weight(1f))
             }
         }
     }
@@ -437,15 +446,16 @@ private fun SelectedParkSummary(
 
 @Composable
 private fun AttractionHistoryChart(
+    day: de.wartezeiten.app.domain.model.AttractionHistoryDay?,
     points: List<AttractionChartPoint>,
     modifier: Modifier = Modifier,
 ) {
-    val waitPoints = remember(points) {
+    val allWaitPoints = remember(points) {
         points
             .filter { it.value >= 0 }
             .sortedBy { it.capturedAtMillis }
     }
-    if (waitPoints.size < 2) {
+    if (allWaitPoints.size < 2) {
         OutlinedCard(modifier = modifier, shape = RoundedCornerShape(14.dp)) {
             Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                 Text("Noch zu wenige Messpunkte", color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -455,13 +465,26 @@ private fun AttractionHistoryChart(
     }
 
     val sortedPoints = remember(points) { points.sortedBy { it.capturedAtMillis } }
-    val minTime = sortedPoints.first().capturedAtMillis
-    val maxTime = sortedPoints.last().capturedAtMillis.coerceAtLeast(minTime + 1)
+    val axisBounds = remember(day, sortedPoints) {
+        calculateAxisBounds(
+            timestamps = sortedPoints.map { it.capturedAtMillis },
+            openFrom = day?.openFrom,
+            closedFrom = day?.closedFrom,
+            firstOpenAtMillis = allWaitPoints.firstOrNull()?.capturedAtMillis,
+        )
+    }
+    val minTime = axisBounds.first
+    val maxTime = axisBounds.second.coerceAtLeast(minTime + 1)
     val midTime = minTime + ((maxTime - minTime) / 2)
-    val maxWait = waitPoints.maxOf { it.value }
-    val yMax = ceil(maxWait / 10f).toInt().times(10).coerceAtLeast(10)
-    val yMid = (yMax / 2f).roundToNiceLabel()
-    val statusPoints = remember(points) { points.filter { it.value < 0 || it.statusCode < 0 } }
+    val visiblePoints = remember(sortedPoints, minTime, maxTime) {
+        sortedPoints.filter { it.capturedAtMillis in minTime..maxTime }
+    }
+    val waitPoints = remember(visiblePoints) { visiblePoints.filter { it.value >= 0 } }
+    val statusPoints = remember(visiblePoints) { visiblePoints.filter { it.value < 0 || it.statusCode < 0 } }
+    val yMax = remember(waitPoints) { calculateNiceYAxisMax(waitPoints.maxOfOrNull { it.value } ?: 0) }
+    val yStep = remember(yMax) { calculateNiceTickStep(yMax) }
+    val yLabels = remember(yMax, yStep) { (0..yMax step yStep).toList() }
+    val hasStatusLane = statusPoints.isNotEmpty()
     val timeFormatter = remember { DateTimeFormatter.ofPattern("HH:mm").withZone(ZoneId.systemDefault()) }
 
     OutlinedCard(modifier = modifier, shape = RoundedCornerShape(14.dp)) {
@@ -473,13 +496,15 @@ private fun AttractionHistoryChart(
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
             ) {
                 Column(
-                    modifier = Modifier.fillMaxHeight(),
+                    modifier = Modifier
+                        .fillMaxHeight()
+                        .padding(bottom = if (hasStatusLane) 18.dp else 0.dp),
                     verticalArrangement = Arrangement.SpaceBetween,
                     horizontalAlignment = Alignment.End,
                 ) {
-                    Text("$yMax", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    Text("$yMid", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    Text("0", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    yLabels.asReversed().forEach { label ->
+                        Text("$label", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
                 }
                 Canvas(
                     modifier = Modifier
@@ -489,11 +514,21 @@ private fun AttractionHistoryChart(
                     val horizontalPadding = 4.dp.toPx()
                     val verticalPadding = 8.dp.toPx()
                     val width = size.width - horizontalPadding * 2
+                    val statusLaneHeight = if (hasStatusLane) 18.dp.toPx() else 0f
                     val height = size.height - verticalPadding * 2
+                    val waitHeight = (height - statusLaneHeight).coerceAtLeast(1f)
                     val range = yMax.coerceAtLeast(1).toFloat()
 
-                    repeat(4) { index ->
-                        val y = verticalPadding + (height * index / 3f)
+                    fun xFor(timestampMillis: Long): Float {
+                        return horizontalPadding + ((timestampMillis - minTime).toFloat() / (maxTime - minTime).toFloat()) * width
+                    }
+
+                    fun yFor(value: Float): Float {
+                        return verticalPadding + (1f - (value / range).coerceIn(0f, 1f)) * waitHeight
+                    }
+
+                    yLabels.forEach { label ->
+                        val y = yFor(label.toFloat())
                         drawLine(
                             color = Color.Gray.copy(alpha = 0.18f),
                             start = Offset(horizontalPadding, y),
@@ -504,8 +539,8 @@ private fun AttractionHistoryChart(
 
                     val path = Path()
                     waitPoints.forEachIndexed { index, point ->
-                        val x = horizontalPadding + ((point.capturedAtMillis - minTime).toFloat() / (maxTime - minTime).toFloat()) * width
-                        val y = verticalPadding + (1f - (point.value / range).coerceIn(0f, 1f)) * height
+                        val x = xFor(point.capturedAtMillis)
+                        val y = yFor(point.value.toFloat())
                         if (index == 0) path.moveTo(x, y) else path.lineTo(x, y)
                     }
                     drawPath(
@@ -514,8 +549,8 @@ private fun AttractionHistoryChart(
                         style = Stroke(width = 3.dp.toPx(), cap = StrokeCap.Round),
                     )
                     waitPoints.forEach { point ->
-                        val x = horizontalPadding + ((point.capturedAtMillis - minTime).toFloat() / (maxTime - minTime).toFloat()) * width
-                        val y = verticalPadding + (1f - (point.value / range).coerceIn(0f, 1f)) * height
+                        val x = xFor(point.capturedAtMillis)
+                        val y = yFor(point.value.toFloat())
                         drawCircle(
                             color = Color(0xFF1565C0),
                             radius = 3.dp.toPx(),
@@ -523,11 +558,17 @@ private fun AttractionHistoryChart(
                         )
                     }
                     statusPoints.forEach { point ->
-                        val x = horizontalPadding + ((point.capturedAtMillis - minTime).toFloat() / (maxTime - minTime).toFloat()) * width
+                        val x = xFor(point.capturedAtMillis)
+                        val laneIndex = when (point.statusCode) {
+                            -3 -> 2
+                            -2 -> 1
+                            else -> 0
+                        }
+                        val y = verticalPadding + waitHeight + (statusLaneHeight * (laneIndex + 1) / 4f)
                         drawCircle(
                             color = statusColor(point.statusCode),
                             radius = 3.dp.toPx(),
-                            center = Offset(x, verticalPadding + height),
+                            center = Offset(x, y),
                         )
                     }
                 }
@@ -573,6 +614,7 @@ private fun StatusLegendItem(label: String, color: Color) {
 
 @Composable
 private fun ParkAverageWaitChart(
+    day: de.wartezeiten.app.domain.model.AttractionHistoryDay?,
     points: List<ParkChartPoint>,
     modifier: Modifier = Modifier,
 ) {
@@ -586,12 +628,25 @@ private fun ParkAverageWaitChart(
     }
 
     val sortedPoints = remember(points) { points.sortedBy { it.capturedAtMillis } }
-    val minTime = sortedPoints.first().capturedAtMillis
-    val maxTime = sortedPoints.last().capturedAtMillis.coerceAtLeast(minTime + 1)
+    val axisBounds = remember(day, sortedPoints) {
+        calculateAxisBounds(
+            timestamps = sortedPoints.map { it.capturedAtMillis },
+            openFrom = day?.openFrom,
+            closedFrom = day?.closedFrom,
+            firstOpenAtMillis = sortedPoints.firstOrNull()?.capturedAtMillis,
+        )
+    }
+    val minTime = axisBounds.first
+    val maxTime = axisBounds.second.coerceAtLeast(minTime + 1)
     val midTime = minTime + ((maxTime - minTime) / 2)
-    val maxWait = sortedPoints.maxOf { it.averageWaitMinutes }
-    val yMax = ceil(maxWait / 10f).toInt().times(10).coerceAtLeast(10)
-    val yMid = (yMax / 2f).roundToNiceLabel()
+    val visiblePoints = remember(sortedPoints, minTime, maxTime) {
+        sortedPoints.filter { it.capturedAtMillis in minTime..maxTime }
+    }
+    val yMax = remember(visiblePoints) {
+        calculateNiceYAxisMax(ceil(visiblePoints.maxOfOrNull { it.averageWaitMinutes } ?: 0f).toInt())
+    }
+    val yStep = remember(yMax) { calculateNiceTickStep(yMax) }
+    val yLabels = remember(yMax, yStep) { (0..yMax step yStep).toList() }
     val timeFormatter = remember { DateTimeFormatter.ofPattern("HH:mm").withZone(ZoneId.systemDefault()) }
 
     OutlinedCard(modifier = modifier, shape = RoundedCornerShape(14.dp)) {
@@ -607,9 +662,9 @@ private fun ParkAverageWaitChart(
                     verticalArrangement = Arrangement.SpaceBetween,
                     horizontalAlignment = Alignment.End,
                 ) {
-                    Text("$yMax", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    Text("$yMid", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    Text("0", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    yLabels.asReversed().forEach { label ->
+                        Text("$label", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
                 }
                 Canvas(
                     modifier = Modifier
@@ -622,8 +677,16 @@ private fun ParkAverageWaitChart(
                     val height = size.height - verticalPadding * 2
                     val range = yMax.coerceAtLeast(1).toFloat()
 
-                    repeat(4) { index ->
-                        val y = verticalPadding + (height * index / 3f)
+                    fun xFor(timestampMillis: Long): Float {
+                        return horizontalPadding + ((timestampMillis - minTime).toFloat() / (maxTime - minTime).toFloat()) * width
+                    }
+
+                    fun yFor(value: Float): Float {
+                        return verticalPadding + (1f - (value / range).coerceIn(0f, 1f)) * height
+                    }
+
+                    yLabels.forEach { label ->
+                        val y = yFor(label.toFloat())
                         drawLine(
                             color = Color.Gray.copy(alpha = 0.18f),
                             start = Offset(horizontalPadding, y),
@@ -633,9 +696,9 @@ private fun ParkAverageWaitChart(
                     }
 
                     val path = Path()
-                    sortedPoints.forEachIndexed { index, point ->
-                        val x = horizontalPadding + ((point.capturedAtMillis - minTime).toFloat() / (maxTime - minTime).toFloat()) * width
-                        val y = verticalPadding + (1f - (point.averageWaitMinutes / range).coerceIn(0f, 1f)) * height
+                    visiblePoints.forEachIndexed { index, point ->
+                        val x = xFor(point.capturedAtMillis)
+                        val y = yFor(point.averageWaitMinutes)
                         if (index == 0) path.moveTo(x, y) else path.lineTo(x, y)
                     }
                     drawPath(
@@ -643,9 +706,9 @@ private fun ParkAverageWaitChart(
                         color = Color(0xFF2E7D32),
                         style = Stroke(width = 3.dp.toPx(), cap = StrokeCap.Round),
                     )
-                    sortedPoints.forEach { point ->
-                        val x = horizontalPadding + ((point.capturedAtMillis - minTime).toFloat() / (maxTime - minTime).toFloat()) * width
-                        val y = verticalPadding + (1f - (point.averageWaitMinutes / range).coerceIn(0f, 1f)) * height
+                    visiblePoints.forEach { point ->
+                        val x = xFor(point.capturedAtMillis)
+                        val y = yFor(point.averageWaitMinutes)
                         drawCircle(
                             color = Color(0xFF2E7D32),
                             radius = 3.dp.toPx(),
@@ -798,8 +861,45 @@ private fun Float?.minutesText(): String {
     return this?.let { "${String.format(Locale.GERMAN, "%.1f", it)} Min." } ?: "-"
 }
 
-private fun Float.roundToNiceLabel(): Int {
-    return ceil(this / 5f).toInt().times(5).coerceAtLeast(5)
+private fun calculateAxisBounds(
+    timestamps: List<Long>,
+    openFrom: String?,
+    closedFrom: String?,
+    firstOpenAtMillis: Long?,
+): Pair<Long, Long> {
+    val firstSample = timestamps.minOrNull() ?: 0L
+    val lastSample = timestamps.maxOrNull() ?: (firstSample + 1)
+    val parkOpen = openFrom?.parseInstantMillis()
+    val parkClose = closedFrom?.parseInstantMillis()
+    val start = when {
+        parkOpen != null && firstOpenAtMillis != null -> minOf(parkOpen, firstOpenAtMillis)
+        parkOpen != null -> parkOpen
+        firstOpenAtMillis != null -> firstOpenAtMillis
+        else -> firstSample
+    }
+    val end = parkClose ?: lastSample
+    return start.coerceAtMost(lastSample) to end.coerceAtLeast(start + 1)
+}
+
+private fun String.parseInstantMillis(): Long? {
+    return runCatching { Instant.parse(this).toEpochMilli() }.getOrNull()
+}
+
+private fun calculateNiceYAxisMax(maxValue: Int): Int {
+    val step = calculateNiceTickStep(maxValue.coerceAtLeast(1))
+    return ceil(maxValue.coerceAtLeast(step).toFloat() / step).toInt()
+        .times(step)
+        .coerceAtLeast(step * 2)
+}
+
+private fun calculateNiceTickStep(maxValue: Int): Int {
+    return when {
+        maxValue <= 10 -> 5
+        maxValue <= 40 -> 10
+        maxValue <= 80 -> 20
+        maxValue <= 200 -> 50
+        else -> 100
+    }
 }
 
 private fun formatDateLabel(value: String): String {
