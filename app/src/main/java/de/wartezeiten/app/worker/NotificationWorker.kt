@@ -82,16 +82,20 @@ class NotificationWorker @AssistedInject constructor(
                 val waitingTimes = safeApiCall { api.getWaitingTimes(parkKey, language) }
                 val crowdLevel = safeApiCall { api.getCrowdLevel(parkKey) }
                 val opening = openingTimes?.firstOrNull()
-                val isParkOpen = isParkCurrentlyOpen(
-                    openedToday = opening?.openedToday,
-                    openFrom = opening?.opening,
-                    closedFrom = opening?.closing,
-                )
+                val isParkOpen = opening?.let {
+                    isParkCurrentlyOpen(
+                        openedToday = it.openedToday,
+                        openFrom = it.opening,
+                        closedFrom = it.closing,
+                    )
+                }
                 val liveWaitingTimes = waitingTimes.orEmpty()
-                val canUseLiveAttractionAlerts = isParkOpen &&
+                val canUseLiveAttractionAlerts = isParkOpen == true &&
                         liveWaitingTimes.any { it.normalizedStatus() == "opened" }
 
-                collectParkNotifications(parkKey, parkName, isParkOpen, alerts, notifications)
+                if (isParkOpen != null) {
+                    collectParkNotifications(parkKey, parkName, isParkOpen, alerts, notifications)
+                }
 
                 val crowdValue = crowdLevel?.crowdLevel?.replace(",", ".")?.toFloatOrNull()
                 collectCrowdNotifications(parkKey, parkName, canUseLiveAttractionAlerts, crowdValue, alerts, notifications)

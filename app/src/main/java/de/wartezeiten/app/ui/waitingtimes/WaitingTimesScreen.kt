@@ -84,6 +84,7 @@ import de.wartezeiten.app.domain.model.OpeningTimes
 import de.wartezeiten.app.domain.model.Park
 import de.wartezeiten.app.domain.model.WaitingTime
 import de.wartezeiten.app.domain.model.WeatherInfo
+import de.wartezeiten.app.ui.components.AttributionBanner
 import java.time.Instant
 import java.time.LocalDate
 import java.time.LocalTime
@@ -157,6 +158,9 @@ fun WaitingTimesScreen(
             SnackbarHost(snackbarHostState) { data ->
                 RefreshSnackbar(data = data)
             }
+        },
+        bottomBar = {
+            AttributionBanner(language = state.language)
         },
         topBar = {
             TopAppBar(
@@ -290,6 +294,7 @@ fun WaitingTimesScreen(
             parkKey = state.park.id,
             attractionId = selectedAttractionId,
             attractionName = attractionName,
+            language = state.language,
             onDismiss = {
                 showAddWatchlistDialog = false
                 selectedAttractionId = null

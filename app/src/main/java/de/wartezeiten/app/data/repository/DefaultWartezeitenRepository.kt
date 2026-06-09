@@ -377,17 +377,23 @@ class DefaultWartezeitenRepository @Inject constructor(
                 )
             }
             (crowdResult as? ApiResult.Success)?.let {
-                val openAttractions = if (waitingResult is ApiResult.Success) {
-                    waitingResult.data.count { currentlyOpen && it.status.equals("opened", ignoreCase = true) }
-                } else {
-                    0
-                }
+                parkDetailDao.upsertCrowdLevel(it.data.toEntity(parkKey, now))
+            }
+
+            if (openingResult is ApiResult.Success || waitingResult is ApiResult.Success || crowdResult is ApiResult.Success) {
+                val openAttractions = (waitingResult as? ApiResult.Success)
+                    ?.data
+                    ?.count { currentlyOpen && it.status.equals("opened", ignoreCase = true) }
+                    ?: 0
+                val totalAttractions = (waitingResult as? ApiResult.Success)?.data?.size ?: 0
                 val canDisplayCrowdLevel = currentlyOpen && openAttractions > 0
-                val apiCrowdLevel = it.data.crowdLevel?.replace(",", ".")?.toFloatOrNull()
+                val apiCrowdLevel = (crowdResult as? ApiResult.Success)
+                    ?.data
+                    ?.crowdLevel
+                    ?.replace(",", ".")
+                    ?.toFloatOrNull()
                 val displayCrowdLevel = apiCrowdLevel.takeIf { canDisplayCrowdLevel }
 
-                parkDetailDao.upsertCrowdLevel(it.data.toEntity(parkKey, now))
-                
                 parkSnapshotDao.insert(
                     ParkSnapshotEntity(
                         parkKey = parkKey,
@@ -399,7 +405,7 @@ class DefaultWartezeitenRepository @Inject constructor(
                         openFrom = openFrom,
                         closedFrom = closedFrom,
                         openAttractions = openAttractions,
-                        totalAttractions = if (waitingResult is ApiResult.Success) waitingResult.data.size else 0
+                        totalAttractions = totalAttractions
                     )
                 )
             }

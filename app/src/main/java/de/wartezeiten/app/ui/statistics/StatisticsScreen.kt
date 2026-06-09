@@ -172,6 +172,7 @@ fun StatisticsScreen(
                         item {
                             ParkAverageWaitChart(
                                 day = state.day,
+                                selectedDate = state.selectedDate,
                                 points = state.parkSeries,
                                 modifier = Modifier
                                     .fillMaxWidth()
@@ -199,6 +200,7 @@ fun StatisticsScreen(
                     item {
                         AttractionHistoryChart(
                             day = state.day,
+                            selectedDate = state.selectedDate,
                             points = state.selectedSeries,
                             modifier = Modifier
                                 .fillMaxWidth()
@@ -458,6 +460,7 @@ private fun SelectedParkSummary(
 @Composable
 private fun AttractionHistoryChart(
     day: de.wartezeiten.app.domain.model.AttractionHistoryDay?,
+    selectedDate: String,
     points: List<AttractionChartPoint>,
     modifier: Modifier = Modifier,
 ) {
@@ -482,6 +485,8 @@ private fun AttractionHistoryChart(
             openFrom = day?.openFrom,
             closedFrom = day?.closedFrom,
             firstOpenAtMillis = allWaitPoints.firstOrNull()?.capturedAtMillis,
+            selectedDate = selectedDate,
+            nowMillis = System.currentTimeMillis(),
         )
     }
     val minTime = axisBounds.first
@@ -626,6 +631,7 @@ private fun StatusLegendItem(label: String, color: Color) {
 @Composable
 private fun ParkAverageWaitChart(
     day: de.wartezeiten.app.domain.model.AttractionHistoryDay?,
+    selectedDate: String,
     points: List<ParkChartPoint>,
     modifier: Modifier = Modifier,
 ) {
@@ -645,6 +651,8 @@ private fun ParkAverageWaitChart(
             openFrom = day?.openFrom,
             closedFrom = day?.closedFrom,
             firstOpenAtMillis = sortedPoints.firstOrNull()?.capturedAtMillis,
+            selectedDate = selectedDate,
+            nowMillis = System.currentTimeMillis(),
         )
     }
     val minTime = axisBounds.first
@@ -885,6 +893,8 @@ private fun calculateAxisBounds(
     openFrom: String?,
     closedFrom: String?,
     firstOpenAtMillis: Long?,
+    selectedDate: String,
+    nowMillis: Long,
 ): Pair<Long, Long> {
     val firstSample = timestamps.minOrNull() ?: 0L
     val lastSample = timestamps.maxOrNull() ?: (firstSample + 1)
@@ -896,7 +906,13 @@ private fun calculateAxisBounds(
         firstOpenAtMillis != null -> firstOpenAtMillis
         else -> firstSample
     }
-    val end = parkClose ?: lastSample
+    val rawEnd = parkClose ?: lastSample
+    val today = LocalDate.now().toString()
+    val end = if (selectedDate == today) {
+        minOf(rawEnd, maxOf(nowMillis, lastSample))
+    } else {
+        rawEnd
+    }
     return start.coerceAtMost(lastSample) to end.coerceAtLeast(start + 1)
 }
 

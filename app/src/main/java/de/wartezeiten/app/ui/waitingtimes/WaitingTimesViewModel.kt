@@ -297,7 +297,11 @@ class WaitingTimesViewModel @Inject constructor(
                     lastRefreshed.value = System.currentTimeMillis()
                     if (showFeedback) refreshTrigger.value += 1
                 }
-                is ApiResult.Error -> errorMessage.value = result.type.toUserMessage()
+                is ApiResult.Error -> {
+                    if (!silent || uiState.value.allWaitingTimes.isEmpty()) {
+                        errorMessage.value = result.type.toUserMessage()
+                    }
+                }
             }
             isLoading.value = false
         }

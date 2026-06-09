@@ -451,6 +451,7 @@ fun ParkListScreen(
                 parkKey = park.id,
                 attractionId = null,
                 attractionName = null,
+                language = state.language,
                 onDismiss = {
                     showAddWatchlistDialog = false
                     selectedParkForWatchlist = null

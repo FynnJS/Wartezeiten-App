@@ -37,6 +37,7 @@ fun AddWatchlistDialog(
     parkKey: String,
     attractionId: String?,
     attractionName: String? = null,
+    language: String = "de",
     onDismiss: () -> Unit,
     viewModel: WatchlistViewModel = hiltViewModel()
 ) {
@@ -57,7 +58,11 @@ fun AddWatchlistDialog(
         if (!granted) {
             Toast.makeText(
                 context,
-                "Erlaube Benachrichtigungen, damit Alarme ausgelöst werden können.",
+                if (language == "en") {
+                    "Allow notifications so alerts can be triggered."
+                } else {
+                    "Erlaube Benachrichtigungen, damit Alarme ausgelöst werden können."
+                },
                 Toast.LENGTH_LONG
             ).show()
         }
@@ -111,10 +116,10 @@ fun AddWatchlistDialog(
     )
 
     val thresholdLabel = when (selectedType) {
-        WatchlistType.WAIT_TIME_BELOW -> "Wartezeit unter (Min)"
-        WatchlistType.WAIT_TIME_ABOVE -> "Wartezeit über (Min)"
-        WatchlistType.CROWD_LEVEL_BELOW -> "Auslastung unter (%)"
-        WatchlistType.CROWD_LEVEL_ABOVE -> "Auslastung über (%)"
+        WatchlistType.WAIT_TIME_BELOW -> if (language == "en") "Wait time below (min)" else "Wartezeit unter (Min.)"
+        WatchlistType.WAIT_TIME_ABOVE -> if (language == "en") "Wait time above (min)" else "Wartezeit über (Min.)"
+        WatchlistType.CROWD_LEVEL_BELOW -> if (language == "en") "Crowd level below (%)" else "Auslastung unter (%)"
+        WatchlistType.CROWD_LEVEL_ABOVE -> if (language == "en") "Crowd level above (%)" else "Auslastung über (%)"
         else -> ""
     }
     val thresholdValue = threshold.toIntOrNull()
@@ -130,19 +135,22 @@ fun AddWatchlistDialog(
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Park-Alarm erstellen") },
+        title = { Text(if (language == "en") "Create park alert" else "Park-Alarm erstellen") },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 if (attractionName != null) {
                     Text(
-                        text = "Attraktion: $attractionName",
+                        text = if (language == "en") "Attraction: $attractionName" else "Attraktion: $attractionName",
                         maxLines = 2
                     )
                 } else {
-                    Text("Parkweiter Alarm")
+                    Text(if (language == "en") "Park-wide alert" else "Parkweiter Alarm")
                 }
 
-                Text("Wobei soll ich dich anstupsen?", style = MaterialTheme.typography.titleSmall)
+                Text(
+                    if (language == "en") "What should trigger the alert?" else "Wobei soll ich dich anstupsen?",
+                    style = MaterialTheme.typography.titleSmall,
+                )
                 Row(
                     modifier = Modifier.horizontalScroll(rememberScrollState()),
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
@@ -151,7 +159,7 @@ fun AddWatchlistDialog(
                         FilterChip(
                             selected = selectedType == type,
                             onClick = { selectedType = type },
-                            label = { Text(type.label(), maxLines = 1) },
+                            label = { Text(type.label(language), maxLines = 1) },
                             shape = RoundedCornerShape(12.dp)
                         )
                     }
@@ -188,14 +196,18 @@ fun AddWatchlistDialog(
 
                 if (isNotificationPermissionRequired && !permissionGranted.value) {
                     Text(
-                        text = "Erlaube Benachrichtigungen, damit dich die App vor Ort rechtzeitig anstupsen kann.",
+                        text = if (language == "en") {
+                            "Allow notifications so the app can alert you in time."
+                        } else {
+                            "Erlaube Benachrichtigungen, damit dich die App vor Ort rechtzeitig anstupsen kann."
+                        },
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.error
                     )
                 }
 
                 Text(
-                    text = selectedType.description(),
+                    text = selectedType.description(language),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -216,17 +228,17 @@ fun AddWatchlistDialog(
                             } else {
                                 Toast.makeText(
                                     context,
-                                    "Diesen Alarm gibt es schon.",
+                                    if (language == "en") "This alert already exists." else "Diesen Alarm gibt es schon.",
                                     Toast.LENGTH_SHORT,
                                 ).show()
                             }
                         }
                     )
                     onDismiss()
-                }) { Text("Speichern") }
+                }) { Text(if (language == "en") "Save" else "Speichern") }
         },
         dismissButton = {
-            TextButton(onClick = onDismiss) { Text("Abbrechen") }
+            TextButton(onClick = onDismiss) { Text(if (language == "en") "Cancel" else "Abbrechen") }
         }
     )
 }
@@ -244,17 +256,17 @@ fun WatchlistType.label(language: String = "de"): String = when (this) {
     WatchlistType.PARK_STATUS_CHANGED -> if (language == "en") "Park ticker" else "Park-Ticker"
 }
 
-private fun WatchlistType.description(): String = when (this) {
-    WatchlistType.WAIT_TIME_BELOW -> "Für spontane Chancen: Du erfährst, wenn eine Wartezeit kurz genug zum Loslaufen ist."
-    WatchlistType.WAIT_TIME_ABOVE -> "Für Planwechsel: Du erfährst, wenn eine Schlange deinen Grenzwert sprengt."
-    WatchlistType.NOW_OPENED -> "Für den Start in den Tag: Du erfährst, wenn der Park heute als geöffnet gemeldet ist."
-    WatchlistType.CROWD_LEVEL_BELOW -> "Für ruhige Momente: Du erfährst, wenn der Park entspannt genug für einen guten Rundgang ist."
-    WatchlistType.CROWD_LEVEL_ABOVE -> "Für Pausenplanung: Du erfährst, wenn der Park voller wird als gewünscht."
-    WatchlistType.ATTRACTION_STATUS_CHANGE -> "Für Favoriten: Du erfährst, wenn sich bei dieser Attraktion etwas ändert."
-    WatchlistType.ATTRACTION_OPEN -> "Für zweite Chancen: Du erfährst, wenn die Attraktion wieder offen ist."
-    WatchlistType.ATTRACTION_CLOSED -> "Für unnötige Wege: Du erfährst, wenn die Attraktion gerade schließt."
-    WatchlistType.ATTRACTION_MAINTENANCE -> "Für Umwege: Du erfährst, wenn die Attraktion in eine Technikpause geht."
-    WatchlistType.PARK_STATUS_CHANGED -> "Für Tagesplanung: Du erfährst, wenn sich der Parkstatus ändert."
+private fun WatchlistType.description(language: String): String = when (this) {
+    WatchlistType.WAIT_TIME_BELOW -> if (language == "en") "For quick chances: you will know when a wait is short enough to head over." else "Für spontane Chancen: Du erfährst, wenn eine Wartezeit kurz genug zum Loslaufen ist."
+    WatchlistType.WAIT_TIME_ABOVE -> if (language == "en") "For route changes: you will know when a queue exceeds your limit." else "Für Planwechsel: Du erfährst, wenn eine Schlange deinen Grenzwert sprengt."
+    WatchlistType.NOW_OPENED -> if (language == "en") "For the start of the day: you will know when the park is reported open today." else "Für den Start in den Tag: Du erfährst, wenn der Park heute als geöffnet gemeldet ist."
+    WatchlistType.CROWD_LEVEL_BELOW -> if (language == "en") "For quieter moments: you will know when the park is relaxed enough for a good round." else "Für ruhige Momente: Du erfährst, wenn der Park entspannt genug für einen guten Rundgang ist."
+    WatchlistType.CROWD_LEVEL_ABOVE -> if (language == "en") "For break planning: you will know when the park gets busier than you want." else "Für Pausenplanung: Du erfährst, wenn der Park voller wird als gewünscht."
+    WatchlistType.ATTRACTION_STATUS_CHANGE -> if (language == "en") "For favorites: you will know when something changes for this attraction." else "Für Favoriten: Du erfährst, wenn sich bei dieser Attraktion etwas ändert."
+    WatchlistType.ATTRACTION_OPEN -> if (language == "en") "For second chances: you will know when the attraction opens again." else "Für zweite Chancen: Du erfährst, wenn die Attraktion wieder offen ist."
+    WatchlistType.ATTRACTION_CLOSED -> if (language == "en") "To avoid wasted walks: you will know when the attraction closes." else "Für unnötige Wege: Du erfährst, wenn die Attraktion gerade schließt."
+    WatchlistType.ATTRACTION_MAINTENANCE -> if (language == "en") "For detours: you will know when the attraction enters maintenance." else "Für Umwege: Du erfährst, wenn die Attraktion in eine Technikpause geht."
+    WatchlistType.PARK_STATUS_CHANGED -> if (language == "en") "For day planning: you will know when the park status changes." else "Für Tagesplanung: Du erfährst, wenn sich der Parkstatus ändert."
 }
 
 data class WatchlistAlertWithParkName(

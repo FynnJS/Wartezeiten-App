@@ -99,7 +99,7 @@ async function updateAppData(env, options = {}) {
   const allParkKeys = await resolveParkKeys(env);
   const parkKeys = options.shardIndex == null
     ? allParkKeys
-    : allParkKeys.filter((parkKey) => attractionHistoryShard(env, parkKey, options.shardCount) === options.shardIndex);
+    : allParkKeys.filter((parkKey) => cronParkShard(parkKey, options.shardCount) === options.shardIndex);
   const existingHistory = options.writeTrend === false
     ? emptyTrendHistory()
     : await readJson(env, TREND_KEY, emptyTrendHistory());
@@ -662,6 +662,10 @@ function attractionHistoryShard(env, parkKey, explicitShardCount = null) {
   const shardCount = explicitShardCount
     ?? parsePositiveInt(env.APP_DATA_HISTORY_SHARDS)
     ?? DEFAULT_ATTRACTION_HISTORY_SHARDS;
+  return hashString(parkKey) % shardCount;
+}
+
+function cronParkShard(parkKey, shardCount) {
   return hashString(parkKey) % shardCount;
 }
 
