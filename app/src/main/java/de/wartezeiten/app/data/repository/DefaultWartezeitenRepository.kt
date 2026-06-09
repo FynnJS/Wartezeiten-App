@@ -371,17 +371,10 @@ class DefaultWartezeitenRepository @Inject constructor(
                 true
             }
             (waitingResult as? ApiResult.Success)?.let {
-                if (currentlyOpen) {
-                    parkDetailDao.replaceWaitingTimes(
-                        parkKey = parkKey,
-                        waitingTimes = it.data.map { dto -> dto.toEntity(parkKey, now) },
-                    )
-                } else {
-                    parkDetailDao.deleteWaitingTimesForPark(parkKey)
-                }
-            }
-            if (openingResult is ApiResult.Success && !currentlyOpen && waitingResult !is ApiResult.Success) {
-                parkDetailDao.deleteWaitingTimesForPark(parkKey)
+                parkDetailDao.replaceWaitingTimes(
+                    parkKey = parkKey,
+                    waitingTimes = it.data.map { dto -> dto.toEntity(parkKey, now) },
+                )
             }
             (crowdResult as? ApiResult.Success)?.let {
                 val openAttractions = if (waitingResult is ApiResult.Success) {
@@ -406,7 +399,7 @@ class DefaultWartezeitenRepository @Inject constructor(
                         openFrom = openFrom,
                         closedFrom = closedFrom,
                         openAttractions = openAttractions,
-                        totalAttractions = if (waitingResult is ApiResult.Success && currentlyOpen) waitingResult.data.size else 0
+                        totalAttractions = if (waitingResult is ApiResult.Success) waitingResult.data.size else 0
                     )
                 )
             }
@@ -523,13 +516,7 @@ class DefaultWartezeitenRepository @Inject constructor(
                         ?: result.data.generatedAtMillis
                         ?: 0L
                     val canUseAttractions = snapshot.attractions.isNotEmpty() &&
-                            now - capturedAt <= RECOMMENDATION_CURRENT_MAX_AGE_MILLIS &&
-                            isParkCurrentlyOpen(
-                                openedToday = snapshot.openedToday,
-                                openFrom = snapshot.openFrom,
-                                closedFrom = snapshot.closedFrom,
-                                nowMillis = now,
-                            )
+                            now - capturedAt <= RECOMMENDATION_CURRENT_MAX_AGE_MILLIS
                     if (canUseAttractions) {
                         parkDetailDao.replaceWaitingTimes(
                             parkKey = snapshot.parkKey,
@@ -544,7 +531,7 @@ class DefaultWartezeitenRepository @Inject constructor(
                                 )
                             },
                         )
-                    } else if (snapshot.openedToday == false || snapshot.attractions.isNotEmpty()) {
+                    } else if (snapshot.attractions.isNotEmpty()) {
                         parkDetailDao.deleteWaitingTimesForPark(snapshot.parkKey)
                     }
                 }

@@ -407,7 +407,11 @@ private fun WaitingTimesContent(
         }
 
         if (state.waitingTimes.isEmpty() && !state.isLoading) {
-            item { EmptyState(language = state.language) }
+            item {
+                EmptyState(
+                    state = state,
+                )
+            }
         } else {
             items(
                 count = state.waitingTimes.size,
@@ -974,12 +978,55 @@ private fun RefreshSnackbar(data: SnackbarData) {
 }
 
 @Composable
-private fun EmptyState(language: String) {
+private fun EmptyState(state: WaitingTimesUiState) {
+    val message = emptyAttractionMessage(state)
     Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
         Text(
-            if (language == "en") "No attractions found." else "Keine Attraktionen gefunden.",
+            message,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
+    }
+}
+
+private fun emptyAttractionMessage(state: WaitingTimesUiState): String {
+    val language = state.language
+    if (state.allWaitingTimes.isNotEmpty()) {
+        return if (language == "en") {
+            "No attractions match the current filters."
+        } else {
+            "Keine Attraktionen passen zu den aktuellen Filtern."
+        }
+    }
+
+    val displayState = parkOpeningDisplayState(
+        openingTimes = state.openingTimes,
+        crowdLevel = state.crowdLevel,
+        waitingTimes = state.allWaitingTimes,
+        currentTimeMillis = state.currentLocalTime,
+        localTimeOffsetSeconds = state.localTimeOffsetSeconds,
+    )
+
+    return when (displayState.tone) {
+        ParkOpeningTone.ClosedToday -> if (language == "en") {
+            "The park is closed today. No current attractions are shown."
+        } else {
+            "Der Park ist heute geschlossen. Es werden keine aktuellen Attraktionen angezeigt."
+        }
+        ParkOpeningTone.OpenOtherTimeToday -> if (language == "en") {
+            "The park is currently closed. Current attractions will appear during opening hours."
+        } else {
+            "Der Park ist aktuell geschlossen. Aktuelle Attraktionen erscheinen während der Öffnungszeiten."
+        }
+        ParkOpeningTone.Unknown -> if (language == "en") {
+            "No current attraction data is available yet."
+        } else {
+            "Noch keine aktuellen Attraktionsdaten verfügbar."
+        }
+        ParkOpeningTone.Open -> if (language == "en") {
+            "No current attraction data is available yet."
+        } else {
+            "Noch keine aktuellen Attraktionsdaten verfügbar."
+        }
     }
 }
 

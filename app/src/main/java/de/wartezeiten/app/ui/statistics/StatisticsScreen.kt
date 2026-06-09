@@ -63,6 +63,7 @@ import de.wartezeiten.app.domain.model.AttractionHistorySummary
 import de.wartezeiten.app.domain.model.Park
 import java.time.Instant
 import java.time.LocalDate
+import java.time.OffsetDateTime
 import java.time.YearMonth
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
@@ -177,8 +178,13 @@ fun StatisticsScreen(
                                     .height(220.dp),
                             )
                         }
-                    } else if (!state.isLoading && state.day != null) {
-                        item { EmptyStatisticsState(state.selectedPark?.name) }
+                    } else if (!state.isLoading && (state.day != null || state.selectedDate == LocalDate.now().toString())) {
+                        item {
+                            EmptyStatisticsState(
+                                selectedName = state.selectedPark?.name,
+                                selectedDate = state.selectedDate,
+                            )
+                        }
                     }
                 }
 
@@ -200,7 +206,12 @@ fun StatisticsScreen(
                         )
                     }
                 } else if (state.selectedAttractionId != null && !state.isLoading && (state.day == null || state.day.snapshots.isEmpty())) {
-                    item { EmptyStatisticsState(state.selectedAttractionName ?: state.selectedPark?.name) }
+                    item {
+                        EmptyStatisticsState(
+                            selectedName = state.selectedAttractionName ?: state.selectedPark?.name,
+                            selectedDate = state.selectedDate,
+                        )
+                    }
                 }
 
                 if (state.monthBuckets.isNotEmpty()) {
@@ -817,19 +828,27 @@ private fun ErrorCard(message: String, onRetry: () -> Unit) {
 }
 
 @Composable
-private fun EmptyStatisticsState(selectedAttractionName: String?) {
+private fun EmptyStatisticsState(
+    selectedName: String?,
+    selectedDate: String,
+) {
+    val isToday = selectedDate == LocalDate.now().toString()
     OutlinedCard(modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(14.dp)) {
         Column(
             modifier = Modifier.padding(18.dp),
             verticalArrangement = Arrangement.spacedBy(6.dp),
         ) {
             Text(
-                text = selectedAttractionName ?: "Keine Attraktion ausgewählt",
+                text = selectedName ?: "Keine Attraktion ausgewählt",
                 style = MaterialTheme.typography.titleSmall,
                 fontWeight = FontWeight.Bold,
             )
             Text(
-                text = "Für diese Auswahl liegen noch keine zentralen Tagesdaten vor. Sobald der Worker Messpunkte gesammelt hat, erscheint hier der Verlauf.",
+                text = if (isToday) {
+                    "Für heute wurden noch keine Messpunkte gesammelt. Der Park ist möglicherweise noch nicht geöffnet oder bleibt heute geschlossen."
+                } else {
+                    "Für diese Auswahl liegen keine zentralen Tagesdaten vor. Wurde der Park an diesem Tag nicht geöffnet, gibt es keinen Verlauf."
+                },
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -882,7 +901,8 @@ private fun calculateAxisBounds(
 }
 
 private fun String.parseInstantMillis(): Long? {
-    return runCatching { Instant.parse(this).toEpochMilli() }.getOrNull()
+    return runCatching { OffsetDateTime.parse(this).toInstant().toEpochMilli() }
+        .getOrElse { runCatching { Instant.parse(this).toEpochMilli() }.getOrNull() }
 }
 
 private fun calculateNiceYAxisMax(maxValue: Int): Int {

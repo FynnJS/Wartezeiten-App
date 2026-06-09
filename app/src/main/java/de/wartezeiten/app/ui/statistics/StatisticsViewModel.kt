@@ -5,6 +5,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
 import de.wartezeiten.app.core.network.ApiResult
+import de.wartezeiten.app.core.network.NetworkError
 import de.wartezeiten.app.core.network.toUserMessage
 import de.wartezeiten.app.domain.model.AttractionHistoryPoint
 import de.wartezeiten.app.domain.model.AttractionHistoryDay
@@ -24,6 +25,7 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import java.time.Instant
 import java.time.LocalDate
+import java.time.OffsetDateTime
 import javax.inject.Inject
 
 data class StatisticsUiState(
@@ -40,7 +42,8 @@ data class StatisticsUiState(
     val availableDates: List<String>
         get() {
             val indexedDates = index.parks.firstOrNull { it.parkKey == selectedParkKey }?.dates.orEmpty()
-            return (indexedDates + selectedDate)
+            val today = LocalDate.now().toString()
+            return (indexedDates + selectedDate + today)
                 .filter { it.isNotBlank() }
                 .distinct()
         }
@@ -313,8 +316,24 @@ class StatisticsViewModel @Inject constructor(
                         )
                     }
                 }
-                is ApiResult.Error -> mutableState.update {
-                    it.copy(isLoading = false, errorMessage = result.type.toUserMessage())
+                is ApiResult.Error -> {
+                    val isMissingToday = result.type == NetworkError.NotFound && date == LocalDate.now().toString()
+                    mutableState.update { state ->
+                        if (isMissingToday) {
+                            state.copy(
+                                day = buildCurrentDaySnapshot(
+                                    parkKey = parkKey,
+                                    date = date,
+                                    parks = state.parks,
+                                    currentAttractions = currentAttractions.value,
+                                ),
+                                isLoading = false,
+                                errorMessage = null,
+                            )
+                        } else {
+                            state.copy(isLoading = false, errorMessage = result.type.toUserMessage())
+                        }
+                    }
                 }
             }
         }
@@ -369,7 +388,7 @@ private fun chooseInitialDate(
     val today = LocalDate.now().toString()
     val hasCurrentAttractions = currentAttractions.any { it.matchesParkKey(parkKey) }
     return when {
-        currentDate != null && currentDate in parkIndexDates -> currentDate
+        currentDate != null && (currentDate in parkIndexDates || currentDate == today) -> currentDate
         today in parkIndexDates -> today
         hasCurrentAttractions && latestDate == null -> today
         latestDate != null -> latestDate
@@ -401,7 +420,8 @@ private fun AttractionHistoryDay.operatingSnapshots(): List<AttractionHistorySna
 }
 
 private fun String.parseInstantMillis(): Long? {
-    return runCatching { Instant.parse(this).toEpochMilli() }.getOrNull()
+    return runCatching { OffsetDateTime.parse(this).toInstant().toEpochMilli() }
+        .getOrElse { runCatching { Instant.parse(this).toEpochMilli() }.getOrNull() }
 }
 
 private fun buildCurrentDaySnapshot(
@@ -420,6 +440,7 @@ private fun buildCurrentDaySnapshot(
         }
         .sortedBy { it.name.lowercase() }
     if (entries.isEmpty()) return null
+    if (entries.none { it.status == AttractionStatus.Opened }) return null
 
     val capturedAtMillis = entries.maxOf { it.updatedAtMillis }
     val points = entries.map { entry ->

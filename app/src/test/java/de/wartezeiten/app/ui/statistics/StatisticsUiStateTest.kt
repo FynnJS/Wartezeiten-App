@@ -9,26 +9,30 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.time.LocalDate
+import java.time.OffsetDateTime
 
 class StatisticsUiStateTest {
     @Test
     fun availableDatesUsesIndexedDatesWhenTodayHasNoMeasurements() {
+        val indexedDate = LocalDate.now().minusDays(1).toString()
+        val today = LocalDate.now().toString()
         val state = StatisticsUiState(
             index = StatisticsIndex(
                 generatedAtMillis = 1L,
                 parks = listOf(
                     parkIndex(
-                        dates = listOf("2026-06-04"),
-                        latestDate = "2026-06-04",
+                        dates = listOf(indexedDate),
+                        latestDate = indexedDate,
                     ),
                 ),
             ),
             selectedParkKey = "europapark",
-            selectedDate = "2026-06-04",
+            selectedDate = indexedDate,
         )
 
-        assertEquals(listOf("2026-06-04"), state.availableDates)
-        assertTrue("2026-06-04" in state.availableDates)
+        assertEquals(listOf(indexedDate, today), state.availableDates)
+        assertTrue(indexedDate in state.availableDates)
+        assertTrue(today in state.availableDates)
     }
 
     @Test
@@ -57,6 +61,37 @@ class StatisticsUiStateTest {
         assertEquals(2, state.parkSeries.size)
         assertEquals(10f, state.parkSeries.first().averageWaitMinutes, 0.001f)
         assertEquals(20f, state.parkStatistics?.latestAverageWaitMinutes ?: -1f, 0.001f)
+    }
+
+    @Test
+    fun offsetOpeningTimesRemoveSnapshotsAfterClosing() {
+        val state = StatisticsUiState(
+            selectedParkKey = "phantasialand",
+            selectedAttractionId = "black-mamba",
+            day = AttractionHistoryDay(
+                generatedAtMillis = 1L,
+                parkKey = "phantasialand",
+                date = "2026-06-06",
+                openFrom = "2026-06-06T09:00:00+02:00",
+                closedFrom = "2026-06-06T18:00:00+02:00",
+                snapshots = listOf(
+                    snapshot(
+                        capturedAtMillis = millis("2026-06-06T10:00:00+02:00"),
+                        point(id = "black-mamba", value = 20, statusCode = 0, status = "opened"),
+                    ),
+                    snapshot(
+                        capturedAtMillis = millis("2026-06-06T23:30:00+02:00"),
+                        point(id = "black-mamba", value = -1, statusCode = -1, status = "closed"),
+                    ),
+                ),
+                attractions = emptyList(),
+            ),
+        )
+
+        assertEquals(1, state.selectedSeries.size)
+        assertEquals(20, state.selectedSeries.single().value)
+        assertEquals(1, state.parkSeries.size)
+        assertEquals(20f, state.parkStatistics?.averageWaitMinutes ?: -1f, 0.001f)
     }
 
     private fun parkIndex(
@@ -97,5 +132,9 @@ class StatisticsUiStateTest {
             statusCode = statusCode,
             status = status,
         )
+    }
+
+    private fun millis(value: String): Long {
+        return OffsetDateTime.parse(value).toInstant().toEpochMilli()
     }
 }
