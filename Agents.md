@@ -117,6 +117,8 @@ Bei jedem Release muss zusätzlich geprüft werden, ob die Projekt-README neue I
   - Unterstützt optionalen Token für private Repos (aktuell nicht nötig)
 - **Repository:** FynnJS/Wartezeiten-App (public)
 - **Status:** ✅ Seit 2026-06-01 integriert und getestet
+- **GitHub-Actions-Fallstrick:** Lange Python-/Shell-Scripte nicht inline per Heredoc in `.github/workflows/*.yml` pflegen. YAML-Einrückung kann den Heredoc-Abschlussmarker beschädigen und den Build im Metadata-Step scheitern lassen. Release-Logik deshalb in versionierte Dateien unter `.github/scripts/` auslagern und im Workflow nur aufrufen.
+- **Release-APK-Pfad:** Die Pipeline darf nicht starr nur `app/build/outputs/apk/release/app-release.apk` erwarten. Bei Änderungen an Android Gradle Plugin, Build-Varianten oder Output-Namen soll das Script die `*.apk` im Release-Output-Verzeichnis ermitteln und bei fehlenden Dateien mit einer klaren Fehlermeldung abbrechen.
 
 ### Website-Updates (2026-06-01)
 - Website synchronisiert mit Live-Version
