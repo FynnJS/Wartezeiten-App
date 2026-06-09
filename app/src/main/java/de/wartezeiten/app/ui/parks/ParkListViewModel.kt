@@ -21,10 +21,14 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import javax.inject.Inject
+
+private const val OPEN_PARK_FILTER_MAX_AGE_MILLIS = 30 * 60 * 1000L
 
 data class ParkListUiState(
     val parks: List<Park> = emptyList(),
@@ -102,7 +106,14 @@ class ParkListViewModel @Inject constructor(
 
     private val allParks = repository.observeParks(null)
     private val currentAttractions = repository.observeCurrentAttractions()
-    private val latestOpenParkKeys = repository.observeLatestOpenParkKeys()
+    private val openParkSnapshotCutoff = flow {
+        while (true) {
+            emit(System.currentTimeMillis() - OPEN_PARK_FILTER_MAX_AGE_MILLIS)
+            delay(60_000L)
+        }
+    }
+    private val latestOpenParkKeys = openParkSnapshotCutoff
+        .flatMapLatest { cutoff -> repository.observeLatestOpenParkKeys(cutoff) }
     private val recommendations = repository.observeParkRecommendations(limit = 5)
 
     @Suppress("UNCHECKED_CAST")

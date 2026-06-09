@@ -30,9 +30,10 @@ interface ParkSnapshotDao {
             ON snapshots.parkKey = latest.parkKey
             AND snapshots.capturedAtMillis = latest.latestCapture
         WHERE snapshots.openedToday = 1
+            AND snapshots.capturedAtMillis >= :capturedAfterMillis
         """
     )
-    fun observeLatestOpenParkKeys(): Flow<List<String>>
+    fun observeLatestOpenParkKeys(capturedAfterMillis: Long): Flow<List<String>>
 
     @Query(
         """

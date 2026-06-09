@@ -72,8 +72,8 @@ class DefaultWartezeitenRepository @Inject constructor(
             .map { attractions -> attractions.map { it.toCurrentAttractionSearchEntry() } }
             .flowOn(ioDispatcher)
 
-    override fun observeLatestOpenParkKeys(): Flow<Set<String>> {
-        return parkSnapshotDao.observeLatestOpenParkKeys()
+    override fun observeLatestOpenParkKeys(capturedAfterMillis: Long): Flow<Set<String>> {
+        return parkSnapshotDao.observeLatestOpenParkKeys(capturedAfterMillis)
             .map { it.toSet() }
             .flowOn(ioDispatcher)
     }

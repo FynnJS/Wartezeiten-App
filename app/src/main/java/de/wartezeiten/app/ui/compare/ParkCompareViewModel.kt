@@ -10,12 +10,17 @@ import de.wartezeiten.app.domain.model.AttractionStatus
 import de.wartezeiten.app.domain.model.CurrentAttractionSearchEntry
 import de.wartezeiten.app.domain.model.Park
 import de.wartezeiten.app.domain.repository.WartezeitenRepository
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import java.text.Normalizer
 import javax.inject.Inject
 
 enum class ParkCompareSort {
@@ -62,6 +67,8 @@ private data class CompareLoadState(
     val errorMessage: String?,
 )
 
+private const val OPEN_PARK_COMPARE_MAX_AGE_MILLIS = 30 * 60 * 1000L
+
 @HiltViewModel
 class ParkCompareViewModel @Inject constructor(
     private val repository: WartezeitenRepository,
@@ -82,10 +89,22 @@ class ParkCompareViewModel @Inject constructor(
         CompareLoadState(refreshing, error)
     }
 
+    private val openParkSnapshotCutoff = flow {
+        while (true) {
+            emit(System.currentTimeMillis() - OPEN_PARK_COMPARE_MAX_AGE_MILLIS)
+            delay(60_000L)
+        }
+    }
+
+    @OptIn(ExperimentalCoroutinesApi::class)
+    private val latestOpenParkKeys = openParkSnapshotCutoff.flatMapLatest { cutoff ->
+        repository.observeLatestOpenParkKeys(cutoff)
+    }
+
     val uiState = combine(
         repository.observeParks(null),
         repository.observeCurrentAttractions(),
-        repository.observeLatestOpenParkKeys(),
+        latestOpenParkKeys,
         controls,
         loadState,
     ) { parks, attractions, openParkKeys, controls, load ->
@@ -95,7 +114,7 @@ class ParkCompareViewModel @Inject constructor(
         val selectedParks = selectedIds.mapNotNull { selectedId ->
             parks.firstOrNull { it.matchesParkKey(selectedId) }
         }
-        val normalizedQuery = controls.parkSearchQuery.normalizedSearchText()
+        val normalizedQuery = controls.parkSearchQuery.normalizedSearchKey()
         val availableParks = parks
             .filter { park -> normalizedQuery.isBlank() || park.matchesSearch(normalizedQuery) }
             .sortedWith(
@@ -260,15 +279,17 @@ class ParkCompareViewModel @Inject constructor(
     }
 
     private fun Park.matchesSearch(normalizedQuery: String): Boolean {
-        return name.normalizedSearchText().contains(normalizedQuery) ||
-            country.normalizedSearchText().contains(normalizedQuery)
+        return name.normalizedSearchKey().contains(normalizedQuery) ||
+            country.normalizedSearchKey().contains(normalizedQuery)
     }
 }
 
-private fun String.normalizedSearchText(): String {
-    return lowercase()
-        .replace("ä", "ae")
-        .replace("ö", "oe")
-        .replace("ü", "ue")
-        .replace("ß", "ss")
+private fun String.normalizedSearchKey(): String {
+    val expandedGerman = lowercase()
+        .replace("\u00e4", "ae")
+        .replace("\u00f6", "oe")
+        .replace("\u00fc", "ue")
+        .replace("\u00df", "ss")
+    return Normalizer.normalize(expandedGerman, Normalizer.Form.NFD)
+        .replace("\\p{Mn}+".toRegex(), "")
 }

@@ -24,7 +24,7 @@ Die Website liest `website/release.json` und verlinkt auf den neuesten GitHub Re
 
 ## Watchlist-Benachrichtigungen
 
-Watchlist-Alarme werden lokal über WorkManager geprüft und als Android-Benachrichtigung angezeigt. Neue Alarme starten zusätzlich einen schnellen Einmal-Check; nach Neustart oder App-Update werden Hintergrundprüfungen wieder angemeldet. Der periodische lokale Check läuft alle 30 Minuten. Es werden keine Firebase-/FCM-Konfiguration und keine Worker-Secrets benötigt. Android kann periodische Arbeit im Standby/Doze trotzdem verzögern.
+Watchlist-Alarme werden lokal über WorkManager geprüft und als Android-Benachrichtigung angezeigt. Neue Alarme starten zusätzlich einen schnellen Einmal-Check; nach Neustart oder App-Update werden Hintergrundprüfungen wieder angemeldet. Der periodische lokale Check läuft alle 30 Minuten. Es werden keine Firebase-/FCM-Konfiguration und keine Worker-Secrets benötigt. Ab Android 13 muss die Benachrichtigungsberechtigung erlaubt sein; einzelne OEM-Systeme können zusätzlich Autostart- oder Akku-Einstellungen verlangen. Android kann periodische Arbeit im Standby/Doze trotzdem verzögern.
 
 ## Entwicklung
 

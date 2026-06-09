@@ -53,7 +53,12 @@ async function loadRelease() {
     setDownloadLinks(data.releasePageUrl || defaultReleasePageUrl);
 
     if (data.releaseNotes && Array.isArray(data.releaseNotes)) {
-      releaseNotesEl.innerHTML = data.releaseNotes.map(note => `<li>${note}</li>`).join('');
+      releaseNotesEl.innerHTML = '';
+      data.releaseNotes.forEach(note => {
+        const item = document.createElement('li');
+        item.textContent = note;
+        releaseNotesEl.appendChild(item);
+      });
     }
 
     console.log('Release-Informationen erfolgreich geladen');

@@ -1,5 +1,19 @@
 # Changelog
 
+## v1.0.8 - 2026-06-09
+
+- Fixed public statistics collection so central park and attraction measurement points are tracked regularly and shared for all users.
+- Limited same-day statistics charts to the current time instead of extending empty graph space to park closing time.
+- Restored required Wartezeiten.APP attribution on park detail and compare screens.
+- Kept park recommendation snapshots current when crowd-level data fails but opening and waiting-time data are available.
+- Hardened Watchlist notifications against partial API failures, including unknown park-opening states and failed crowd-level calls.
+- Improved local notification permission recovery with an app-settings shortcut and permission recheck after returning to the app.
+- Suppressed silent auto-refresh error banners when cached wait-time data is already available.
+- Localized the Watchlist dialog more consistently for German and English users.
+- Made open-park filters and comparisons ignore stale opening snapshots older than 30 minutes.
+- Cleaned obsolete repository artifacts and stopped tracking local machine configuration.
+- Hardened website release-note rendering for safer release metadata display.
+
 ## v1.0.7 - 2026-06-08
 
 - Added a data-based multi-park comparison screen with searchable park selection, sorting, and direct navigation to park detail pages.

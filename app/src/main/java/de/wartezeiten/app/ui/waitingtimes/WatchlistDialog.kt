@@ -1,8 +1,11 @@
 package de.wartezeiten.app.ui.waitingtimes
 
 import android.Manifest
+import android.content.Intent
 import android.content.pm.PackageManager
+import android.net.Uri
 import android.os.Build
+import android.provider.Settings
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -19,7 +22,10 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.ViewModel
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
 import de.wartezeiten.app.data.local.dao.ParkDao
@@ -42,6 +48,7 @@ fun AddWatchlistDialog(
     viewModel: WatchlistViewModel = hiltViewModel()
 ) {
     val context = LocalContext.current
+    val lifecycleOwner = LocalLifecycleOwner.current
     val isNotificationPermissionRequired = Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU
     val permissionGranted = remember {
         mutableStateOf(
@@ -65,6 +72,22 @@ fun AddWatchlistDialog(
                 },
                 Toast.LENGTH_LONG
             ).show()
+        }
+    }
+
+    DisposableEffect(lifecycleOwner, isNotificationPermissionRequired) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) {
+                permissionGranted.value =
+                    !isNotificationPermissionRequired || ContextCompat.checkSelfPermission(
+                        context,
+                        Manifest.permission.POST_NOTIFICATIONS
+                    ) == PackageManager.PERMISSION_GRANTED
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose {
+            lifecycleOwner.lifecycle.removeObserver(observer)
         }
     }
 
@@ -195,15 +218,28 @@ fun AddWatchlistDialog(
                 }
 
                 if (isNotificationPermissionRequired && !permissionGranted.value) {
-                    Text(
-                        text = if (language == "en") {
-                            "Allow notifications so the app can alert you in time."
-                        } else {
-                            "Erlaube Benachrichtigungen, damit dich die App vor Ort rechtzeitig anstupsen kann."
-                        },
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.error
-                    )
+                    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        Text(
+                            text = if (language == "en") {
+                                "Allow notifications so the app can alert you in time."
+                            } else {
+                                "Erlaube Benachrichtigungen, damit dich die App vor Ort rechtzeitig anstupsen kann."
+                            },
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.error
+                        )
+                        TextButton(
+                            onClick = {
+                                context.startActivity(
+                                    Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
+                                        data = Uri.fromParts("package", context.packageName, null)
+                                    }
+                                )
+                            }
+                        ) {
+                            Text(if (language == "en") "Open app settings" else "App-Einstellungen öffnen")
+                        }
+                    }
                 }
 
                 Text(

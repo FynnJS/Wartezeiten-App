@@ -19,7 +19,7 @@ data class ParkRecommendationScanProgress(
 interface WartezeitenRepository {
     fun observeParks(query: String?): Flow<List<Park>>
     fun observeCurrentAttractions(): Flow<List<CurrentAttractionSearchEntry>>
-    fun observeLatestOpenParkKeys(): Flow<Set<String>>
+    fun observeLatestOpenParkKeys(capturedAfterMillis: Long = Long.MIN_VALUE): Flow<Set<String>>
     fun observeBestParkRecommendation(): Flow<ParkRecommendation?>
     fun observeParkRecommendations(limit: Int = 5): Flow<List<ParkRecommendation>>
     suspend fun refreshParks(language: String): ApiResult<Unit>

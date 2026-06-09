@@ -48,6 +48,11 @@ private data class WatchlistNotification(
     val attractionId: String? = null,
 )
 
+private sealed interface WatchlistApiResult<out T> {
+    data class Success<T>(val data: T) : WatchlistApiResult<T>
+    data class Failure(val message: String) : WatchlistApiResult<Nothing>
+}
+
 @HiltWorker
 class NotificationWorker @AssistedInject constructor(
     @Assisted context: Context,
@@ -78,10 +83,10 @@ class NotificationWorker @AssistedInject constructor(
         groupedByPark.forEach { (parkKey, alerts) ->
             runCatching {
                 val parkName = parkNames[parkKey] ?: parkKey
-                val openingTimes = safeApiCall { api.getOpeningTimes(parkKey) }
-                val waitingTimes = safeApiCall { api.getWaitingTimes(parkKey, language) }
-                val crowdLevel = safeApiCall { api.getCrowdLevel(parkKey) }
-                val opening = openingTimes?.firstOrNull()
+                val openingResult = watchlistApiCall("/v1/openingtimes") { api.getOpeningTimes(parkKey) }
+                val waitingResult = watchlistApiCall("/v1/waitingtimes") { api.getWaitingTimes(parkKey, language) }
+                val crowdResult = watchlistApiCall("/v1/crowdlevel") { api.getCrowdLevel(parkKey) }
+                val opening = (openingResult as? WatchlistApiResult.Success)?.data?.firstOrNull()
                 val isParkOpen = opening?.let {
                     isParkCurrentlyOpen(
                         openedToday = it.openedToday,
@@ -89,16 +94,21 @@ class NotificationWorker @AssistedInject constructor(
                         closedFrom = it.closing,
                     )
                 }
-                val liveWaitingTimes = waitingTimes.orEmpty()
-                val canUseLiveAttractionAlerts = isParkOpen == true &&
+                val liveWaitingTimes = (waitingResult as? WatchlistApiResult.Success)?.data.orEmpty()
+                val hasLiveWaitingTimes = waitingResult is WatchlistApiResult.Success &&
                         liveWaitingTimes.any { it.normalizedStatus() == "opened" }
+                val canUseLiveAttractionAlerts = isParkOpen != false && hasLiveWaitingTimes
 
                 if (isParkOpen != null) {
                     collectParkNotifications(parkKey, parkName, isParkOpen, alerts, notifications)
                 }
 
-                val crowdValue = crowdLevel?.crowdLevel?.replace(",", ".")?.toFloatOrNull()
-                collectCrowdNotifications(parkKey, parkName, canUseLiveAttractionAlerts, crowdValue, alerts, notifications)
+                val crowdValue = (crowdResult as? WatchlistApiResult.Success)
+                    ?.data
+                    ?.crowdLevel
+                    ?.replace(",", ".")
+                    ?.toFloatOrNull()
+                collectCrowdNotifications(parkKey, parkName, isParkOpen == true, crowdValue, alerts, notifications)
 
                 if (canUseLiveAttractionAlerts) {
                     collectWaitBelowNotifications(parkKey, parkName, liveWaitingTimes, alerts, notifications)
@@ -399,16 +409,25 @@ class NotificationWorker @AssistedInject constructor(
         return 10_000 + hashCode().let { if (it == Int.MIN_VALUE) 0 else kotlin.math.abs(it) % 50_000 }
     }
 
-    private suspend fun <T> safeApiCall(call: suspend () -> retrofit2.Response<T>): T? {
+    private suspend fun <T> watchlistApiCall(
+        label: String,
+        call: suspend () -> retrofit2.Response<T>,
+    ): WatchlistApiResult<T> {
         return try {
             val response = call()
-            if (response.isSuccessful) response.body() else {
-                logger.log(Level.WARNING, "Watchlist API call failed with HTTP {0}", response.code())
-                null
+            if (!response.isSuccessful) {
+                val message = "$label failed with HTTP ${response.code()}"
+                logger.warning(message)
+                WatchlistApiResult.Failure(message)
+            } else {
+                response.body()?.let { WatchlistApiResult.Success(it) }
+                    ?: WatchlistApiResult.Failure("$label returned an empty body").also {
+                        logger.warning(it.message)
+                    }
             }
         } catch (exception: Exception) {
-            logger.log(Level.WARNING, "Watchlist API call failed", exception)
-            null
+            logger.log(Level.WARNING, "$label failed", exception)
+            WatchlistApiResult.Failure(exception.message ?: "$label failed")
         }
     }
 
