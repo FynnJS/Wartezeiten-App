@@ -50,6 +50,6 @@ interface ParkSnapshotDao {
     )
     fun observeLatestSnapshots(): Flow<List<ParkSnapshotEntity>>
     
-    @Query("DELETE FROM park_snapshots WHERE capturedAtMillis < :olderThanMillis")
+    @Query("DELETE FROM park_snapshots WHERE capturedAtMillis < :olderThanMillis AND source = 'local'")
     suspend fun deleteOldSnapshots(olderThanMillis: Long)
 }

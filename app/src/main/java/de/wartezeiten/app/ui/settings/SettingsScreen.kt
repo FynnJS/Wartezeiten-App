@@ -2,6 +2,7 @@ package de.wartezeiten.app.ui.settings
 
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -17,7 +18,9 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.ListItem
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Switch
+import androidx.compose.material3.SegmentedButton
+import androidx.compose.material3.SegmentedButtonDefaults
+import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
@@ -26,6 +29,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import de.wartezeiten.app.ui.components.AttributionBanner
@@ -84,13 +88,30 @@ fun SettingsScreen(
                     })
                 },
                 leadingContent = { Icon(Icons.Default.Brightness4, contentDescription = null) },
-                trailingContent = {
-                    Switch(
-                        checked = state.darkMode ?: false,
-                        onCheckedChange = { onDarkModeChange(it) },
-                    )
-                }
             )
+            SingleChoiceSegmentedButtonRow(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp)
+            ) {
+                val options = listOf(
+                    null to if (state.language == "en") "System" else "System",
+                    false to if (state.language == "en") "Light" else "Hell",
+                    true to if (state.language == "en") "Dark" else "Dunkel",
+                )
+                options.forEachIndexed { index, option ->
+                    SegmentedButton(
+                        selected = state.darkMode == option.first,
+                        onClick = { onDarkModeChange(option.first) },
+                        shape = SegmentedButtonDefaults.itemShape(
+                            index = index,
+                            count = options.size,
+                        ),
+                    ) {
+                        Text(option.second)
+                    }
+                }
+            }
             HorizontalDivider()
             ListItem(
                 headlineContent = { Text(if (state.language == "en") "Language" else "Sprache") },

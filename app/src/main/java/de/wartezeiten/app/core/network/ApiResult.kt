@@ -25,14 +25,39 @@ enum class NetworkError {
     Unknown
 }
 
-fun NetworkError.toUserMessage(): String {
+fun NetworkError.toUserMessage(language: String = "de"): String {
+    val useEnglish = language == "en"
     return when (this) {
-        NetworkError.RateLimited -> "Zu viele Anfragen. Bitte kurz warten."
-        NetworkError.NotFound -> "Daten konnten nicht gefunden werden."
-        NetworkError.Network -> "Keine Internetverbindung. Bitte prüfe dein Netzwerk."
-        NetworkError.Server -> "Serverfehler. Bitte versuche es später erneut."
-        NetworkError.EmptyBody -> "Keine Daten vom Server erhalten."
-        NetworkError.Unknown -> "Ein unbekannter Fehler ist aufgetreten."
+        NetworkError.RateLimited -> if (useEnglish) {
+            "Too many requests. Please wait a moment."
+        } else {
+            "Zu viele Anfragen. Bitte kurz warten."
+        }
+        NetworkError.NotFound -> if (useEnglish) {
+            "Data could not be found."
+        } else {
+            "Daten konnten nicht gefunden werden."
+        }
+        NetworkError.Network -> if (useEnglish) {
+            "No internet connection. Please check your network."
+        } else {
+            "Keine Internetverbindung. Bitte pr\u00fcfe dein Netzwerk."
+        }
+        NetworkError.Server -> if (useEnglish) {
+            "Server error. Please try again later."
+        } else {
+            "Serverfehler. Bitte versuche es sp\u00e4ter erneut."
+        }
+        NetworkError.EmptyBody -> if (useEnglish) {
+            "No data received from the server."
+        } else {
+            "Keine Daten vom Server erhalten."
+        }
+        NetworkError.Unknown -> if (useEnglish) {
+            "An unknown error occurred."
+        } else {
+            "Ein unbekannter Fehler ist aufgetreten."
+        }
     }
 }
 
@@ -58,7 +83,7 @@ suspend fun <T> safeApiCall(call: suspend () -> Response<T>): ApiResult<T> {
             response.code() == 404 -> {
                 ApiResult.Error(
                     type = NetworkError.NotFound,
-                    message = "Für diesen Park liegen aktuell keine Daten vor."
+                    message = "F\u00fcr diesen Park liegen aktuell keine Daten vor."
                 )
             }
             response.code() in 500..599 -> {
@@ -76,5 +101,3 @@ suspend fun <T> safeApiCall(call: suspend () -> Response<T>): ApiResult<T> {
         ApiResult.Error(NetworkError.Unknown, exception.message(), cause = exception)
     }
 }
-
-

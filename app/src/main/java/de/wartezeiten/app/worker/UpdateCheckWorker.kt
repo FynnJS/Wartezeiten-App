@@ -89,7 +89,7 @@ class UpdateCheckWorker @AssistedInject constructor(
         }
 
         val notification = NotificationCompat.Builder(applicationContext, CHANNEL_ID)
-            .setSmallIcon(de.wartezeiten.app.R.mipmap.ic_launcher)
+            .setSmallIcon(de.wartezeiten.app.R.drawable.ic_stat_notification)
             .setContentTitle("Update erforderlich")
             .setContentText("Version ${releaseInfo.versionName} installieren, um die App weiter zu nutzen.")
             .setStyle(NotificationCompat.BigTextStyle().bigText(body))

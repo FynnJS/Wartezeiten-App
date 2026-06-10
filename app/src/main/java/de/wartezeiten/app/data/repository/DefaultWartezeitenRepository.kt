@@ -47,6 +47,7 @@ private const val RECOMMENDATION_SNAPSHOT_MAX_AGE_MILLIS = 6 * 60 * 60 * 1000L
 private const val RECOMMENDATION_REQUEST_DELAY_MILLIS = 1_500L
 private const val RECOMMENDATION_ESTIMATED_PARK_SCAN_MILLIS = 4_500L
 private const val OPTIONAL_DETAIL_TIMEOUT_MILLIS = 3_000L
+private const val LOCAL_PARK_SNAPSHOT_RETENTION_MILLIS = 7 * 24 * 60 * 60 * 1000L
 
 @Singleton
 class DefaultWartezeitenRepository @Inject constructor(
@@ -154,6 +155,7 @@ class DefaultWartezeitenRepository @Inject constructor(
             return@withContext publicResult
         }
 
+        pruneOldLocalParkSnapshots()
         val parks = parkDao.observeParks(null).first()
         if (parks.isEmpty()) return@withContext ApiResult.Success(Unit)
         val now = System.currentTimeMillis()
@@ -235,6 +237,7 @@ class DefaultWartezeitenRepository @Inject constructor(
         )
 
         if (openingResult is ApiResult.Success && !currentlyOpen) {
+            pruneOldLocalParkSnapshots(now)
             parkSnapshotDao.insert(
                 ParkSnapshotEntity(
                     parkKey = parkKey,
@@ -275,6 +278,7 @@ class DefaultWartezeitenRepository @Inject constructor(
         val canDisplayCrowdLevel = openedToday == true && openAttractions > 0
 
         if (openingResult is ApiResult.Success || waitingResult is ApiResult.Success || crowdResult is ApiResult.Success) {
+            pruneOldLocalParkSnapshots(now)
             parkSnapshotDao.insert(
                 ParkSnapshotEntity(
                     parkKey = parkKey,
@@ -394,6 +398,7 @@ class DefaultWartezeitenRepository @Inject constructor(
                     ?.toFloatOrNull()
                 val displayCrowdLevel = apiCrowdLevel.takeIf { canDisplayCrowdLevel }
 
+                pruneOldLocalParkSnapshots(now)
                 parkSnapshotDao.insert(
                     ParkSnapshotEntity(
                         parkKey = parkKey,
@@ -545,6 +550,10 @@ class DefaultWartezeitenRepository @Inject constructor(
             }
             is ApiResult.Error -> result
         }
+    }
+
+    private suspend fun pruneOldLocalParkSnapshots(nowMillis: Long = System.currentTimeMillis()) {
+        parkSnapshotDao.deleteOldSnapshots(nowMillis - LOCAL_PARK_SNAPSHOT_RETENTION_MILLIS)
     }
 
     private fun statusCodeToApiStatus(statusCode: Int?): String {

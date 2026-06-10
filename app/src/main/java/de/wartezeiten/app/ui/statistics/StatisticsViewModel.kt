@@ -7,6 +7,7 @@ import dagger.hilt.android.lifecycle.HiltViewModel
 import de.wartezeiten.app.core.network.ApiResult
 import de.wartezeiten.app.core.network.NetworkError
 import de.wartezeiten.app.core.network.toUserMessage
+import de.wartezeiten.app.data.local.PreferencesDataSource
 import de.wartezeiten.app.domain.model.AttractionHistoryPoint
 import de.wartezeiten.app.domain.model.AttractionHistoryDay
 import de.wartezeiten.app.domain.model.AttractionHistorySnapshot
@@ -165,6 +166,7 @@ data class StatisticsAttractionOption(
 @HiltViewModel
 class StatisticsViewModel @Inject constructor(
     private val repository: WartezeitenRepository,
+    private val preferences: PreferencesDataSource,
     savedStateHandle: SavedStateHandle,
 ) : ViewModel() {
     private val initialParkKey: String? = savedStateHandle["parkKey"]
@@ -244,8 +246,11 @@ class StatisticsViewModel @Inject constructor(
                     }
                     loadSelectedDay()
                 }
-                is ApiResult.Error -> mutableState.update {
-                    it.copy(isLoading = false, errorMessage = result.type.toUserMessage())
+                is ApiResult.Error -> {
+                    val language = preferences.language.first()
+                    mutableState.update {
+                        it.copy(isLoading = false, errorMessage = result.type.toUserMessage(language))
+                    }
                 }
             }
         }
@@ -318,6 +323,7 @@ class StatisticsViewModel @Inject constructor(
                 }
                 is ApiResult.Error -> {
                     val isMissingToday = result.type == NetworkError.NotFound && date == LocalDate.now().toString()
+                    val language = preferences.language.first()
                     mutableState.update { state ->
                         if (isMissingToday) {
                             state.copy(
@@ -331,7 +337,7 @@ class StatisticsViewModel @Inject constructor(
                                 errorMessage = null,
                             )
                         } else {
-                            state.copy(isLoading = false, errorMessage = result.type.toUserMessage())
+                            state.copy(isLoading = false, errorMessage = result.type.toUserMessage(language))
                         }
                     }
                 }

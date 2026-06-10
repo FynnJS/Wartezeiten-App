@@ -425,7 +425,7 @@ class NotificationWorker @AssistedInject constructor(
                 parkNotifications.joinToString(separator = "\n") { "${it.title}: ${it.content}" }
             }
             val notification = NotificationCompat.Builder(applicationContext, CHANNEL_ID)
-                .setSmallIcon(de.wartezeiten.app.R.mipmap.ic_launcher)
+                .setSmallIcon(de.wartezeiten.app.R.drawable.ic_stat_notification)
                 .setContentTitle(title)
                 .setContentText(content)
                 .setContentIntent(notificationIntent(parkKey, first.attractionId))
@@ -445,7 +445,7 @@ class NotificationWorker @AssistedInject constructor(
             notifications.joinToString(separator = "\n") { "${it.title}: ${it.content}" }
         }
         val summary = NotificationCompat.Builder(applicationContext, CHANNEL_ID)
-            .setSmallIcon(de.wartezeiten.app.R.mipmap.ic_launcher)
+            .setSmallIcon(de.wartezeiten.app.R.drawable.ic_stat_notification)
             .setContentTitle("${notifications.size} neue Park-Alarme")
             .setContentText(groupedByPark.size.toParkCountText())
             .setContentIntent(notificationIntent(notifications.first().parkKey, notifications.first().attractionId))

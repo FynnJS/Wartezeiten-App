@@ -184,7 +184,7 @@ class ParkCompareViewModel @Inject constructor(
                     is ApiResult.Success -> Unit
                     is ApiResult.Error -> {
                         if (errorMessage.value == null) {
-                            errorMessage.value = result.type.toUserMessage()
+                            errorMessage.value = result.type.toUserMessage(currentLanguage.value)
                         }
                     }
                 }

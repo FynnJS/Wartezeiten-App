@@ -299,7 +299,7 @@ class WaitingTimesViewModel @Inject constructor(
                 }
                 is ApiResult.Error -> {
                     if (!silent || uiState.value.allWaitingTimes.isEmpty()) {
-                        errorMessage.value = result.type.toUserMessage()
+                        errorMessage.value = result.type.toUserMessage(currentLanguage.value)
                     }
                 }
             }

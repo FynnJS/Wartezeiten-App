@@ -29,6 +29,7 @@ class PreferencesDataSource @Inject constructor(
         val WAITING_TIMES_SORT = stringPreferencesKey("waiting_times_sort")
         val WAITING_TIMES_FILTER = stringPreferencesKey("waiting_times_filter")
         val WAITING_TIMES_MAX_WAIT = intPreferencesKey("waiting_times_max_wait")
+        val PARK_SORT = stringPreferencesKey("park_sort")
         val LANGUAGE = stringPreferencesKey("language")
     }
 
@@ -86,6 +87,16 @@ class PreferencesDataSource @Inject constructor(
         }
         .map { preferences -> preferences[PreferencesKeys.WAITING_TIMES_MAX_WAIT] }
 
+    val parkSort: Flow<String?> = context.dataStore.data
+        .catch { exception ->
+            if (exception is IOException) {
+                emit(emptyPreferences())
+            } else {
+                throw exception
+            }
+        }
+        .map { preferences -> preferences[PreferencesKeys.PARK_SORT] }
+
     val language: Flow<String> = context.dataStore.data
         .catch { exception ->
             if (exception is IOException) {
@@ -131,6 +142,12 @@ class PreferencesDataSource @Inject constructor(
             } else {
                 preferences[PreferencesKeys.WAITING_TIMES_MAX_WAIT] = value
             }
+        }
+    }
+
+    suspend fun setParkSort(value: String) {
+        context.dataStore.edit { preferences ->
+            preferences[PreferencesKeys.PARK_SORT] = value
         }
     }
 

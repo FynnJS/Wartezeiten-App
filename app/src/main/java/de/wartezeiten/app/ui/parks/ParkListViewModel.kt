@@ -220,9 +220,18 @@ class ParkListViewModel @Inject constructor(
     )
 
     init {
+        observeParkSort()
         observeLanguage()
         startAutoRefresh()
         refreshStatisticsIndex()
+    }
+
+    private fun observeParkSort() {
+        viewModelScope.launch {
+            preferences.parkSort.distinctUntilChanged().collect { savedSort ->
+                sort.value = ParkSort.entries.firstOrNull { it.name == savedSort } ?: ParkSort.Name
+            }
+        }
     }
 
     private fun observeLanguage() {
@@ -262,6 +271,7 @@ class ParkListViewModel @Inject constructor(
 
     fun setSort(value: ParkSort) {
         sort.value = value
+        viewModelScope.launch { preferences.setParkSort(value.name) }
     }
 
     fun clearFilters() {
@@ -269,7 +279,7 @@ class ParkListViewModel @Inject constructor(
         selectedCountry.value = null
         showOpenOnly.value = false
         showFavoritesOnly.value = false
-        sort.value = ParkSort.Name
+        setSort(ParkSort.Name)
     }
 
     fun toggleFavorite(park: Park) {
@@ -301,7 +311,7 @@ class ParkListViewModel @Inject constructor(
                 is ApiResult.Error -> {
                     val hasCachedParks = uiState.value.totalParkCount > 0
                     if (showFeedback || !hasCachedParks || result.type != NetworkError.RateLimited) {
-                        errorMessage.value = result.type.toUserMessage()
+                        errorMessage.value = result.type.toUserMessage(currentLanguage.value)
                     }
                 }
             }
