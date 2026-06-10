@@ -141,7 +141,7 @@ fun WartezeitenApp(
         }
 
         val releaseInfo = updateState.releaseInfo
-        if (updateState.updateAvailable && updateState.showBanner && releaseInfo != null) {
+        if (updateState.updateAvailable && releaseInfo != null) {
             UpdateBanner(
                 releaseInfo = releaseInfo,
                 language = settingsState.language,
@@ -150,7 +150,13 @@ fun WartezeitenApp(
                     intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
                     context.startActivity(intent)
                 },
-                onDismiss = updateViewModel::dismissBanner,
+                onReleasePageClick = releaseInfo.releasePageUrl?.let { releasePageUrl ->
+                    {
+                        val intent = Intent(Intent.ACTION_VIEW, Uri.parse(releasePageUrl))
+                        intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                        context.startActivity(intent)
+                    }
+                },
             )
         }
     }

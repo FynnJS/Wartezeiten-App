@@ -6,7 +6,6 @@ import android.app.NotificationManager
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
-import android.net.Uri
 import android.os.Build
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
@@ -77,12 +76,23 @@ class UpdateCheckWorker @AssistedInject constructor(
             intent,
             android.app.PendingIntent.FLAG_IMMUTABLE or android.app.PendingIntent.FLAG_UPDATE_CURRENT
         )
+        val notes = releaseInfo.releaseNotes
+            .map { it.trim() }
+            .filter { it.isNotBlank() }
+            .take(3)
+        val body = buildString {
+            append("Version ${releaseInfo.versionName} muss installiert werden, bevor die App weiter genutzt werden kann.")
+            if (notes.isNotEmpty()) {
+                append("\n")
+                append(notes.joinToString(separator = "\n") { "- $it" })
+            }
+        }
 
         val notification = NotificationCompat.Builder(applicationContext, CHANNEL_ID)
             .setSmallIcon(de.wartezeiten.app.R.mipmap.ic_launcher)
-            .setContentTitle("Neues App-Update verfügbar")
-            .setContentText("Version ${releaseInfo.versionName} steht zum Download bereit.")
-            .setStyle(NotificationCompat.BigTextStyle().bigText(releaseInfo.releaseDate))
+            .setContentTitle("Update erforderlich")
+            .setContentText("Version ${releaseInfo.versionName} installieren, um die App weiter zu nutzen.")
+            .setStyle(NotificationCompat.BigTextStyle().bigText(body))
             .setContentIntent(pendingIntent)
             .setAutoCancel(true)
             .setPriority(NotificationCompat.PRIORITY_HIGH)
@@ -100,7 +110,7 @@ class UpdateCheckWorker @AssistedInject constructor(
             CHANNEL_NAME,
             NotificationManager.IMPORTANCE_DEFAULT
         ).apply {
-            description = "Benachrichtigt über verfügbare APK-Updates."
+            description = "Benachrichtigt \u00fcber erforderliche APK-Updates."
         }
         val manager = applicationContext.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
         manager.createNotificationChannel(channel)

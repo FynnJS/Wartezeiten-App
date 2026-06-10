@@ -17,7 +17,6 @@ import javax.inject.Inject
 data class UpdateUiState(
     val isLoading: Boolean = false,
     val updateAvailable: Boolean = false,
-    val showBanner: Boolean = false,
     val releaseInfo: AppUpdateInfo? = null,
     val currentVersionCode: Int = BuildConfig.VERSION_CODE,
     val currentVersionName: String = BuildConfig.VERSION_NAME,
@@ -49,7 +48,6 @@ class UpdateViewModel @Inject constructor(
                             it.copy(
                                 isLoading = false,
                                 updateAvailable = updateAvailable,
-                                showBanner = updateAvailable && releaseInfo.showBanner,
                                 releaseInfo = releaseInfo,
                             )
                         }
@@ -85,9 +83,5 @@ class UpdateViewModel @Inject constructor(
                 }
             }
         }
-    }
-
-    fun dismissBanner() {
-        _uiState.update { it.copy(showBanner = false) }
     }
 }

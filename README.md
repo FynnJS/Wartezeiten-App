@@ -60,6 +60,15 @@ Die Website liegt im Ordner `website/` und wird als Cloudflare Worker deployt. B
 
 Der GitHub Actions Workflow `.github/workflows/release-pipeline.yml` baut die Release-APK, lädt sie als GitHub-Release-Asset hoch und aktualisiert `website/release.json` automatisch.
 
+Für veröffentlichte GitHub-Releases muss die Pipeline mit einem stabilen Release-Keystore signieren. Dafür müssen diese Repository-Secrets gepflegt sein:
+
+- `RELEASE_KEYSTORE_BASE64`
+- `RELEASE_STORE_PASSWORD`
+- `RELEASE_KEY_ALIAS`
+- `RELEASE_KEY_PASSWORD`
+
+Fehlen diese Secrets bei einem Release-Event, bricht die Pipeline ab. Das verhindert APKs, die wegen abweichender Signatur nicht als Update über eine bestehende Installation installiert werden können.
+
 Cloudflare App-Daten für Ranking, Trends und zentrale Attraktionsstatistiken werden vom Worker-Cron erzeugt. Setup-Hinweise stehen in `website/CLOUDFLARE-APP-DATA.md`.
 
 Vor jedem Release prüfen:

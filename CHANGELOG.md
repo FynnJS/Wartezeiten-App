@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+- Replaced the dismissible in-app update banner with a required update screen that blocks outdated app versions once a newer release is detected.
+- Shortened update messaging in the app and background notification so release notes remain readable on small screens.
+- Hardened the GitHub release pipeline so published APK releases require stable signing secrets and stay update-compatible.
+
 ## v1.0.8 - 2026-06-09
 
 - Fixed public statistics collection so central park and attraction measurement points are tracked regularly and shared for all users.
