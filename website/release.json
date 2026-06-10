@@ -1,16 +1,17 @@
 {
-  "versionName": "1.0.8",
-  "versionCode": 10008,
-  "releaseDate": "2026-06-09",
-  "releasePageUrl": "https://github.com/FynnJS/Wartezeiten-App/releases/tag/v1.0.8",
-  "apkUrl": "https://github.com/FynnJS/Wartezeiten-App/releases/download/v1.0.8/wartezeiten-app-1.0.8.apk",
-  "apkSize": "",
+  "versionName": "1.1.0",
+  "versionCode": 10100,
+  "releaseDate": "2026-06-10",
+  "releasePageUrl": "https://github.com/FynnJS/Wartezeiten-App/releases/tag/v1.1.0",
+  "apkUrl": "https://github.com/FynnJS/Wartezeiten-App/releases/download/v1.1.0/wartezeiten-app-1.1.0.apk",
+  "apkSize": "3.45",
   "releaseNotes": [
-    "Zentrale Park- und Attraktionsstatistiken werden regelmaessiger als gemeinsame Messpunkte bereitgestellt.",
-    "Heutige Statistikdiagramme enden beim aktuellen Zeitpunkt statt leer bis zur Parkschliessung weiterzulaufen.",
-    "Watchlist-Benachrichtigungen reagieren robuster auf API-Teilausfaelle und helfen beim Freigeben der Android-Berechtigung.",
-    "Parkdetail- und Vergleichsansicht zeigen die erforderliche Wartezeiten.APP-Attribution wieder sichtbar an.",
-    "Offen-Filter und Parkvergleich ignorieren veraltete Oeffnungs-Snapshots."
+    "Offline-Banner zeigen klar, wenn gecachte Park- oder Wartezeitdaten genutzt werden.",
+    "Park-Suche, Suchhistorie, zuletzt angesehene Parks und Favoriten-Dashboard helfen beim schnelleren Wiederfinden.",
+    "Statistiken koennen als Screenshot geteilt werden, Parkdetails als kompakte Textzusammenfassung.",
+    "Watchlist-Alarme erkennen jetzt alle Park- und Attraktionsaenderungen und unterstuetzen optional serverseitige Push-Benachrichtigungen.",
+    "Zentrale Trend- und Statistikdaten wurden auf D1-Snapshots und stabilere globale Messpunkte umgestellt.",
+    "Pflicht-Updates und APK-Signaturpruefungen wurden fuer kompatible Releases gehaertet."
   ],
   "showBanner": true
 }
