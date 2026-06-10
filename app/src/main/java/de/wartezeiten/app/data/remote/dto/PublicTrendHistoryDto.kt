@@ -96,6 +96,10 @@ data class PublicParkTrendSnapshotDto(
     val displayCrowdLevel: Float?,
     @SerializedName("openedToday")
     val openedToday: Boolean?,
+    @SerializedName("openFrom")
+    val openFrom: String?,
+    @SerializedName("closedFrom")
+    val closedFrom: String?,
     @SerializedName("openAttractions")
     val openAttractions: Int,
     @SerializedName("totalAttractions")

@@ -24,6 +24,7 @@ import de.wartezeiten.app.data.remote.dto.toDomain
 import de.wartezeiten.app.domain.model.Park
 import de.wartezeiten.app.domain.model.ParkDetail
 import de.wartezeiten.app.domain.model.ParkRecommendation
+import de.wartezeiten.app.domain.model.isParkCurrentlyOpen
 import de.wartezeiten.app.domain.repository.ParkRecommendationScanProgress
 import de.wartezeiten.app.domain.repository.WartezeitenRepository
 import kotlinx.coroutines.CoroutineDispatcher
@@ -38,7 +39,6 @@ import kotlinx.coroutines.supervisorScope
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
 import java.time.Instant
-import java.time.OffsetDateTime
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -165,7 +165,7 @@ class DefaultWartezeitenRepository @Inject constructor(
                     openedToday = snapshot.openedToday,
                     openFrom = snapshot.openFrom,
                     closedFrom = snapshot.closedFrom,
-                    nowMillis = now,
+                    now = Instant.ofEpochMilli(now),
                 )
             }
             .map { it.parkKey }
@@ -231,7 +231,7 @@ class DefaultWartezeitenRepository @Inject constructor(
             openedToday = openedToday,
             openFrom = openFrom,
             closedFrom = closedFrom,
-            nowMillis = now,
+            now = Instant.ofEpochMilli(now),
         )
 
         if (openingResult is ApiResult.Success && !currentlyOpen) {
@@ -365,7 +365,7 @@ class DefaultWartezeitenRepository @Inject constructor(
                     openedToday = openedToday,
                     openFrom = openFrom,
                     closedFrom = closedFrom,
-                    nowMillis = now,
+                    now = Instant.ofEpochMilli(now),
                 )
             } else {
                 true
@@ -557,26 +557,6 @@ class DefaultWartezeitenRepository @Inject constructor(
         }
     }
 
-    private fun isParkCurrentlyOpen(
-        openedToday: Boolean?,
-        openFrom: String?,
-        closedFrom: String?,
-        nowMillis: Long,
-    ): Boolean {
-        if (openedToday != true) return false
-        val now = Instant.ofEpochMilli(nowMillis)
-        val opensAt = openFrom?.toInstantOrNull()
-        val closesAt = closedFrom?.toInstantOrNull()
-        if (opensAt != null && now.isBefore(opensAt)) return false
-        if (closesAt != null && !now.isBefore(closesAt)) return false
-        return true
-    }
-
-    private fun String.toInstantOrNull(): Instant? {
-        return runCatching { OffsetDateTime.parse(this).toInstant() }
-            .getOrElse { runCatching { Instant.parse(this) }.getOrNull() }
-    }
-
     private fun buildRecommendationReason(
         crowdLevel: Float?,
         openAttractions: Int,
@@ -706,8 +686,8 @@ class DefaultWartezeitenRepository @Inject constructor(
                                 calculatedCrowdLevel = snapshot.calculatedCrowdLevel,
                                 displayCrowdLevel = displayLevel,
                                 openedToday = snapshot.openedToday,
-                                openFrom = null,
-                                closedFrom = null,
+                                openFrom = snapshot.openFrom,
+                                closedFrom = snapshot.closedFrom,
                                 openAttractions = snapshot.openAttractions,
                                 totalAttractions = snapshot.totalAttractions,
                                 source = "public",

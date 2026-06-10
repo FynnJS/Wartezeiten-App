@@ -27,10 +27,9 @@ import de.wartezeiten.app.data.local.entity.WatchlistType
 import de.wartezeiten.app.data.remote.WartezeitenApiService
 import de.wartezeiten.app.data.remote.dto.WaitingTimeDto
 import de.wartezeiten.app.MainActivity
+import de.wartezeiten.app.domain.model.isParkCurrentlyOpen
 import kotlinx.coroutines.flow.first
 import java.util.Locale
-import java.time.Instant
-import java.time.OffsetDateTime
 import java.util.logging.Level
 import java.util.logging.Logger
 
@@ -109,6 +108,15 @@ class NotificationWorker @AssistedInject constructor(
                     ?.replace(",", ".")
                     ?.toFloatOrNull()
                 collectCrowdNotifications(parkKey, parkName, isParkOpen == true, crowdValue, alerts, notifications)
+                collectParkAllChangeNotifications(
+                    parkKey = parkKey,
+                    parkName = parkName,
+                    isParkOpen = isParkOpen,
+                    crowdValue = crowdValue,
+                    waitingTimes = liveWaitingTimes,
+                    alerts = alerts,
+                    notifications = notifications,
+                )
 
                 if (canUseLiveAttractionAlerts) {
                     collectWaitBelowNotifications(parkKey, parkName, liveWaitingTimes, alerts, notifications)
@@ -203,6 +211,42 @@ class NotificationWorker @AssistedInject constructor(
         }
     }
 
+    private suspend fun collectParkAllChangeNotifications(
+        parkKey: String,
+        parkName: String,
+        isParkOpen: Boolean?,
+        crowdValue: Float?,
+        waitingTimes: List<WaitingTimeDto>,
+        alerts: List<WatchlistEntity>,
+        notifications: MutableList<WatchlistNotification>,
+    ) {
+        alerts.filter { it.type == WatchlistType.PARK_ALL_CHANGES }.forEach { alert ->
+            val openAttractions = waitingTimes.count { it.normalizedStatus() == "opened" }
+            val totalAttractions = waitingTimes.size
+            val state = listOf(
+                "open=${isParkOpen ?: "unknown"}",
+                "crowd=${crowdValue?.toInt() ?: "unknown"}",
+                "openAttractions=$openAttractions",
+                "totalAttractions=$totalAttractions",
+            ).joinToString("|")
+            if (shouldNotifyValue(alert.id, state, notifyOnFirstMatch = false)) {
+                notifications.add(
+                    WatchlistNotification(
+                        title = "Park-Änderung: $parkName",
+                        content = buildParkChangeNotificationContent(
+                            isParkOpen = isParkOpen,
+                            crowdValue = crowdValue,
+                            openAttractions = openAttractions,
+                            totalAttractions = totalAttractions,
+                        ),
+                        parkKey = parkKey,
+                        parkName = parkName,
+                    )
+                )
+            }
+        }
+    }
+
     private suspend fun collectWaitBelowNotifications(
         parkKey: String,
         parkName: String,
@@ -279,7 +323,8 @@ class NotificationWorker @AssistedInject constructor(
                 it.type == WatchlistType.ATTRACTION_OPEN ||
                         it.type == WatchlistType.ATTRACTION_CLOSED ||
                         it.type == WatchlistType.ATTRACTION_MAINTENANCE ||
-                        it.type == WatchlistType.ATTRACTION_STATUS_CHANGE
+                        it.type == WatchlistType.ATTRACTION_STATUS_CHANGE ||
+                        it.type == WatchlistType.ATTRACTION_ALL_CHANGES
             }
             .forEach { alert ->
                 val current = alert.attractionId?.let { id ->
@@ -293,19 +338,33 @@ class NotificationWorker @AssistedInject constructor(
                     WatchlistType.ATTRACTION_STATUS_CHANGE -> shouldNotifyValue(
                         alert.id,
                         current.normalizedStatus(),
+                        notifyOnFirstMatch = current.normalizedStatus() == "opened",
+                    )
+                    WatchlistType.ATTRACTION_ALL_CHANGES -> shouldNotifyValue(
+                        alert.id,
+                        current.changeState(),
                         notifyOnFirstMatch = false,
                     )
                     else -> false
                 }
 
                 if (shouldSend) {
+                    val content = if (alert.type == WatchlistType.ATTRACTION_ALL_CHANGES) {
+                        current.toAttractionChangeContent()
+                    } else {
+                        current.safeStatus().toReadableStatus()
+                    }
                     notifications.add(
                         WatchlistNotification(
                             title = current.safeName().toStatusNotificationTitle(current.safeStatus()),
-                            content = current.safeStatus().toReadableStatus(),
+                            content = content,
                             parkKey = parkKey,
                             parkName = parkName,
-                            attractionId = normalizeAttractionId(current),
+                            attractionId = if (alert.type == WatchlistType.ATTRACTION_ALL_CHANGES) {
+                                null
+                            } else {
+                                normalizeAttractionId(current)
+                            },
                         )
                     )
                 }
@@ -468,6 +527,16 @@ class NotificationWorker @AssistedInject constructor(
         return safeStatus().normalizedStatus()
     }
 
+    private fun WaitingTimeDto.changeState(): String {
+        val waitValue = waitingTime?.takeIf { it >= 0 }?.toString() ?: "unknown"
+        return "${normalizedStatus()}|wait=$waitValue"
+    }
+
+    private fun WaitingTimeDto.toAttractionChangeContent(): String {
+        val waitText = waitingTime?.takeIf { it >= 0 }?.let { "$it Min." } ?: "keine Wartezeit"
+        return "${safeName()}: ${safeStatus().toReadableShortStatus()}, $waitText"
+    }
+
     private fun canPostNotifications(): Boolean {
         return Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU ||
                 ContextCompat.checkSelfPermission(
@@ -481,6 +550,35 @@ class NotificationWorker @AssistedInject constructor(
             toInt().toString()
         } else {
             String.format(Locale.GERMAN, "%.1f", this)
+        }
+    }
+
+    private fun buildParkChangeNotificationContent(
+        isParkOpen: Boolean?,
+        crowdValue: Float?,
+        openAttractions: Int,
+        totalAttractions: Int,
+    ): String {
+        val statusText = when (isParkOpen) {
+            true -> "Park geoeffnet"
+            false -> "Park geschlossen"
+            null -> "Oeffnungsstatus unbekannt"
+        }
+        val crowdText = crowdValue?.let { ", Auslastung ${it.formatPercent()}%" }.orEmpty()
+        val attractionText = if (totalAttractions > 0) {
+            ", $openAttractions von $totalAttractions Attraktionen offen"
+        } else {
+            ""
+        }
+        return statusText + crowdText + attractionText
+    }
+
+    private fun String.toReadableShortStatus(): String {
+        return when (normalizedStatus()) {
+            "opened" -> "offen"
+            "closed" -> "geschlossen"
+            "maintenance" -> "Technikpause"
+            else -> ifBlank { "Status unbekannt" }
         }
     }
 
@@ -503,25 +601,6 @@ class NotificationWorker @AssistedInject constructor(
     }
 
     private fun String.normalizedStatus(): String = trim().lowercase(Locale.ROOT)
-
-    private fun isParkCurrentlyOpen(
-        openedToday: Boolean?,
-        openFrom: String?,
-        closedFrom: String?,
-    ): Boolean {
-        if (openedToday != true) return false
-        val now = Instant.now()
-        val opensAt = openFrom?.toInstantOrNull()
-        val closesAt = closedFrom?.toInstantOrNull()
-        if (opensAt != null && now.isBefore(opensAt)) return false
-        if (closesAt != null && !now.isBefore(closesAt)) return false
-        return true
-    }
-
-    private fun String.toInstantOrNull(): Instant? {
-        return runCatching { OffsetDateTime.parse(this).toInstant() }
-            .getOrElse { runCatching { Instant.parse(this) }.getOrNull() }
-    }
 
     private fun Int.toParkCountText(): String {
         return if (this == 1) {

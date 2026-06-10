@@ -28,7 +28,6 @@ import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.List
 import androidx.compose.material.icons.automirrored.filled.Sort
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Check
@@ -202,7 +201,10 @@ fun ParkListScreen(
                             Icon(Icons.Default.Settings, contentDescription = if (state.language == "en") "Settings" else "Einstellungen")
                         }
                         IconButton(onClick = onWatchlistClick) {
-                            Icon(Icons.AutoMirrored.Filled.List, contentDescription = "Watchlist")
+                            Icon(
+                                Icons.Default.Notifications,
+                                contentDescription = if (state.language == "en") "Watchlist" else "Benachrichtigungen"
+                            )
                         }
                         IconButton(onClick = onCompareClick) {
                             Icon(

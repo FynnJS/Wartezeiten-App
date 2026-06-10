@@ -109,6 +109,7 @@ fun AddWatchlistDialog(
         listOf(
             WatchlistType.WAIT_TIME_BELOW,
             WatchlistType.WAIT_TIME_ABOVE,
+            WatchlistType.ATTRACTION_ALL_CHANGES,
             WatchlistType.ATTRACTION_STATUS_CHANGE,
             WatchlistType.ATTRACTION_OPEN,
             WatchlistType.ATTRACTION_CLOSED,
@@ -118,6 +119,7 @@ fun AddWatchlistDialog(
         listOf(
             WatchlistType.WAIT_TIME_BELOW,
             WatchlistType.WAIT_TIME_ABOVE,
+            WatchlistType.PARK_ALL_CHANGES,
             WatchlistType.NOW_OPENED,
             WatchlistType.PARK_STATUS_CHANGED,
             WatchlistType.CROWD_LEVEL_BELOW,
@@ -285,6 +287,8 @@ fun WatchlistType.label(language: String = "de"): String = when (this) {
     WatchlistType.NOW_OPENED -> if (language == "en") "Entry ready" else "Einlass bereit"
     WatchlistType.CROWD_LEVEL_BELOW -> if (language == "en") "Relaxed park" else "Entspannter Park"
     WatchlistType.CROWD_LEVEL_ABOVE -> if (language == "en") "Crowd alert" else "Andrang-Warnung"
+    WatchlistType.PARK_ALL_CHANGES -> if (language == "en") "Park changes" else "Park-Änderungen"
+    WatchlistType.ATTRACTION_ALL_CHANGES -> if (language == "en") "All changes" else "Alle Änderungen"
     WatchlistType.ATTRACTION_STATUS_CHANGE -> if (language == "en") "Status radar" else "Status-Radar"
     WatchlistType.ATTRACTION_OPEN -> if (language == "en") "Open again" else "Wieder offen"
     WatchlistType.ATTRACTION_CLOSED -> if (language == "en") "Just closed" else "Gerade zu"
@@ -298,6 +302,8 @@ private fun WatchlistType.description(language: String): String = when (this) {
     WatchlistType.NOW_OPENED -> if (language == "en") "For the start of the day: you will know when the park is reported open today." else "Für den Start in den Tag: Du erfährst, wenn der Park heute als geöffnet gemeldet ist."
     WatchlistType.CROWD_LEVEL_BELOW -> if (language == "en") "For quieter moments: you will know when the park is relaxed enough for a good round." else "Für ruhige Momente: Du erfährst, wenn der Park entspannt genug für einen guten Rundgang ist."
     WatchlistType.CROWD_LEVEL_ABOVE -> if (language == "en") "For break planning: you will know when the park gets busier than you want." else "Für Pausenplanung: Du erfährst, wenn der Park voller wird als gewünscht."
+    WatchlistType.PARK_ALL_CHANGES -> if (language == "en") "For the full picture: you will know when opening state, crowd level, or attraction availability changes." else "Für den Gesamtblick: Du erfährst, wenn sich Öffnung, Auslastung oder Attraktionsverfügbarkeit ändern."
+    WatchlistType.ATTRACTION_ALL_CHANGES -> if (language == "en") "For favorites: you will know when status or wait time changes." else "Für Favoriten: Du erfährst, wenn sich Status oder Wartezeit ändern."
     WatchlistType.ATTRACTION_STATUS_CHANGE -> if (language == "en") "For favorites: you will know when something changes for this attraction." else "Für Favoriten: Du erfährst, wenn sich bei dieser Attraktion etwas ändert."
     WatchlistType.ATTRACTION_OPEN -> if (language == "en") "For second chances: you will know when the attraction opens again." else "Für zweite Chancen: Du erfährst, wenn die Attraktion wieder offen ist."
     WatchlistType.ATTRACTION_CLOSED -> if (language == "en") "To avoid wasted walks: you will know when the attraction closes." else "Für unnötige Wege: Du erfährst, wenn die Attraktion gerade schließt."

@@ -33,7 +33,7 @@ export default {
     }
 
     if (url.pathname === "/app-data/trend-history.json") {
-      return jsonResponse(await readJson(env, TREND_KEY, emptyTrendHistory()));
+      return jsonResponse(await readTrendHistory(env));
     }
 
     if (url.pathname === GLOBAL_MARKERS_PATH) {
@@ -272,7 +272,10 @@ async function collectParkSnapshot(parkKey, now, options = {}) {
   const openAttractions = attractionItems.filter((item) => item.statusCode === 0).length;
   const totalAttractions = waitingItems.length;
   const apiCrowdLevel = parseCrowdLevel(crowdLevel?.crowd_level);
-  const displayCrowdLevel = openedToday && openAttractions > 0 ? apiCrowdLevel : null;
+  const calculatedCrowdLevel = estimateCrowdLevelFromAttractions(attractionItems);
+  const displayCrowdLevel = openedToday && openAttractions > 0
+    ? (apiCrowdLevel ?? calculatedCrowdLevel)
+    : null;
   const errors = [
     settledError("/openingtimes", openingResult),
     settledError("/waitingtimes", waitingResult),
@@ -291,7 +294,7 @@ async function collectParkSnapshot(parkKey, now, options = {}) {
     parkKey,
     capturedAtMillis: now,
     apiCrowdLevel,
-    calculatedCrowdLevel: null,
+    calculatedCrowdLevel,
     displayCrowdLevel,
     openedToday,
     openFrom: opening?.open_from ?? opening?.opening ?? null,
@@ -349,8 +352,103 @@ function toTrendSnapshot(snapshot) {
     calculatedCrowdLevel: snapshot.calculatedCrowdLevel,
     displayCrowdLevel: snapshot.displayCrowdLevel,
     openedToday: snapshot.openedToday,
+    openFrom: snapshot.openFrom,
+    closedFrom: snapshot.closedFrom,
     openAttractions: snapshot.openAttractions,
     totalAttractions: snapshot.totalAttractions,
+  };
+}
+
+async function readTrendHistory(env) {
+  const legacyTrend = await readJson(env, TREND_KEY, emptyTrendHistory());
+  if (!hasD1(env)) return legacyTrend;
+
+  const d1Trend = await readTrendHistoryD1(env, Date.now());
+  return mergeTrendHistory(legacyTrend, d1Trend);
+}
+
+async function readTrendHistoryD1(env, now) {
+  const minCapturedAt = now - MAX_HISTORY_AGE_MILLIS;
+  const result = await env.APP_DATA_DB.prepare(`
+    SELECT
+      park_key,
+      captured_at_millis,
+      generated_at_millis,
+      opened_today,
+      open_from,
+      closed_from,
+      attractions_json
+    FROM attraction_history_snapshots
+    WHERE captured_at_millis >= ?
+    ORDER BY park_key, captured_at_millis
+  `).bind(minCapturedAt).all();
+
+  const byPark = new Map();
+  let generatedAtMillis = 0;
+  for (const row of result.results ?? []) {
+    const parkKey = String(row.park_key ?? "");
+    if (!parkKey) continue;
+    const attractions = parseJsonArray(row.attractions_json);
+    const openAttractions = attractions.filter((attraction) => Number(attraction.statusCode) === 0).length;
+    const calculatedCrowdLevel = estimateCrowdLevelFromAttractions(attractions);
+    const openedToday = Number(row.opened_today ?? 0) === 1;
+    const displayCrowdLevel = openedToday && openAttractions > 0 ? calculatedCrowdLevel : null;
+    if (displayCrowdLevel == null) continue;
+
+    const capturedAtMillis = Number(row.captured_at_millis ?? 0);
+    const snapshots = byPark.get(parkKey) ?? [];
+    snapshots.push({
+      capturedAtMillis,
+      apiCrowdLevel: null,
+      calculatedCrowdLevel,
+      displayCrowdLevel,
+      openedToday,
+      openFrom: row.open_from ?? null,
+      closedFrom: row.closed_from ?? null,
+      openAttractions,
+      totalAttractions: attractions.length,
+    });
+    byPark.set(parkKey, snapshots);
+    generatedAtMillis = Math.max(generatedAtMillis, Number(row.generated_at_millis ?? 0), capturedAtMillis);
+  }
+
+  return {
+    generatedAtMillis,
+    parks: [...byPark.entries()].map(([parkKey, snapshots]) => ({
+      parkKey,
+      snapshots: snapshots
+        .sort((a, b) => Number(a.capturedAtMillis) - Number(b.capturedAtMillis))
+        .slice(-MAX_HISTORY_POINTS_PER_PARK),
+    })),
+  };
+}
+
+function mergeTrendHistory(legacyTrend, d1Trend) {
+  const byPark = new Map();
+  for (const trend of [legacyTrend, d1Trend]) {
+    for (const park of trend.parks ?? []) {
+      const existing = byPark.get(park.parkKey) ?? [];
+      const byCapture = new Map(existing.map((snapshot) => [Number(snapshot.capturedAtMillis), snapshot]));
+      for (const snapshot of park.snapshots ?? []) {
+        byCapture.set(Number(snapshot.capturedAtMillis), snapshot);
+      }
+      byPark.set(
+        park.parkKey,
+        [...byCapture.values()]
+          .sort((a, b) => Number(a.capturedAtMillis) - Number(b.capturedAtMillis))
+          .slice(-MAX_HISTORY_POINTS_PER_PARK),
+      );
+    }
+  }
+  return {
+    generatedAtMillis: Math.max(
+      Number(legacyTrend.generatedAtMillis ?? 0),
+      Number(d1Trend.generatedAtMillis ?? 0),
+    ),
+    parks: [...byPark.entries()]
+      .filter(([, snapshots]) => snapshots.length > 0)
+      .map(([parkKey, snapshots]) => ({ parkKey, snapshots }))
+      .sort((a, b) => a.parkKey.localeCompare(b.parkKey)),
   };
 }
 
@@ -749,6 +847,25 @@ function parseCrowdLevel(value) {
   if (value == null) return null;
   const parsed = Number(String(value).replace(",", "."));
   return Number.isFinite(parsed) ? Math.max(0, Math.min(100, parsed)) : null;
+}
+
+function estimateCrowdLevelFromAttractions(attractions) {
+  const waits = (attractions ?? [])
+    .filter((attraction) => Number(attraction.statusCode) === 0)
+    .map((attraction) => Number(attraction.value))
+    .filter((value) => Number.isFinite(value) && value >= 0)
+    .map((value) => Math.min(value, 120))
+    .sort((a, b) => a - b);
+  if (waits.length < 3) return null;
+
+  const averageWait = waits.reduce((sum, value) => sum + value, 0) / waits.length;
+  const p75Wait = waits[Math.floor((waits.length - 1) * 0.75)];
+  const estimated = ((averageWait / 60) * 0.7 + (p75Wait / 90) * 0.3) * 100;
+  return roundToNearestFive(Math.max(0, Math.min(100, estimated)));
+}
+
+function roundToNearestFive(value) {
+  return Math.max(0, Math.min(100, Math.round(value / 5) * 5));
 }
 
 async function readJson(env, key, fallback) {

@@ -5,17 +5,13 @@ import de.wartezeiten.app.domain.model.AttractionStatus
 import de.wartezeiten.app.domain.model.OpeningTimes
 import de.wartezeiten.app.domain.model.WaitingTime
 import de.wartezeiten.app.domain.model.estimateCrowdLevel
+import de.wartezeiten.app.domain.model.parkOpeningWindow
 import java.time.Instant
-import java.time.LocalDateTime
 import java.time.LocalTime
-import java.time.OffsetDateTime
 import java.time.ZoneId
 import java.time.ZoneOffset
-import java.time.ZonedDateTime
 import java.time.format.DateTimeFormatter
 import java.util.Locale
-import java.util.logging.Level
-import java.util.logging.Logger
 
 internal enum class ParkOpeningTone {
     Open,
@@ -53,10 +49,11 @@ internal fun parkOpeningDisplayState(
 
     val zoneId = localTimeOffsetSeconds?.let { ZoneOffset.ofTotalSeconds(it) } ?: ZoneId.systemDefault()
     val now = Instant.ofEpochMilli(currentTimeMillis).atZone(zoneId)
-    val openAt = openingTimes.from?.let { parseDateTime(it, zoneId) }
-    val closeAt = openingTimes.to?.let { parseDateTime(it, zoneId) }
-    val openTime = openAt?.toLocalTime() ?: openingTimes.from?.let(::parseTime)
-    val closeTime = closeAt?.toLocalTime() ?: openingTimes.to?.let(::parseTime)
+    val window = parkOpeningWindow(openingTimes.from, openingTimes.to, zoneId)
+    val openAt = window.opensAt
+    val closeAt = window.closesAt
+    val openTime = window.openTime
+    val closeTime = window.closeTime
 
     val isCurrentlyOpen = when {
         openAt != null && closeAt != null -> !now.isBefore(openAt) && now.isBefore(closeAt)
@@ -86,31 +83,6 @@ internal fun parkOpeningDisplayState(
             statusText = buildOpeningWindowStatusText(openTime, closeTime),
         )
     }
-}
-
-private fun parseDateTime(value: String, zoneId: ZoneId): ZonedDateTime? {
-    runCatching { OffsetDateTime.parse(value).atZoneSameInstant(zoneId) }
-        .onSuccess { return it }
-
-    runCatching { LocalDateTime.parse(value).atZone(zoneId) }
-        .onSuccess { return it }
-
-    logger.log(Level.WARNING, "Could not parse opening date-time value: {0}", value)
-    return null
-}
-
-private fun parseTime(value: String): LocalTime? {
-    val rawTime = timePattern.find(value.substringAfter('T', value))?.value
-    if (rawTime == null) {
-        logger.log(Level.WARNING, "Could not find opening time value in: {0}", value)
-        return null
-    }
-
-    return runCatching { LocalTime.parse(rawTime) }
-        .onFailure {
-            logger.log(Level.WARNING, "Could not parse opening time value: $rawTime", it)
-        }
-        .getOrNull()
 }
 
 private fun isWithinOpeningHours(
@@ -148,5 +120,3 @@ private fun buildCrowdText(level: Float?): String? {
 }
 
 private val displayTimeFormatter: DateTimeFormatter = DateTimeFormatter.ofPattern("HH:mm")
-private val timePattern = Regex("""\d{2}:\d{2}(:\d{2})?""")
-private val logger: Logger = Logger.getLogger("ParkOpeningDisplayState")
