@@ -26,6 +26,8 @@ Die Website stellt die aktuelle APK bereit und dient gleichzeitig als Cloudflare
 }
 ```
 
+Bei einem neuen GitHub-Release wird `release.json` durch `.github/workflows/release-pipeline.yml` automatisch aktualisiert. Wegen der Pflicht-Update-Sperre in der Android-App darf `release.json` erst auf eine neue Version zeigen, wenn die zugehörige APK als GitHub-Release-Asset verfügbar ist.
+
 Zusätzliche Sicherheits-Scan-Metadaten werden nicht mehr auf der Website angezeigt und nicht mehr in `release.json` geschrieben.
 
 ## Deployment

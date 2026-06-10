@@ -19,7 +19,7 @@ Die Website liest `website/release.json` und verlinkt auf den neuesten GitHub Re
 - Statistikbereich mit Park-, Datum- und Attraktionsauswahl für zentrale Tagesverläufe
 - Watchlist-Alarme für Wartezeiten, Attraktionsstatus, Parkstatus und Crowd-Level
 - Datenbasierter Multi-Park-Vergleich mit Suche, Sortierung und direktem Sprung zur Parkübersicht
-- In-App-Hinweis und Benachrichtigung bei neuer APK-Version
+- Pflicht-Update-Sperre und Benachrichtigung bei neuer APK-Version
 - Offline-First-Datenhaltung über Room, Cache-Hinweis und automatische Aktualisierung für Live-Daten
 
 ## Watchlist-Benachrichtigungen
@@ -56,7 +56,7 @@ npm run worker:dev
 
 ## Website und Releases
 
-Die Website liegt im Ordner `website/` und wird als Cloudflare Worker deployt. Bei einem neuen Release muss `website/release.json` auf die aktuelle APK zeigen, damit Website, In-App-Update-Banner und Update-Benachrichtigung dieselbe Version sehen.
+Die Website liegt im Ordner `website/` und wird als Cloudflare Worker deployt. Bei einem neuen Release muss `website/release.json` auf die aktuelle APK zeigen, damit Website, Pflicht-Update-Screen und Update-Benachrichtigung dieselbe Version sehen.
 
 Der GitHub Actions Workflow `.github/workflows/release-pipeline.yml` baut die Release-APK, lädt sie als GitHub-Release-Asset hoch und aktualisiert `website/release.json` automatisch.
 
@@ -74,6 +74,6 @@ Cloudflare App-Daten für Ranking, Trends und zentrale Attraktionsstatistiken we
 Vor jedem Release prüfen:
 
 - `CHANGELOG.md` ist aktualisiert.
-- `website/release.json` zeigt auf Version, APK und Release-URL.
+- `website/release.json` zeigt erst dann auf Version, APK und Release-URL, wenn die APK als GitHub-Release-Asset verfügbar ist.
 - Diese README enthält neue relevante Informationen zu Installation, Website oder Release-Automation.
 - Die Attribution zu https://www.wartezeiten.app bleibt in der App sichtbar und anklickbar.
