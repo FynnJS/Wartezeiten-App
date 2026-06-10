@@ -1,11 +1,16 @@
 # Changelog
 
-## v1.0.9 - 2026-06-10
+## v1.1.0 - 2026-06-10
 
+- Added a clearer offline mode with cache-age banners in the park list and park details.
+- Added persistent park search, recent search history, recently viewed parks, favorites-first sorting, and a favorites dashboard.
+- Added share actions for statistics screenshots and current park summaries.
+- Added data-quality indicators and cache management so stale or local data is easier to understand and reset.
+- Added Watchlist alerts for all park changes and all attraction changes, with notifications opening the park page or attraction.
+- Added optional server-side Firebase Cloud Messaging push for Watchlist alerts, backed by Cloudflare Worker Cron and D1, while keeping local WorkManager checks as fallback.
 - Repaired global park measurement points by serving public trend history from D1 attraction snapshots plus legacy KV data.
 - Added calculated park utilization to central snapshots so park trend charts keep receiving global points without extra crowd-level cron calls.
 - Preserved opening-window metadata in public trend imports and fixed parks that reported the closing timestamp on the previous date.
-- Added Watchlist alerts for all park changes and all attraction changes, with notifications opening the park page.
 - Changed the top-bar Watchlist action to use the same notification bell icon as park and attraction alert actions.
 - Replaced the dismissible in-app update banner with a required update screen that blocks outdated app versions once a newer release is detected.
 - Shortened update messaging in the app and background notification so release notes remain readable on small screens.

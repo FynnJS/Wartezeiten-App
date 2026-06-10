@@ -24,7 +24,24 @@ Die Website liest `website/release.json` und verlinkt auf den neuesten GitHub Re
 
 ## Watchlist-Benachrichtigungen
 
-Watchlist-Alarme werden lokal über WorkManager geprüft und als Android-Benachrichtigung angezeigt. Neue Alarme starten zusätzlich einen schnellen Einmal-Check; nach Neustart oder App-Update werden Hintergrundprüfungen wieder angemeldet. Der periodische lokale Check läuft alle 30 Minuten. Es werden keine Firebase-/FCM-Konfiguration und keine Worker-Secrets benötigt. Ab Android 13 muss die Benachrichtigungsberechtigung erlaubt sein; einzelne OEM-Systeme können zusätzlich Autostart- oder Akku-Einstellungen verlangen. Android kann periodische Arbeit im Standby/Doze trotzdem verzögern.
+Watchlist-Alarme werden weiterhin lokal ueber WorkManager geprueft und als Android-Benachrichtigung angezeigt. Neue Alarme starten zusaetzlich einen schnellen Einmal-Check; nach Neustart oder App-Update werden Hintergrundpruefungen wieder angemeldet. Der periodische lokale Fallback-Check laeuft alle 30 Minuten. Ab Android 13 muss die Benachrichtigungsberechtigung erlaubt sein; einzelne OEM-Systeme koennen zusaetzlich Autostart- oder Akku-Einstellungen verlangen.
+
+Optional kann die App Watchlist-Alarme serverseitig per Firebase Cloud Messaging empfangen. Dafuer synchronisiert die App ihre lokale Watchlist an den Cloudflare Worker (`/push/register`, `/push/watchlist`), der die Alerts in D1 speichert und ueber einen separaten `* * * * *`-Cron minuetlich prueft, soweit Upstream-API, Firebase und Android-Zustellung mitspielen. Die Statistik-Shards bleiben auf den versetzten 5-Minuten-Regeln (`0-59/5`, `1-59/5`, `2-59/5`).
+
+Android-Build-Properties fuer FCM:
+
+- `FIREBASE_APPLICATION_ID`
+- `FIREBASE_API_KEY`
+- `FIREBASE_PROJECT_ID`
+- `FIREBASE_GCM_SENDER_ID`
+
+Cloudflare Worker-Secrets fuer FCM HTTP v1:
+
+- `FCM_PROJECT_ID`
+- `FCM_CLIENT_EMAIL`
+- `FCM_PRIVATE_KEY`
+
+Ohne diese Werte bleibt Push deaktiviert und die lokale WorkManager-Loesung uebernimmt.
 
 ## Entwicklung
 
