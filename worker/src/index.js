@@ -12,6 +12,7 @@ const REQUEST_DELAY_MILLIS = 900;
 const DEFAULT_ATTRACTION_HISTORY_SHARDS = 3;
 const DEFAULT_INDEX_UPDATE_INTERVAL_MILLIS = 60 * 60 * 1000;
 const DEFAULT_CRON_SHARDS = 3;
+const D1_SCHEMA_VERSION = 1;
 
 const DEFAULT_PARK_KEYS = [
   "europapark",
@@ -40,13 +41,13 @@ export default {
     }
 
     if (url.pathname === "/app-data/statistics/index.json") {
-      return jsonResponse(await readJson(env, ATTRACTION_HISTORY_INDEX_KEY, emptyAttractionHistoryIndex()));
+      return jsonResponse(await readStatisticsIndex(env));
     }
 
     const datesMatch = url.pathname.match(/^\/app-data\/statistics\/parks\/([^/]+)\/dates\.json$/);
     if (datesMatch) {
       const parkKey = decodeURIComponent(datesMatch[1]);
-      const index = await readJson(env, ATTRACTION_HISTORY_INDEX_KEY, emptyAttractionHistoryIndex());
+      const index = await readStatisticsIndex(env);
       const park = index.parks.find((item) => item.parkKey === parkKey);
       return jsonResponse({
         generatedAtMillis: index.generatedAtMillis ?? 0,
@@ -83,11 +84,35 @@ export default {
 };
 
 async function updateScheduledAppData(controller, env) {
-  const shardCount = parsePositiveInt(env.APP_DATA_CRON_SHARDS) ?? DEFAULT_CRON_SHARDS;
-  const shardIndex = scheduledShardIndex(controller?.cron, shardCount);
+  const cronShardCount = parsePositiveInt(env.APP_DATA_CRON_SHARDS) ?? DEFAULT_CRON_SHARDS;
+  const historyShardCount = parsePositiveInt(env.APP_DATA_HISTORY_SHARDS) ?? DEFAULT_ATTRACTION_HISTORY_SHARDS;
+  const cronShardIndex = scheduledShardIndex(controller?.cron, cronShardCount);
+  const historyShardIndex = scheduledHistoryShardIndex(
+    Number(controller?.scheduledTime) || Date.now(),
+    cronShardIndex,
+    cronShardCount,
+    historyShardCount,
+  );
+  if (historyShardIndex == null) {
+    return {
+      ok: true,
+      generatedAtMillis: Date.now(),
+      parks: 0,
+      totalParks: 0,
+      shardIndex: cronShardIndex,
+      shardCount: cronShardCount,
+      historyShardIndex: null,
+      historyShardCount,
+      skipped: true,
+      reason: "No unique history shard assigned to this cron trigger.",
+      errors: [],
+    };
+  }
   return updateAppData(env, {
-    shardIndex,
-    shardCount,
+    shardIndex: cronShardIndex,
+    shardCount: cronShardCount,
+    historyShardIndex,
+    historyShardCount,
     writeLatest: false,
     writeTrend: false,
     includeCrowd: false,
@@ -97,9 +122,13 @@ async function updateScheduledAppData(controller, env) {
 async function updateAppData(env, options = {}) {
   const now = Date.now();
   const allParkKeys = await resolveParkKeys(env);
-  const parkKeys = options.shardIndex == null
-    ? allParkKeys
-    : allParkKeys.filter((parkKey) => cronParkShard(parkKey, options.shardCount) === options.shardIndex);
+  const historyShardIndex = options.historyShardIndex ?? null;
+  const historyShardCount = options.historyShardCount ?? null;
+  const parkKeys = historyShardIndex != null
+    ? allParkKeys.filter((parkKey) => attractionHistoryShard(env, parkKey, historyShardCount) === historyShardIndex)
+    : options.shardIndex == null
+      ? allParkKeys
+      : allParkKeys.filter((parkKey) => cronParkShard(parkKey, options.shardCount) === options.shardIndex);
   const existingHistory = options.writeTrend === false
     ? emptyTrendHistory()
     : await readJson(env, TREND_KEY, emptyTrendHistory());
@@ -111,6 +140,7 @@ async function updateAppData(env, options = {}) {
   const recommendations = [];
   const errors = [];
   const attractionDayUpdates = [];
+  const d1AttractionSnapshots = [];
 
   for (const parkKey of parkKeys) {
     try {
@@ -142,7 +172,11 @@ async function updateAppData(env, options = {}) {
       }
 
       if (snapshot.attractions.length > 0) {
-        attractionDayUpdates.push(await buildUpdatedAttractionHistory(env, snapshot, now));
+        if (hasD1(env)) {
+          d1AttractionSnapshots.push(toAttractionSnapshotRow(snapshot, now));
+        } else {
+          attractionDayUpdates.push(await buildUpdatedAttractionHistory(env, snapshot, now));
+        }
       }
 
       if (snapshot.errors.length > 0) {
@@ -176,6 +210,9 @@ async function updateAppData(env, options = {}) {
   if (options.writeTrend !== false) {
     await env.APP_DATA.put(TREND_KEY, JSON.stringify(trendHistory));
   }
+  if (d1AttractionSnapshots.length > 0) {
+    await writeAttractionSnapshotsD1(env, d1AttractionSnapshots);
+  }
   if (attractionDayUpdates.length > 0) {
     await writeAttractionHistoryBatch(env, attractionDayUpdates, now);
   }
@@ -186,6 +223,8 @@ async function updateAppData(env, options = {}) {
     totalParks: allParkKeys.length,
     shardIndex: options.shardIndex ?? null,
     shardCount: options.shardCount ?? null,
+    historyShardIndex,
+    historyShardCount,
     errors,
   };
 }
@@ -319,6 +358,76 @@ function toLatestParkSnapshot(snapshot) {
   return snapshot;
 }
 
+function toAttractionSnapshotRow(snapshot, generatedAtMillis) {
+  return {
+    generatedAtMillis,
+    parkKey: snapshot.parkKey,
+    date: isoDate(snapshot.capturedAtMillis),
+    capturedAtMillis: snapshot.capturedAtMillis,
+    openedToday: snapshot.openedToday === true,
+    openFrom: snapshot.openFrom ?? null,
+    closedFrom: snapshot.closedFrom ?? null,
+    attractions: snapshot.attractions,
+  };
+}
+
+async function writeAttractionSnapshotsD1(env, snapshots) {
+  const db = env.APP_DATA_DB;
+  if (!db || snapshots.length === 0) return;
+
+  const statements = [];
+  for (const snapshot of snapshots) {
+    statements.push(
+      db.prepare(`
+        INSERT INTO attraction_history_days (
+          park_key,
+          date,
+          generated_at_millis,
+          open_from,
+          closed_from,
+          schema_version
+        )
+        VALUES (?, ?, ?, ?, ?, ?)
+        ON CONFLICT(park_key, date) DO UPDATE SET
+          generated_at_millis = max(attraction_history_days.generated_at_millis, excluded.generated_at_millis),
+          open_from = coalesce(excluded.open_from, attraction_history_days.open_from),
+          closed_from = coalesce(excluded.closed_from, attraction_history_days.closed_from),
+          schema_version = excluded.schema_version
+      `).bind(
+        snapshot.parkKey,
+        snapshot.date,
+        snapshot.generatedAtMillis,
+        snapshot.openFrom,
+        snapshot.closedFrom,
+        D1_SCHEMA_VERSION,
+      ),
+      db.prepare(`
+        INSERT OR REPLACE INTO attraction_history_snapshots (
+          park_key,
+          date,
+          captured_at_millis,
+          generated_at_millis,
+          opened_today,
+          open_from,
+          closed_from,
+          attractions_json
+        )
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+      `).bind(
+        snapshot.parkKey,
+        snapshot.date,
+        snapshot.capturedAtMillis,
+        snapshot.generatedAtMillis,
+        snapshot.openedToday ? 1 : 0,
+        snapshot.openFrom,
+        snapshot.closedFrom,
+        JSON.stringify(snapshot.attractions),
+      ),
+    );
+  }
+  await db.batch(statements);
+}
+
 async function buildUpdatedAttractionHistory(env, snapshot, now) {
   const date = isoDate(now);
   const existing = await readAttractionDay(env, snapshot.parkKey, date);
@@ -409,6 +518,116 @@ async function maybeUpdateAttractionHistoryIndex(env, dayUpdates, generatedAtMil
     ATTRACTION_HISTORY_INDEX_KEY,
     JSON.stringify({ generatedAtMillis, parks }),
   );
+}
+
+async function readStatisticsIndex(env) {
+  const legacyIndex = await readJson(env, ATTRACTION_HISTORY_INDEX_KEY, emptyAttractionHistoryIndex());
+  if (!hasD1(env)) return legacyIndex;
+
+  const d1Index = await readStatisticsIndexD1(env);
+  return mergeStatisticsIndexes(legacyIndex, d1Index);
+}
+
+async function readStatisticsIndexD1(env) {
+  const result = await env.APP_DATA_DB.prepare(`
+    SELECT
+      d.park_key AS parkKey,
+      d.date AS date,
+      d.generated_at_millis AS generatedAtMillis,
+      COUNT(s.captured_at_millis) AS sampleCount
+    FROM attraction_history_days d
+    LEFT JOIN attraction_history_snapshots s
+      ON s.park_key = d.park_key AND s.date = d.date
+    GROUP BY d.park_key, d.date
+    ORDER BY d.park_key, d.date
+  `).all();
+
+  const byPark = new Map();
+  let generatedAtMillis = 0;
+  for (const row of result.results ?? []) {
+    const parkKey = String(row.parkKey ?? "");
+    const date = String(row.date ?? "");
+    if (!parkKey || !date) continue;
+    const existing = byPark.get(parkKey) ?? {
+      parkKey,
+      dates: [],
+      latestDate: null,
+      attractionCount: 0,
+      sampleCount: 0,
+      updatedAtMillis: 0,
+      attractions: [],
+    };
+    existing.dates.push(date);
+    const updatedAtMillis = Number(row.generatedAtMillis ?? 0);
+    generatedAtMillis = Math.max(generatedAtMillis, updatedAtMillis);
+    if (existing.latestDate == null || date > existing.latestDate) {
+      existing.latestDate = date;
+      existing.sampleCount = Number(row.sampleCount ?? 0);
+      existing.updatedAtMillis = updatedAtMillis;
+    }
+    byPark.set(parkKey, existing);
+  }
+
+  const parks = [];
+  for (const park of byPark.values()) {
+    const latestDay = park.latestDate
+      ? await readAttractionDayD1(env, park.parkKey, park.latestDate)
+      : null;
+    parks.push({
+      ...park,
+      dates: [...new Set(park.dates)].sort(),
+      attractionCount: latestDay?.attractions?.length ?? 0,
+      attractions: (latestDay?.attractions ?? []).map((attraction) => ({
+        id: attraction.id,
+        name: attraction.name,
+        latestDate: park.latestDate,
+        sampleCount: attraction.sampleCount,
+        averageWaitMinutes: attraction.averageWaitMinutes,
+        lastValue: attraction.lastValue,
+        lastStatusCode: attraction.lastStatusCode,
+      })),
+    });
+  }
+
+  parks.sort((a, b) => a.parkKey.localeCompare(b.parkKey));
+  return { generatedAtMillis, parks };
+}
+
+function mergeStatisticsIndexes(legacyIndex, d1Index) {
+  const byPark = new Map();
+  for (const index of [legacyIndex, d1Index]) {
+    for (const park of index.parks ?? []) {
+      const existing = byPark.get(park.parkKey);
+      if (!existing) {
+        byPark.set(park.parkKey, {
+          ...park,
+          dates: [...new Set(park.dates ?? [])].sort(),
+          attractions: park.attractions ?? [],
+        });
+        continue;
+      }
+      const dates = [...new Set([...(existing.dates ?? []), ...(park.dates ?? [])])].sort();
+      const useParkForLatest = String(park.latestDate ?? "") >= String(existing.latestDate ?? "");
+      byPark.set(park.parkKey, {
+        ...existing,
+        dates,
+        latestDate: useParkForLatest ? park.latestDate : existing.latestDate,
+        attractionCount: useParkForLatest ? park.attractionCount : existing.attractionCount,
+        sampleCount: useParkForLatest ? park.sampleCount : existing.sampleCount,
+        updatedAtMillis: Math.max(Number(existing.updatedAtMillis ?? 0), Number(park.updatedAtMillis ?? 0)),
+        attractions: useParkForLatest && (park.attractions ?? []).length > 0
+          ? park.attractions
+          : (existing.attractions ?? []),
+      });
+    }
+  }
+  return {
+    generatedAtMillis: Math.max(
+      Number(legacyIndex.generatedAtMillis ?? 0),
+      Number(d1Index.generatedAtMillis ?? 0),
+    ),
+    parks: [...byPark.values()].sort((a, b) => a.parkKey.localeCompare(b.parkKey)),
+  };
 }
 
 function mergeAttractionIndex(existingAttractions, dayData) {
@@ -543,6 +762,10 @@ async function readJson(env, key, fallback) {
 }
 
 async function readAttractionDay(env, parkKey, date) {
+  if (hasD1(env)) {
+    const d1Day = await readAttractionDayD1(env, parkKey, date);
+    if ((d1Day.snapshots ?? []).length > 0) return d1Day;
+  }
   const aggregate = await readJson(env, attractionDailyKey(date, attractionHistoryShard(env, parkKey)), null);
   const day = aggregate?.parks?.find((park) => park.parkKey === parkKey);
   if (day) return day;
@@ -552,8 +775,75 @@ async function readAttractionDay(env, parkKey, date) {
   return readJson(env, attractionDayKey(parkKey, date), emptyAttractionDay(parkKey, date));
 }
 
+async function readAttractionDayD1(env, parkKey, date) {
+  const [dayResult, snapshotResult] = await Promise.all([
+    env.APP_DATA_DB.prepare(`
+      SELECT generated_at_millis, open_from, closed_from
+      FROM attraction_history_days
+      WHERE park_key = ? AND date = ?
+      LIMIT 1
+    `).bind(parkKey, date).first(),
+    env.APP_DATA_DB.prepare(`
+      SELECT
+        captured_at_millis,
+        generated_at_millis,
+        opened_today,
+        open_from,
+        closed_from,
+        attractions_json
+      FROM attraction_history_snapshots
+      WHERE park_key = ? AND date = ?
+      ORDER BY captured_at_millis
+    `).bind(parkKey, date).all(),
+  ]);
+
+  const rows = snapshotResult.results ?? [];
+  if (rows.length === 0) return emptyAttractionDay(parkKey, date);
+
+  const snapshots = rows.map((row) => ({
+    capturedAtMillis: Number(row.captured_at_millis ?? 0),
+    openedToday: Number(row.opened_today ?? 0) === 1,
+    openFrom: row.open_from ?? null,
+    closedFrom: row.closed_from ?? null,
+    attractions: parseJsonArray(row.attractions_json),
+  }));
+  const generatedAtMillis = Math.max(
+    Number(dayResult?.generated_at_millis ?? 0),
+    ...rows.map((row) => Number(row.generated_at_millis ?? 0)).filter(Number.isFinite),
+  );
+  const openFrom = dayResult?.open_from
+    ?? snapshots.find((snapshot) => snapshot.openFrom)?.openFrom
+    ?? null;
+  const closedFrom = dayResult?.closed_from
+    ?? snapshots.find((snapshot) => snapshot.closedFrom)?.closedFrom
+    ?? null;
+  const cleanedSnapshots = filterOperatingWindowSnapshots(snapshots, openFrom, closedFrom);
+  return buildAttractionDayData(parkKey, date, cleanedSnapshots, generatedAtMillis, openFrom, closedFrom);
+}
+
 async function readGlobalMarkers(env) {
   const date = isoDate(Date.now());
+  if (hasD1(env)) {
+    const d1Markers = await readGlobalMarkersD1(env, date);
+    const legacyMarkers = await readGlobalMarkersKv(env, date);
+    const byPark = new Map(legacyMarkers.markers.map((marker) => [marker.parkKey, marker]));
+    for (const marker of d1Markers.markers) {
+      const existing = byPark.get(marker.parkKey);
+      if (!existing || Number(marker.capturedAtMillis ?? 0) >= Number(existing.capturedAtMillis ?? 0)) {
+        byPark.set(marker.parkKey, marker);
+      }
+    }
+    const markers = [...byPark.values()].sort((a, b) => a.parkKey.localeCompare(b.parkKey));
+    return {
+      generatedAtMillis: Math.max(d1Markers.generatedAtMillis, legacyMarkers.generatedAtMillis),
+      date,
+      markers,
+    };
+  }
+  return readGlobalMarkersKv(env, date);
+}
+
+async function readGlobalMarkersKv(env, date) {
   const shardCount = parsePositiveInt(env.APP_DATA_HISTORY_SHARDS) ?? DEFAULT_ATTRACTION_HISTORY_SHARDS;
   const markers = [];
 
@@ -581,6 +871,44 @@ async function readGlobalMarkers(env) {
   }
 
   markers.sort((a, b) => a.parkKey.localeCompare(b.parkKey));
+  return {
+    generatedAtMillis: Date.now(),
+    date,
+    markers,
+  };
+}
+
+async function readGlobalMarkersD1(env, date) {
+  const result = await env.APP_DATA_DB.prepare(`
+    SELECT s.*
+    FROM attraction_history_snapshots s
+    INNER JOIN (
+      SELECT park_key, max(captured_at_millis) AS captured_at_millis
+      FROM attraction_history_snapshots
+      WHERE date = ?
+      GROUP BY park_key
+    ) latest
+      ON latest.park_key = s.park_key
+      AND latest.captured_at_millis = s.captured_at_millis
+    WHERE s.date = ?
+    ORDER BY s.park_key
+  `).bind(date, date).all();
+
+  const markers = (result.results ?? []).map((row) => {
+    const attractions = parseJsonArray(row.attractions_json);
+    const openAttractions = attractions.filter((attraction) => Number(attraction.statusCode) === 0).length;
+    return {
+      parkKey: String(row.park_key ?? ""),
+      capturedAtMillis: Number(row.captured_at_millis ?? 0),
+      openedToday: Number(row.opened_today ?? 0) === 1,
+      openFrom: row.open_from ?? null,
+      closedFrom: row.closed_from ?? null,
+      openAttractions,
+      totalAttractions: attractions.length,
+      attractionCount: attractions.length,
+    };
+  }).filter((marker) => marker.parkKey);
+
   return {
     generatedAtMillis: Date.now(),
     date,
@@ -658,6 +986,20 @@ function parsePositiveInt(value) {
   return Number.isInteger(parsed) && parsed > 0 ? parsed : null;
 }
 
+function parseJsonArray(value) {
+  if (!value) return [];
+  try {
+    const parsed = JSON.parse(value);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
+
+function hasD1(env) {
+  return Boolean(env.APP_DATA_DB);
+}
+
 function attractionHistoryShard(env, parkKey, explicitShardCount = null) {
   const shardCount = explicitShardCount
     ?? parsePositiveInt(env.APP_DATA_HISTORY_SHARDS)
@@ -674,6 +1016,15 @@ function scheduledShardIndex(cron, shardCount) {
   const offset = Number(configured.match(/^(\d+)-59\/5 /)?.[1]);
   if (Number.isInteger(offset)) return Math.max(0, Math.min(shardCount - 1, offset));
   return 0;
+}
+
+function scheduledHistoryShardIndex(scheduledTimeMillis, cronShardIndex, cronShardCount, historyShardCount) {
+  if (historyShardCount <= cronShardCount && cronShardIndex >= historyShardCount) {
+    return null;
+  }
+  const fiveMinuteSlot = Math.floor(Number(scheduledTimeMillis) / (5 * 60 * 1000));
+  const cycleOffset = (fiveMinuteSlot * cronShardCount) + cronShardIndex;
+  return cycleOffset % historyShardCount;
 }
 
 function hashString(value) {

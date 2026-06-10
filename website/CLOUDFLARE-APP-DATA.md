@@ -10,9 +10,9 @@ Der Worker sammelt zentrale Live-Snapshots für die Android-App und stellt sie a
 - `/app-data/statistics/parks/{parkKey}/days/{yyyy-MM-dd}.json` für Wartezeiten- und Statusverlauf aller Attraktionen eines Tages
 
 Die App importiert Park- und Trenddaten in Room und nutzt lokale/API-Scans nur noch als Fallback.
-Die Attraktionsstatistiken werden nicht lokal gespeichert, sondern pro Park und Tag zentral im Cloudflare-KV abgelegt.
+Die Attraktionsstatistiken werden nicht lokal gespeichert, sondern zentral in Cloudflare D1 abgelegt.
 Dadurch kann die App später gezielt alte Tagesdateien laden, z.B. für Vergleiche oder Monatsübersichten.
-Der Cron läuft in drei versetzten Shards alle fünf Minuten. Damit der Free-Plan mit 1.000 KV-Schreibvorgängen pro Tag nicht überschritten wird, schreibt der Worker standardmäßig drei kompakte Tages-Shards und aktualisiert den Statistik-Index nur etwa stündlich bzw. wenn ein neuer Park/Tag auftaucht. Im Shard-Modus werden für Statistik-Snapshots nur Öffnungszeiten und Wartezeiten geladen; Crowd-Level bleibt full Refreshes vorbehalten. Globale Marker werden serverseitig aus diesen Shards gelesen und benötigen keine zusätzlichen KV-Schreibvorgänge. Der Multi-Park-Vergleich in der App nutzt diese bzw. lokal aktualisierte Wartezeitdaten read-only und erzeugt keine zusätzlichen KV-Schreibvorgänge.
+Der Cron läuft in drei versetzten Shards alle fünf Minuten. Neue Statistik-Snapshots werden in D1 als ein kompaktes Snapshot-JSON pro Park und Messzeitpunkt gespeichert. Die öffentlichen Statistik-Endpunkte behalten ihr bisheriges JSON-Format; alte KV-Tagesdateien bleiben als Legacy-Fallback erhalten und werden mit den D1-Daten zusammengeführt. Im Shard-Modus werden für Statistik-Snapshots nur Öffnungszeiten und Wartezeiten geladen; Crowd-Level bleibt full Refreshes vorbehalten. Globale Marker werden serverseitig aus D1 plus Legacy-KV abgeleitet. Der Multi-Park-Vergleich in der App nutzt diese bzw. lokal aktualisierte Wartezeitdaten read-only und erzeugt keine zusätzlichen Writes.
 
 ## Einmalige Einrichtung
 
@@ -36,7 +36,7 @@ Der Cron läuft in drei versetzten Shards alle fünf Minuten. Damit der Free-Pla
    $env:CLOUDFLARE_API_TOKEN="..."
    ```
 
-3. KV Namespace erstellen:
+3. KV Namespace erstellen oder bestehende ID weiterverwenden:
 
    ```powershell
    npx wrangler kv namespace create APP_DATA
@@ -44,7 +44,16 @@ Der Cron läuft in drei versetzten Shards alle fünf Minuten. Damit der Free-Pla
 
 4. Die ausgegebene `id` in `wrangler.jsonc` bei `kv_namespaces[0].id` eintragen.
 
-5. Optional Parkliste für den Cron anpassen:
+5. D1-Datenbank erstellen und Migration anwenden:
+
+   ```powershell
+   npx wrangler d1 create wartezeiten-app-data
+   npx wrangler d1 migrations apply wartezeiten-app-data --remote
+   ```
+
+   Die ausgegebene `database_id` in `wrangler.jsonc` bei `d1_databases[0].database_id` eintragen. Die Binding muss `APP_DATA_DB` heißen.
+
+6. Optional Parkliste für den Cron anpassen:
 
    ```powershell
    npx wrangler secret put APP_DATA_PARK_KEYS
@@ -56,20 +65,19 @@ Der Cron läuft in drei versetzten Shards alle fünf Minuten. Damit der Free-Pla
    europapark,phantasialand,heidepark,hansapark,legoland-de,disneyland-paris,efteling
    ```
 
-6. Optional Statistik-Schreibverhalten anpassen:
+7. Optional Statistik-Schreibverhalten anpassen:
 
    ```powershell
    npx wrangler secret put APP_DATA_INDEX_UPDATE_INTERVAL_MILLIS
-   npx wrangler secret put APP_DATA_HISTORY_SHARDS
    ```
 
-   Standard: Index-Update ca. stündlich und drei Tages-Shards. Mehr Shards reduzieren die Dateigröße einzelner KV-Werte, erhöhen aber die KV-Schreibvorgänge pro Cron-Lauf.
+   `APP_DATA_HISTORY_SHARDS` wird nur noch für den Legacy-KV-Fallback gebraucht. Mit aktivem D1-Binding steuert D1 die zentrale Snapshot-Historie.
 
-## KV-Budget
+## Speicher-Budget
 
-Bei drei 5-Minuten-Cron-Shards entstehen 864 Shard-Läufe pro Tag. Mit der Standardkonfiguration schreibt jeder Lauf genau einen Tages-Statistik-Shard; der Index wird zusätzlich ungefähr stündlich geschrieben. Das ergibt grob 888 KV-Schreibvorgänge pro Tag und bleibt unter dem Free-Plan-Limit von 1.000 Schreibvorgängen pro Tag.
+Bei aktivem D1-Binding schreibt ein erfolgreicher Cron-Parklauf im Wesentlichen eine Tagesmetadaten-Zeile und einen Snapshot pro Park. Die Attraktionen liegen als JSON im Snapshot, damit nicht jede Attraktion eine eigene D1-Zeile erzeugt. Dadurch bleibt die Write-Anzahl auch bei vielen Attraktionen deutlich unter einer normalisierten Attraktionspunkt-Tabelle.
 
-Wichtig: Sehr viele Parks können zusätzlich an Worker-Subrequest-, API- und KV-Größenlimits stoßen. Der Shard-Modus ist auf den aktuellen Wartezeiten.APP-Umfang von über 40 Parks ausgelegt. Wenn die API deutlich wächst, sollte eher auf einen Paid-Plan und/oder R2, D1, Queues bzw. Durable Objects umgestellt werden.
+Wichtig: Sehr viele Parks können zusätzlich an Worker-Subrequest-, API- und D1-Limits stoßen. Der Shard-Modus ist auf den aktuellen Wartezeiten.APP-Umfang von über 40 Parks ausgelegt. Wenn die API deutlich wächst, sollte die Statistik eher über Queues, R2-Roharchive oder eine stärker aggregierte D1-Struktur erweitert werden.
 
 ## Lokal testen
 

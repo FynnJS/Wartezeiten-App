@@ -15,6 +15,14 @@
       "id": "31da31b0b6b8407983691eb9216c8f37"
     }
   ],
+  "d1_databases": [
+    {
+      "binding": "APP_DATA_DB",
+      "database_name": "wartezeiten-app-data",
+      "database_id": "59c0f8e5-60de-4caf-bb9c-2b6d5bdff4c4",
+      "migrations_dir": "worker/migrations"
+    }
+  ],
   "triggers": {
     "crons": [
       "0-59/5 * * * *",
