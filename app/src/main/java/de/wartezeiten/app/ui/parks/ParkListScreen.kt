@@ -103,6 +103,8 @@ fun ParkListRoute(
     ParkListScreen(
         state = state,
         onQueryChange = viewModel::onQueryChange,
+        onSearchHistoryClick = viewModel::useSearchHistory,
+        onClearSearchHistory = viewModel::clearSearchHistory,
         onCountrySelected = viewModel::onCountrySelected,
         onToggleOpenOnly = viewModel::onToggleOpenOnly,
         onToggleFavoritesOnly = viewModel::onToggleFavoritesOnly,
@@ -110,12 +112,19 @@ fun ParkListRoute(
         onClearFilters = viewModel::clearFilters,
         onToggleFavorite = viewModel::toggleFavorite,
         onRefreshClick = { viewModel.refresh() },
-        onParkClick = onParkClick,
+        onParkClick = { park ->
+            viewModel.recordCurrentSearch()
+            viewModel.recordParkOpened(park)
+            onParkClick(park)
+        },
         onSettingsClick = onSettingsClick,
         onWatchlistClick = onWatchlistClick,
         onCompareClick = onCompareClick,
         onParkStatisticsClick = onParkStatisticsClick,
-        onAttractionClick = onAttractionClick,
+        onAttractionClick = { parkKey, attractionId ->
+            viewModel.recordCurrentSearch()
+            onAttractionClick(parkKey, attractionId)
+        },
     )
 }
 
@@ -124,6 +133,8 @@ fun ParkListRoute(
 fun ParkListScreen(
     state: ParkListUiState,
     onQueryChange: (String) -> Unit,
+    onSearchHistoryClick: (String) -> Unit,
+    onClearSearchHistory: () -> Unit,
     onCountrySelected: (String?) -> Unit,
     onToggleOpenOnly: () -> Unit,
     onToggleFavoritesOnly: () -> Unit,
@@ -291,7 +302,30 @@ fun ParkListScreen(
                     ) {
                         if (state.isShowingOfflineData) {
                             item {
-                                OfflineDataBanner(language = state.language)
+                                OfflineDataBanner(
+                                    language = state.language,
+                                    ageMinutes = state.offlineDataAgeMinutes,
+                                )
+                            }
+                        }
+
+                        if (state.recentParks.isNotEmpty() && state.query.isBlank()) {
+                            item {
+                                RecentParksSection(
+                                    parks = state.recentParks,
+                                    language = state.language,
+                                    onParkClick = onParkClick,
+                                )
+                            }
+                        }
+
+                        if (state.favoriteDashboardItems.isNotEmpty() && state.query.isBlank()) {
+                            item {
+                                FavoriteDashboardSection(
+                                    items = state.favoriteDashboardItems,
+                                    language = state.language,
+                                    onParkClick = onParkClick,
+                                )
                             }
                         }
 
@@ -320,6 +354,17 @@ fun ParkListScreen(
                                     focusedBorderColor = MaterialTheme.colorScheme.primary
                                 )
                             )
+                        }
+
+                        if (state.searchHistory.isNotEmpty()) {
+                            item {
+                                SearchHistoryRow(
+                                    history = state.searchHistory,
+                                    language = state.language,
+                                    onHistoryClick = onSearchHistoryClick,
+                                    onClearHistory = onClearSearchHistory,
+                                )
+                            }
                         }
 
                         if (state.availableCountries.isNotEmpty()) {
@@ -464,7 +509,127 @@ fun ParkListScreen(
 }
 
 @Composable
-private fun OfflineDataBanner(language: String) {
+private fun RecentParksSection(
+    parks: List<Park>,
+    language: String,
+    onParkClick: (Park) -> Unit,
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Text(
+            text = if (language == "en") "Recently viewed" else "Zuletzt angesehen",
+            style = MaterialTheme.typography.titleSmall,
+            color = MaterialTheme.colorScheme.primary,
+            fontWeight = FontWeight.Bold,
+        )
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .horizontalScroll(rememberScrollState()),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            parks.forEach { park ->
+                FilterChip(
+                    selected = false,
+                    onClick = { onParkClick(park) },
+                    label = {
+                        Text(
+                            "${countryToFlag(park.country)} ${park.name}",
+                            maxLines = 1,
+                            style = MaterialTheme.typography.labelMedium,
+                        )
+                    },
+                    shape = RoundedCornerShape(12.dp),
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun FavoriteDashboardSection(
+    items: List<FavoriteDashboardItem>,
+    language: String,
+    onParkClick: (Park) -> Unit,
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Text(
+            text = if (language == "en") "Favorites dashboard" else "Favoriten-Dashboard",
+            style = MaterialTheme.typography.titleSmall,
+            color = MaterialTheme.colorScheme.primary,
+            fontWeight = FontWeight.Bold,
+        )
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .horizontalScroll(rememberScrollState()),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            items.forEach { item ->
+                OutlinedCard(
+                    modifier = Modifier
+                        .width(260.dp)
+                        .clickable { onParkClick(item.park) },
+                    shape = RoundedCornerShape(12.dp),
+                    colors = CardDefaults.outlinedCardColors(
+                        containerColor = if (item.isOpen) {
+                            MaterialTheme.colorScheme.primaryContainer
+                        } else {
+                            MaterialTheme.colorScheme.surface
+                        },
+                    ),
+                ) {
+                    Column(
+                        modifier = Modifier.padding(12.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        Text(
+                            item.park.name,
+                            style = MaterialTheme.typography.bodyMedium,
+                            fontWeight = FontWeight.Bold,
+                            maxLines = 1,
+                            overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                        )
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            DashboardMetric(
+                                label = if (language == "en") "Open" else "Offen",
+                                value = "${item.openAttractions}/${item.totalAttractions}",
+                                modifier = Modifier.weight(1f),
+                            )
+                            DashboardMetric(
+                                label = if (language == "en") "Max" else "Max",
+                                value = item.maxWaitMinutes?.let { "$it" } ?: "-",
+                                modifier = Modifier.weight(1f),
+                            )
+                            DashboardMetric(
+                                label = if (language == "en") "Data" else "Daten",
+                                value = item.dataAgeMinutes.shortAgeLabel(language),
+                                modifier = Modifier.weight(1f),
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun DashboardMetric(
+    label: String,
+    value: String,
+    modifier: Modifier = Modifier,
+) {
+    Column(modifier = modifier) {
+        Text(value, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Black)
+        Text(label, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+    }
+}
+
+@Composable
+private fun OfflineDataBanner(
+    language: String,
+    ageMinutes: Long?,
+) {
     Surface(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(12.dp),
@@ -477,11 +642,73 @@ private fun OfflineDataBanner(language: String) {
             horizontalArrangement = Arrangement.spacedBy(10.dp),
         ) {
             Icon(Icons.Default.Warning, contentDescription = null, modifier = Modifier.size(20.dp))
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = if (language == "en") "Showing cached data" else "Gecachte Daten werden angezeigt",
+                    style = MaterialTheme.typography.bodySmall,
+                    fontWeight = FontWeight.SemiBold,
+                )
+                Text(
+                    text = if (language == "en") {
+                        "Last successful park update: ${ageMinutes.cacheAgeLabel(language)}. Some live status may be outdated."
+                    } else {
+                        "Letzte erfolgreiche Park-Aktualisierung: ${ageMinutes.cacheAgeLabel(language)}. Live-Status kann veraltet sein."
+                    },
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onErrorContainer.copy(alpha = 0.86f),
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun SearchHistoryRow(
+    history: List<String>,
+    language: String,
+    onHistoryClick: (String) -> Unit,
+    onClearHistory: () -> Unit,
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
             Text(
-                text = if (language == "en") "Showing offline data" else "Offline-Daten werden angezeigt",
-                style = MaterialTheme.typography.bodySmall,
+                text = if (language == "en") "Recent searches" else "Letzte Suchen",
+                modifier = Modifier.weight(1f),
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
                 fontWeight = FontWeight.SemiBold,
             )
+            TextButton(onClick = onClearHistory) {
+                Text(if (language == "en") "Clear" else "Leeren")
+            }
+        }
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .horizontalScroll(rememberScrollState()),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            history.forEach { value ->
+                FilterChip(
+                    selected = false,
+                    onClick = { onHistoryClick(value) },
+                    label = {
+                        Text(
+                            value,
+                            style = MaterialTheme.typography.labelMedium,
+                            maxLines = 1,
+                        )
+                    },
+                    leadingIcon = {
+                        Icon(Icons.Default.Search, contentDescription = null, modifier = Modifier.size(16.dp))
+                    },
+                    shape = RoundedCornerShape(12.dp),
+                )
+            }
         }
     }
 }
@@ -1099,6 +1326,28 @@ private fun ParkRecommendation.localizedReason(language: String): String {
         if (language == "en") "$openAttractions attractions open" else "$openAttractions Attraktionen offen"
     }
     return "$crowdText, $attractionText"
+}
+
+private fun Long?.cacheAgeLabel(language: String): String {
+    val minutes = this ?: return if (language == "en") "unknown" else "unbekannt"
+    return when {
+        minutes <= 1L -> if (language == "en") "just now" else "gerade eben"
+        minutes < 60L -> if (language == "en") "$minutes minutes ago" else "vor $minutes Minuten"
+        minutes < 120L -> if (language == "en") "1 hour ago" else "vor 1 Stunde"
+        else -> {
+            val hours = minutes / 60L
+            if (language == "en") "$hours hours ago" else "vor $hours Stunden"
+        }
+    }
+}
+
+private fun Long?.shortAgeLabel(language: String): String {
+    val minutes = this ?: return "-"
+    return when {
+        minutes < 1L -> if (language == "en") "now" else "jetzt"
+        minutes < 60L -> "${minutes}m"
+        else -> "${minutes / 60L}h"
+    }
 }
 
 @Composable

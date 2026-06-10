@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Brightness4
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Language
 import androidx.compose.material.icons.filled.KeyboardArrowDown
@@ -22,6 +23,7 @@ import androidx.compose.material3.SegmentedButton
 import androidx.compose.material3.SegmentedButtonDefaults
 import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -45,6 +47,8 @@ fun SettingsRoute(
         onBackClick = onBackClick,
         onDarkModeChange = viewModel::setDarkMode,
         onLanguageChange = viewModel::setLanguage,
+        onClearCache = viewModel::clearCache,
+        onDismissCacheMessage = viewModel::dismissCacheClearMessage,
     )
 }
 
@@ -55,6 +59,8 @@ fun SettingsScreen(
     onBackClick: () -> Unit,
     onDarkModeChange: (Boolean?) -> Unit,
     onLanguageChange: (String) -> Unit,
+    onClearCache: () -> Unit,
+    onDismissCacheMessage: () -> Unit,
 ) {
     var languageExpanded by remember { mutableStateOf(false) }
 
@@ -137,6 +143,43 @@ fun SettingsScreen(
                                 },
                             )
                         }
+                    }
+                },
+            )
+            HorizontalDivider()
+            ListItem(
+                headlineContent = { Text(if (state.language == "en") "Local cache" else "Lokaler Cache") },
+                supportingContent = {
+                    Text(
+                        when {
+                            state.cacheClearMessage != null -> if (state.language == "en") {
+                                "Cached API data was cleared. Favorites and notifications stay saved."
+                            } else {
+                                "Cache-Daten wurden gelöscht. Favoriten und Benachrichtigungen bleiben erhalten."
+                            }
+                            state.language == "en" -> "Clear cached park, attraction, weather, and statistics data."
+                            else -> "Park-, Attraktions-, Wetter- und Statistikdaten aus dem Cache löschen."
+                        }
+                    )
+                },
+                leadingContent = { Icon(Icons.Default.Delete, contentDescription = null) },
+                trailingContent = {
+                    TextButton(
+                        onClick = {
+                            if (state.cacheClearMessage == null) {
+                                onClearCache()
+                            } else {
+                                onDismissCacheMessage()
+                            }
+                        },
+                    ) {
+                        Text(
+                            if (state.cacheClearMessage == null) {
+                                if (state.language == "en") "Clear" else "Leeren"
+                            } else {
+                                "OK"
+                            }
+                        )
                     }
                 },
             )

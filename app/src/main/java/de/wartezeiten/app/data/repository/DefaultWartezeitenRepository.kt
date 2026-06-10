@@ -640,6 +640,14 @@ class DefaultWartezeitenRepository @Inject constructor(
         }
     }
 
+    override suspend fun clearCachedData() {
+        withContext(ioDispatcher) {
+            parkDetailDao.clearCachedDetails()
+            parkSnapshotDao.deleteAllSnapshots()
+            parkDao.deleteNonFavoriteParks()
+        }
+    }
+
     override fun getParkTrendSummary(parkKey: String): Flow<de.wartezeiten.app.domain.model.ParkTrendSummary> {
         return parkSnapshotDao.getSnapshotsByParkKey(parkKey)
             .map { snapshots ->

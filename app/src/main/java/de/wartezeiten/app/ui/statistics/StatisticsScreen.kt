@@ -1,5 +1,9 @@
 package de.wartezeiten.app.ui.statistics
 
+import android.content.Context
+import android.content.Intent
+import android.graphics.Bitmap
+import android.widget.Toast
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
@@ -25,6 +29,7 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.Share
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
@@ -46,6 +51,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -54,13 +60,18 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.core.content.FileProvider
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import de.wartezeiten.app.domain.model.AttractionHistorySummary
 import de.wartezeiten.app.domain.model.Park
+import kotlinx.coroutines.launch
+import java.io.File
 import java.time.Instant
 import java.time.LocalDate
 import java.time.OffsetDateTime
@@ -99,6 +110,10 @@ fun StatisticsScreen(
     onAttractionSelected: (String) -> Unit,
     onParkStatisticsSelected: () -> Unit,
 ) {
+    val context = LocalContext.current
+    val rootView = LocalView.current
+    val scope = rememberCoroutineScope()
+
     Scaffold(
         topBar = {
             TopAppBar(
@@ -124,6 +139,19 @@ fun StatisticsScreen(
                         CircularProgressIndicator(modifier = Modifier.size(24.dp), strokeWidth = 2.5.dp)
                         Spacer(Modifier.width(8.dp))
                     } else {
+                        IconButton(
+                            onClick = {
+                                scope.launch {
+                                    shareStatisticsScreenshot(
+                                        context = context,
+                                        view = rootView,
+                                        title = state.selectedPark?.name ?: "Wartezeiten Statistik",
+                                    )
+                                }
+                            },
+                        ) {
+                            Icon(Icons.Default.Share, contentDescription = "Statistik teilen")
+                        }
                         IconButton(onClick = onRefreshClick) {
                             Icon(Icons.Default.Refresh, contentDescription = "Aktualisieren")
                         }
@@ -243,6 +271,41 @@ fun StatisticsScreen(
             }
         }
     }
+}
+
+private fun shareStatisticsScreenshot(
+    context: Context,
+    view: android.view.View,
+    title: String,
+) {
+    if (view.width <= 0 || view.height <= 0) {
+        Toast.makeText(context, "Screenshot konnte nicht erstellt werden.", Toast.LENGTH_SHORT).show()
+        return
+    }
+
+    val bitmap = Bitmap.createBitmap(view.width, view.height, Bitmap.Config.ARGB_8888)
+    view.draw(android.graphics.Canvas(bitmap))
+
+    val shareDirectory = File(context.cacheDir, "shared_statistics").apply { mkdirs() }
+    val file = File(shareDirectory, "wartezeiten-statistik.png")
+    file.outputStream().use { output ->
+        bitmap.compress(Bitmap.CompressFormat.PNG, 100, output)
+    }
+    bitmap.recycle()
+
+    val uri = FileProvider.getUriForFile(
+        context,
+        "${context.packageName}.fileprovider",
+        file,
+    )
+    val intent = Intent(Intent.ACTION_SEND).apply {
+        type = "image/png"
+        putExtra(Intent.EXTRA_STREAM, uri)
+        putExtra(Intent.EXTRA_SUBJECT, title)
+        putExtra(Intent.EXTRA_TEXT, title)
+        addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+    }
+    context.startActivity(Intent.createChooser(intent, "Statistik teilen"))
 }
 
 @Composable

@@ -1,5 +1,7 @@
 package de.wartezeiten.app.ui.waitingtimes
 
+import android.content.Context
+import android.content.Intent
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
@@ -36,6 +38,7 @@ import androidx.compose.material.icons.filled.FilterList
 import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
@@ -70,6 +73,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.foundation.clickable
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -131,6 +135,7 @@ fun WaitingTimesScreen(
     onParkStatisticsClick: (String) -> Unit,
     onAttractionStatisticsClick: (String, String) -> Unit,
 ) {
+    val context = LocalContext.current
     val snackbarHostState = remember { SnackbarHostState() }
     var showAddWatchlistDialog by remember { mutableStateOf(false) }
     var selectedAttractionId by remember { mutableStateOf<String?>(null) }
@@ -187,6 +192,12 @@ fun WaitingTimesScreen(
                 },
                 actions = {
                     state.park?.let { park ->
+                        IconButton(onClick = { shareParkDetail(context, state) }) {
+                            Icon(
+                                Icons.Default.Share,
+                                contentDescription = if (state.language == "en") "Share park overview" else "Parkübersicht teilen",
+                            )
+                        }
                         IconButton(onClick = { onParkStatisticsClick(park.id) }) {
                             Icon(
                                 painter = painterResource(R.drawable.ic_stats_bar_chart_24),
@@ -356,6 +367,15 @@ private fun WaitingTimesContent(
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
         item {
+            if (state.isShowingOfflineData) {
+                OfflineDetailBanner(
+                    language = state.language,
+                    ageMinutes = state.offlineDataAgeMinutes,
+                )
+            }
+        }
+
+        item {
             ParkHeaderSection(
                 currentTime = state.currentLocalTime,
                 openingTimes = state.openingTimes,
@@ -366,6 +386,10 @@ private fun WaitingTimesContent(
                 holidays = state.holidays,
                 language = state.language,
             )
+        }
+
+        item {
+            DataQualityCard(state = state)
         }
 
         item {
@@ -925,6 +949,138 @@ private fun plannerLine(item: WaitingTime, language: String): String {
             "${item.waitingTime ?: 0} Min. Wartezeit"
         }
         else -> item.status.label(language)
+    }
+}
+
+@Composable
+private fun OfflineDetailBanner(
+    language: String,
+    ageMinutes: Long?,
+) {
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(12.dp),
+        color = MaterialTheme.colorScheme.errorContainer,
+        contentColor = MaterialTheme.colorScheme.onErrorContainer,
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            Icon(Icons.Default.Warning, contentDescription = null, modifier = Modifier.size(20.dp))
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = if (language == "en") "Showing cached attraction data" else "Gecachte Attraktionsdaten",
+                    style = MaterialTheme.typography.bodySmall,
+                    fontWeight = FontWeight.SemiBold,
+                )
+                Text(
+                    text = if (language == "en") {
+                        "Last successful detail update: ${ageMinutes.cacheAgeLabel(language)}."
+                    } else {
+                        "Letzte erfolgreiche Detail-Aktualisierung: ${ageMinutes.cacheAgeLabel(language)}."
+                    },
+                    style = MaterialTheme.typography.labelSmall,
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun DataQualityCard(state: WaitingTimesUiState) {
+    val language = state.language
+    val ageText = state.offlineDataAgeMinutes
+        ?: state.dataUpdatedAtMillis.takeIf { it > 0L }?.let { ((System.currentTimeMillis() - it).coerceAtLeast(0L) / 60_000L) }
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(12.dp),
+        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.75f),
+    ) {
+        Row(
+            modifier = Modifier.padding(12.dp),
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Icon(
+                imageVector = if (state.isShowingOfflineData) Icons.Default.Warning else Icons.Default.CheckCircle,
+                contentDescription = null,
+                tint = if (state.isShowingOfflineData) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary,
+            )
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = when {
+                        state.isShowingOfflineData -> if (language == "en") "Cached data" else "Cache-Daten"
+                        state.dataUpdatedAtMillis > 0L && (ageText ?: Long.MAX_VALUE) <= 5L -> if (language == "en") "Live-like data" else "Aktuelle Daten"
+                        state.dataUpdatedAtMillis > 0L -> if (language == "en") "Older local data" else "Ältere lokale Daten"
+                        else -> if (language == "en") "Data status unknown" else "Datenstatus unbekannt"
+                    },
+                    style = MaterialTheme.typography.bodySmall,
+                    fontWeight = FontWeight.SemiBold,
+                )
+                Text(
+                    text = if (state.dataUpdatedAtMillis > 0L) {
+                        if (language == "en") "Data age: ${ageText.cacheAgeLabel(language)}" else "Datenalter: ${ageText.cacheAgeLabel(language)}"
+                    } else {
+                        if (language == "en") "No successful update stored yet" else "Noch keine erfolgreiche Aktualisierung gespeichert"
+                    },
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        }
+    }
+}
+
+private fun shareParkDetail(context: Context, state: WaitingTimesUiState) {
+    val park = state.park ?: return
+    val openAttractions = state.allWaitingTimes.count { it.status == AttractionStatus.Opened }
+    val topWaits = state.allWaitingTimes
+        .filter { it.status == AttractionStatus.Opened && it.waitingTime != null }
+        .sortedByDescending { it.waitingTime ?: 0 }
+        .take(5)
+    val text = buildString {
+        appendLine(park.name)
+        appendLine(park.country)
+        appendLine(
+            if (state.language == "en") {
+                "$openAttractions of ${state.allWaitingTimes.size} attractions open"
+            } else {
+                "$openAttractions von ${state.allWaitingTimes.size} Attraktionen offen"
+            }
+        )
+        state.crowdEstimate?.level?.let { level ->
+            appendLine(if (state.language == "en") "Crowd estimate: ${level.toInt()}%" else "Auslastung geschätzt: ${level.toInt()}%")
+        }
+        if (topWaits.isNotEmpty()) {
+            appendLine()
+            appendLine(if (state.language == "en") "Longest waits:" else "Längste Wartezeiten:")
+            topWaits.forEach { item ->
+                appendLine("- ${item.name}: ${item.waitingTime ?: 0} Min.")
+            }
+        }
+        appendLine()
+        append(if (state.language == "en") "Shared from Wartezeiten App" else "Geteilt aus der Wartezeiten App")
+    }
+    val intent = Intent(Intent.ACTION_SEND).apply {
+        type = "text/plain"
+        putExtra(Intent.EXTRA_SUBJECT, park.name)
+        putExtra(Intent.EXTRA_TEXT, text)
+    }
+    context.startActivity(Intent.createChooser(intent, if (state.language == "en") "Share park overview" else "Parkübersicht teilen"))
+}
+
+private fun Long?.cacheAgeLabel(language: String): String {
+    val minutes = this ?: return if (language == "en") "unknown" else "unbekannt"
+    return when {
+        minutes <= 1L -> if (language == "en") "just now" else "gerade eben"
+        minutes < 60L -> if (language == "en") "$minutes minutes ago" else "vor $minutes Minuten"
+        minutes < 120L -> if (language == "en") "1 hour ago" else "vor 1 Stunde"
+        else -> {
+            val hours = minutes / 60L
+            if (language == "en") "$hours hours ago" else "vor $hours Stunden"
+        }
     }
 }
 

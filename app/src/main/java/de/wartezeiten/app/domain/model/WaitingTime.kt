@@ -4,7 +4,8 @@ data class WaitingTime(
     val attractionId: String,
     val name: String,
     val waitingTime: Int?,
-    val status: AttractionStatus
+    val status: AttractionStatus,
+    val updatedAtMillis: Long = 0L,
 )
 
 data class CurrentAttractionSearchEntry(

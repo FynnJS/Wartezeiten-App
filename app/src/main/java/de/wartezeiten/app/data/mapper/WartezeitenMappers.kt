@@ -38,7 +38,8 @@ fun ParkEntity.toDomain(): Park {
         uuid = uuid,
         name = name,
         country = country,
-        isFavorite = isFavorite
+        isFavorite = isFavorite,
+        updatedAtMillis = updatedAtMillis,
     )
 }
 
@@ -84,6 +85,7 @@ fun WaitingTimeEntity.toDomain(): WaitingTime {
         name = name,
         waitingTime = waitingTime,
         status = AttractionStatus.fromApi(status),
+        updatedAtMillis = updatedAtMillis,
     )
 }
 

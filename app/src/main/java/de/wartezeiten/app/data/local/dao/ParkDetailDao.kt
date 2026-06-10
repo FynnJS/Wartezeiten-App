@@ -62,6 +62,34 @@ interface ParkDetailDao {
     @Query("DELETE FROM holidays WHERE parkKey = :parkKey")
     suspend fun deleteHolidaysForPark(parkKey: String)
 
+    @Query("DELETE FROM opening_times")
+    suspend fun deleteAllOpeningTimes()
+
+    @Query("DELETE FROM crowd_levels")
+    suspend fun deleteAllCrowdLevels()
+
+    @Query("DELETE FROM waiting_times")
+    suspend fun deleteAllWaitingTimes()
+
+    @Query("DELETE FROM weather")
+    suspend fun deleteAllWeather()
+
+    @Query("DELETE FROM weather_forecast")
+    suspend fun deleteAllWeatherForecast()
+
+    @Query("DELETE FROM holidays")
+    suspend fun deleteAllHolidays()
+
+    @Transaction
+    suspend fun clearCachedDetails() {
+        deleteAllOpeningTimes()
+        deleteAllCrowdLevels()
+        deleteAllWaitingTimes()
+        deleteAllWeather()
+        deleteAllWeatherForecast()
+        deleteAllHolidays()
+    }
+
     @Transaction
     suspend fun replaceWaitingTimes(parkKey: String, waitingTimes: List<WaitingTimeEntity>) {
         deleteWaitingTimesForPark(parkKey)

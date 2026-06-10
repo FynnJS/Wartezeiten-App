@@ -66,6 +66,9 @@ data class WaitingTimesUiState(
     val isLoading: Boolean = false,
     val errorMessage: String? = null,
     val lastRefreshed: Long = 0L,
+    val dataUpdatedAtMillis: Long = 0L,
+    val isShowingOfflineData: Boolean = false,
+    val offlineDataAgeMinutes: Long? = null,
     val refreshTrigger: Int = 0,
     val currentLocalTime: Long = System.currentTimeMillis(),
     val localTimeOffsetSeconds: Int? = null,
@@ -155,10 +158,14 @@ class WaitingTimesViewModel @Inject constructor(
             )
 
         if (detail.park == null) {
+            val dataUpdatedAtMillis = detail.latestDataUpdatedAtMillis()
             WaitingTimesUiState(
                 isLoading = status.isLoading,
                 errorMessage = status.errorMessage,
                 lastRefreshed = status.lastRefreshed,
+                dataUpdatedAtMillis = dataUpdatedAtMillis,
+                isShowingOfflineData = status.errorMessage != null && dataUpdatedAtMillis > 0L,
+                offlineDataAgeMinutes = dataUpdatedAtMillis.toAgeMinutes(),
                 refreshTrigger = status.refreshTrigger,
                 currentLocalTime = status.currentTime,
                 trendSummary = trendSummary,
@@ -166,6 +173,7 @@ class WaitingTimesViewModel @Inject constructor(
                 highlightedAttractionId = highlightedAttractionId,
             )
         } else {
+            val dataUpdatedAtMillis = detail.latestDataUpdatedAtMillis()
             val hasOpenAttraction = detail.waitingTimes.any { it.status == AttractionStatus.Opened }
             val canCalculateCrowdLevel = detail.openingTimes?.opened == true && hasOpenAttraction
             val crowdEstimate = if (canCalculateCrowdLevel) {
@@ -194,12 +202,15 @@ class WaitingTimesViewModel @Inject constructor(
                 isLoading = status.isLoading,
                 errorMessage = status.errorMessage,
                 lastRefreshed = status.lastRefreshed,
+                dataUpdatedAtMillis = dataUpdatedAtMillis,
+                isShowingOfflineData = status.errorMessage != null && dataUpdatedAtMillis > 0L,
+                offlineDataAgeMinutes = dataUpdatedAtMillis.toAgeMinutes(),
                 refreshTrigger = status.refreshTrigger,
                 currentLocalTime = status.currentTime,
                 localTimeOffsetSeconds = detail.localTimeOffsetSeconds(),
                 dataQuality = DataQuality(
-                    lastUpdated = status.lastRefreshed,
-                    freshness = if (System.currentTimeMillis() - status.lastRefreshed < 300_000) DataFreshness.Fresh else DataFreshness.Stale,
+                    lastUpdated = dataUpdatedAtMillis,
+                    freshness = if (System.currentTimeMillis() - dataUpdatedAtMillis < 300_000) DataFreshness.Fresh else DataFreshness.Stale,
                     confidenceScore = if (detail.crowdLevel != null) 0.9f else 0.7f
                 ),
                 trendSummary = if (canCalculateCrowdLevel) trendSummary else ParkTrendSummary.Empty,
@@ -214,10 +225,17 @@ class WaitingTimesViewModel @Inject constructor(
     )
 
     init {
+        recordRecentPark()
         restoreSavedFilters()
         observeLanguage()
         refreshPublicTrendHistory()
         startAutoRefresh()
+    }
+
+    private fun recordRecentPark() {
+        viewModelScope.launch {
+            preferences.addRecentParkKey(parkKey)
+        }
     }
 
     private fun refreshPublicTrendHistory() {
@@ -354,6 +372,18 @@ class WaitingTimesViewModel @Inject constructor(
         return candidates.firstNotNullOfOrNull { value ->
             runCatching { OffsetDateTime.parse(value).offset.totalSeconds }.getOrNull()
         }
+    }
+
+    private fun de.wartezeiten.app.domain.model.ParkDetail.latestDataUpdatedAtMillis(): Long {
+        return listOfNotNull(
+            park?.updatedAtMillis?.takeIf { it > 0L },
+            waitingTimes.maxOfOrNull { it.updatedAtMillis }?.takeIf { it > 0L },
+        ).maxOrNull() ?: 0L
+    }
+
+    private fun Long.toAgeMinutes(): Long? {
+        if (this <= 0L) return null
+        return ((System.currentTimeMillis() - this).coerceAtLeast(0L) / 60_000L)
     }
 }
 

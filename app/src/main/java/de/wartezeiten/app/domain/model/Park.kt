@@ -5,5 +5,6 @@ data class Park(
     val uuid: String,
     val name: String,
     val country: String,
-    val isFavorite: Boolean = false
+    val isFavorite: Boolean = false,
+    val updatedAtMillis: Long = 0L,
 )

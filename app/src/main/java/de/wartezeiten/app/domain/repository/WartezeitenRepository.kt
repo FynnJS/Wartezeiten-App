@@ -38,4 +38,5 @@ interface WartezeitenRepository {
     suspend fun getAttractionHistoryDay(parkKey: String, date: String): ApiResult<AttractionHistoryDay>
 
     suspend fun toggleFavorite(parkId: String, isFavorite: Boolean)
+    suspend fun clearCachedData()
 }

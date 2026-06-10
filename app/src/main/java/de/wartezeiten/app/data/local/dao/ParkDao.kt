@@ -27,4 +27,7 @@ interface ParkDao {
 
     @Query("UPDATE parks SET isFavorite = :isFavorite WHERE id = :parkId")
     suspend fun updateFavorite(parkId: String, isFavorite: Boolean)
+
+    @Query("DELETE FROM parks WHERE isFavorite = 0")
+    suspend fun deleteNonFavoriteParks()
 }

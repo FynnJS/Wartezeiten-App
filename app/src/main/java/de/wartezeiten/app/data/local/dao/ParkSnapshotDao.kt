@@ -52,4 +52,7 @@ interface ParkSnapshotDao {
     
     @Query("DELETE FROM park_snapshots WHERE capturedAtMillis < :olderThanMillis AND source = 'local'")
     suspend fun deleteOldSnapshots(olderThanMillis: Long)
+
+    @Query("DELETE FROM park_snapshots")
+    suspend fun deleteAllSnapshots()
 }

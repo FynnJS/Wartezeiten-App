@@ -33,7 +33,10 @@ private const val OPEN_PARK_FILTER_MAX_AGE_MILLIS = 30 * 60 * 1000L
 data class ParkListUiState(
     val parks: List<Park> = emptyList(),
     val favoriteParks: List<Park> = emptyList(),
+    val favoriteDashboardItems: List<FavoriteDashboardItem> = emptyList(),
+    val recentParks: List<Park> = emptyList(),
     val query: String = "",
+    val searchHistory: List<String> = emptyList(),
     val selectedCountry: String? = null,
     val availableCountries: List<String> = emptyList(),
     val showOpenOnly: Boolean = false,
@@ -47,12 +50,22 @@ data class ParkListUiState(
     val totalParkCount: Int = 0,
     val visibleCountryCount: Int = 0,
     val isShowingOfflineData: Boolean = false,
+    val offlineDataAgeMinutes: Long? = null,
     val isLoading: Boolean = false,
     val errorMessage: String? = null,
     val refreshTrigger: Int = 0,
     val attractionSearchResults: List<AttractionSearchResult> = emptyList(),
     val statisticsParkKeys: Map<String, String> = emptyMap(),
     val isStatisticsIndexLoading: Boolean = false,
+)
+
+data class FavoriteDashboardItem(
+    val park: Park,
+    val isOpen: Boolean,
+    val openAttractions: Int,
+    val totalAttractions: Int,
+    val maxWaitMinutes: Int?,
+    val dataAgeMinutes: Long?,
 )
 
 data class AttractionSearchResult(
@@ -89,6 +102,8 @@ class ParkListViewModel @Inject constructor(
     private val preferences: PreferencesDataSource,
 ) : ViewModel() {
     private val query = MutableStateFlow("")
+    private val searchHistory = MutableStateFlow<List<String>>(emptyList())
+    private val recentParkKeys = MutableStateFlow<List<String>>(emptyList())
     private val selectedCountry = MutableStateFlow<String?>(null)
     private val showOpenOnly = MutableStateFlow(false)
     private val showFavoritesOnly = MutableStateFlow(false)
@@ -122,6 +137,8 @@ class ParkListViewModel @Inject constructor(
         currentAttractions,
         latestOpenParkKeys,
         query,
+        searchHistory,
+        recentParkKeys,
         selectedCountry,
         showOpenOnly,
         showFavoritesOnly,
@@ -140,21 +157,26 @@ class ParkListViewModel @Inject constructor(
         val currentAttractionEntries = args[1] as List<CurrentAttractionSearchEntry>
         val openParkKeys = args[2] as Set<String>
         val q = args[3] as String
-        val country = args[4] as String?
-        val openOnly = args[5] as Boolean
-        val favoritesOnly = args[6] as Boolean
-        val currentSort = args[7] as ParkSort
-        val currentRecommendations = args[8] as List<ParkRecommendation>
-        val recommendationLoading = args[9] as Boolean
-        val scanProgress = args[10] as ParkRecommendationScanProgress?
-        val language = args[11] as String
-        val loading = args[12] as Boolean
-        val error = args[13] as String?
-        val trigger = args[14] as Int
-        val statsIndex = args[15] as StatisticsIndex
-        val statsLoading = args[16] as Boolean
+        val currentSearchHistory = args[4] as List<String>
+        val currentRecentParkKeys = args[5] as List<String>
+        val country = args[6] as String?
+        val openOnly = args[7] as Boolean
+        val favoritesOnly = args[8] as Boolean
+        val currentSort = args[9] as ParkSort
+        val currentRecommendations = args[10] as List<ParkRecommendation>
+        val recommendationLoading = args[11] as Boolean
+        val scanProgress = args[12] as ParkRecommendationScanProgress?
+        val language = args[13] as String
+        val loading = args[14] as Boolean
+        val error = args[15] as String?
+        val trigger = args[16] as Int
+        val statsIndex = args[17] as StatisticsIndex
+        val statsLoading = args[18] as Boolean
 
         val favorites = parks.filter { it.isFavorite }
+        val recent = currentRecentParkKeys.mapNotNull { key ->
+            parks.firstOrNull { it.id == key || it.uuid == key }
+        }
         val countries = parks.map { it.country }.distinct().sorted()
         val parksByKey = parks
             .flatMap { park -> listOf(park.id to park, park.uuid to park) }
@@ -165,8 +187,7 @@ class ParkListViewModel @Inject constructor(
         var filtered = parks
         if (normalizedQuery.isNotBlank()) {
             filtered = filtered.filter { park ->
-                park.name.normalizedSearchText().contains(normalizedQuery) ||
-                    park.country.normalizedSearchText().contains(normalizedQuery)
+                park.matchesSearchQuery(normalizedQuery)
             }
         }
         if (country != null) filtered = filtered.filter { it.country == country }
@@ -192,7 +213,10 @@ class ParkListViewModel @Inject constructor(
         ParkListUiState(
             parks = filtered,
             favoriteParks = favorites,
+            favoriteDashboardItems = favorites.toFavoriteDashboardItems(currentAttractionEntries, openParkKeys),
+            recentParks = recent,
             query = q,
+            searchHistory = currentSearchHistory.filterNot { it.equals(q, ignoreCase = true) },
             selectedCountry = country,
             availableCountries = countries,
             showOpenOnly = openOnly,
@@ -206,6 +230,7 @@ class ParkListViewModel @Inject constructor(
             totalParkCount = parks.size,
             visibleCountryCount = filtered.map { it.country }.distinct().size,
             isShowingOfflineData = error != null && parks.isNotEmpty(),
+            offlineDataAgeMinutes = parks.latestCacheAgeMinutes(),
             isLoading = loading,
             errorMessage = error,
             refreshTrigger = trigger,
@@ -220,10 +245,29 @@ class ParkListViewModel @Inject constructor(
     )
 
     init {
+        observeParkSearchState()
         observeParkSort()
         observeLanguage()
         startAutoRefresh()
         refreshStatisticsIndex()
+    }
+
+    private fun observeParkSearchState() {
+        viewModelScope.launch {
+            preferences.parkSearchQuery.distinctUntilChanged().collect { savedQuery ->
+                query.value = savedQuery
+            }
+        }
+        viewModelScope.launch {
+            preferences.parkSearchHistory.distinctUntilChanged().collect { savedHistory ->
+                searchHistory.value = savedHistory
+            }
+        }
+        viewModelScope.launch {
+            preferences.recentParkKeys.distinctUntilChanged().collect { savedKeys ->
+                recentParkKeys.value = savedKeys
+            }
+        }
     }
 
     private fun observeParkSort() {
@@ -255,6 +299,36 @@ class ParkListViewModel @Inject constructor(
 
     fun onQueryChange(value: String) {
         query.value = value
+        viewModelScope.launch {
+            preferences.setParkSearchQuery(value)
+        }
+    }
+
+    fun recordCurrentSearch() {
+        recordSearch(query.value)
+    }
+
+    fun recordParkOpened(park: Park) {
+        viewModelScope.launch {
+            preferences.addRecentParkKey(park.id)
+        }
+    }
+
+    fun useSearchHistory(value: String) {
+        onQueryChange(value)
+        recordSearch(value)
+    }
+
+    fun clearSearchHistory() {
+        viewModelScope.launch {
+            preferences.clearParkSearchHistory()
+        }
+    }
+
+    private fun recordSearch(value: String) {
+        viewModelScope.launch {
+            preferences.addParkSearchHistory(value)
+        }
     }
 
     fun onCountrySelected(country: String?) {
@@ -276,6 +350,7 @@ class ParkListViewModel @Inject constructor(
 
     fun clearFilters() {
         query.value = ""
+        viewModelScope.launch { preferences.setParkSearchQuery("") }
         selectedCountry.value = null
         showOpenOnly.value = false
         showFavoritesOnly.value = false
@@ -375,6 +450,33 @@ class ParkListViewModel @Inject constructor(
             ParkSort.Country -> sortedWith(
                 compareBy<Park> { it.country.lowercase() }
                     .thenBy { it.name.lowercase() }
+            )
+        }
+    }
+
+    private fun List<Park>.latestCacheAgeMinutes(): Long? {
+        val latestUpdate = maxOfOrNull { it.updatedAtMillis }?.takeIf { it > 0L } ?: return null
+        return ((System.currentTimeMillis() - latestUpdate).coerceAtLeast(0L) / 60_000L).coerceAtLeast(0L)
+    }
+
+    private fun List<Park>.toFavoriteDashboardItems(
+        attractions: List<CurrentAttractionSearchEntry>,
+        openParkKeys: Set<String>,
+    ): List<FavoriteDashboardItem> {
+        return map { park ->
+            val parkAttractions = attractions.filter { it.parkKey == park.id || it.parkKey == park.uuid }
+            val openAttractions = parkAttractions.filter { it.status == AttractionStatus.Opened }
+            val latestUpdate = listOfNotNull(
+                park.updatedAtMillis.takeIf { it > 0L },
+                parkAttractions.maxOfOrNull { it.updatedAtMillis },
+            ).maxOrNull()
+            FavoriteDashboardItem(
+                park = park,
+                isOpen = park.id in openParkKeys || park.uuid in openParkKeys || openAttractions.isNotEmpty(),
+                openAttractions = openAttractions.size,
+                totalAttractions = parkAttractions.size,
+                maxWaitMinutes = openAttractions.mapNotNull { it.waitingTime }.maxOrNull(),
+                dataAgeMinutes = latestUpdate?.let { ((System.currentTimeMillis() - it).coerceAtLeast(0L) / 60_000L) },
             )
         }
     }
@@ -503,4 +605,29 @@ private fun String.normalizedSearchText(): String {
         .replace("ö", "oe")
         .replace("ü", "ue")
         .replace("ß", "ss")
+}
+
+private fun Park.matchesSearchQuery(normalizedQuery: String): Boolean {
+    val candidates = buildList {
+        add(name)
+        add(country)
+        add(id)
+        add(uuid)
+        addAll(searchAliases())
+    }
+    return candidates.any { it.normalizedSearchText().contains(normalizedQuery) }
+}
+
+private fun Park.searchAliases(): List<String> {
+    val normalizedId = id.normalizedSearchText()
+    val normalizedName = name.normalizedSearchText()
+    return buildList {
+        if ("europapark" in listOf(normalizedId, normalizedName)) addAll(listOf("ep", "europa park", "europapark"))
+        if ("phantasialand" in listOf(normalizedId, normalizedName)) addAll(listOf("pl", "phantasia land"))
+        if ("heidepark" in listOf(normalizedId, normalizedName)) addAll(listOf("heide park", "hp"))
+        if ("hansapark" in listOf(normalizedId, normalizedName)) addAll(listOf("hansa park"))
+        if ("legoland" in normalizedId || "legoland" in normalizedName) addAll(listOf("lego land", "lego"))
+        if ("disney" in normalizedId || "disney" in normalizedName) addAll(listOf("dlp", "disney", "disneyland"))
+        if ("efteling" in normalizedId || "efteling" in normalizedName) add("eft")
+    }
 }
