@@ -11,6 +11,7 @@ import dagger.hilt.components.SingletonComponent
 import de.wartezeiten.app.BuildConfig
 import de.wartezeiten.app.core.network.CacheHeadersInterceptor
 import de.wartezeiten.app.data.remote.HolidayApiService
+import de.wartezeiten.app.data.remote.PushApiService
 import de.wartezeiten.app.data.remote.PublicAppDataApiService
 import de.wartezeiten.app.data.remote.UpdateApiService
 import de.wartezeiten.app.data.remote.WartezeitenApiService
@@ -129,5 +130,19 @@ object NetworkModule {
             .addConverterFactory(GsonConverterFactory.create(gson))
             .build()
             .create(PublicAppDataApiService::class.java)
+    }
+
+    @Provides
+    @Singleton
+    fun providePushApiService(
+        client: OkHttpClient,
+        gson: Gson
+    ): PushApiService {
+        return Retrofit.Builder()
+            .baseUrl(BuildConfig.PUSH_API_BASE_URL)
+            .client(client)
+            .addConverterFactory(GsonConverterFactory.create(gson))
+            .build()
+            .create(PushApiService::class.java)
     }
 }

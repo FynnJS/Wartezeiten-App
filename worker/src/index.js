@@ -12,7 +12,9 @@ const REQUEST_DELAY_MILLIS = 900;
 const DEFAULT_ATTRACTION_HISTORY_SHARDS = 3;
 const DEFAULT_INDEX_UPDATE_INTERVAL_MILLIS = 60 * 60 * 1000;
 const DEFAULT_CRON_SHARDS = 3;
+const DEFAULT_PUSH_SCAN_LIMIT = 1000;
 const D1_SCHEMA_VERSION = 1;
+let cachedFcmAccessToken = null;
 
 const DEFAULT_PARK_KEYS = [
   "europapark",
@@ -27,6 +29,10 @@ const DEFAULT_PARK_KEYS = [
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
+
+    if (request.method === "OPTIONS") {
+      return jsonResponse({ ok: true });
+    }
 
     if (url.pathname === "/app-data/latest.json") {
       return jsonResponse(await readJson(env, LATEST_KEY, emptyLatest()));
@@ -72,6 +78,18 @@ export default {
       return jsonResponse(result);
     }
 
+    if (url.pathname === "/push/register" && request.method === "POST") {
+      return pushJsonResponse(registerPushInstallation, env, request);
+    }
+
+    if (url.pathname === "/push/watchlist" && request.method === "POST") {
+      return pushJsonResponse(syncPushWatchlist, env, request);
+    }
+
+    if (url.pathname === "/push/unregister" && request.method === "POST") {
+      return pushJsonResponse(unregisterPushInstallation, env, request);
+    }
+
     if (env.ASSETS) {
       return env.ASSETS.fetch(request);
     }
@@ -79,6 +97,10 @@ export default {
   },
 
   async scheduled(controller, env, ctx) {
+    if (controller?.cron === "* * * * *") {
+      ctx.waitUntil(runPushWatchlistScan(env));
+      return;
+    }
     ctx.waitUntil(updateScheduledAppData(controller, env));
   },
 };
@@ -325,6 +347,503 @@ async function apiJson(path, headers) {
     throw new Error(`${path} failed with HTTP ${response.status}`);
   }
   return response.json();
+}
+
+async function registerPushInstallation(env, payload) {
+  ensurePushD1(env);
+  const installationId = cleanString(payload?.installationId, 160);
+  const token = cleanString(payload?.token, 512);
+  const language = cleanString(payload?.language, 8) === "en" ? "en" : "de";
+  if (!installationId || !token) {
+    return { ok: false, error: "installationId and token are required" };
+  }
+
+  await env.APP_DATA_DB.prepare(
+    `
+      INSERT INTO push_installations (installation_id, fcm_token, language, updated_at, disabled_at)
+      VALUES (?, ?, ?, ?, NULL)
+      ON CONFLICT(installation_id) DO UPDATE SET
+        fcm_token = excluded.fcm_token,
+        language = excluded.language,
+        updated_at = excluded.updated_at,
+        disabled_at = NULL
+    `,
+  ).bind(installationId, token, language, Date.now()).run();
+  return { ok: true };
+}
+
+async function pushJsonResponse(handler, env, request) {
+  try {
+    const result = await handler(env, await request.json());
+    return jsonResponse(result, result.ok === false ? 400 : 200);
+  } catch (error) {
+    return jsonResponse({
+      ok: false,
+      error: error instanceof Error ? error.message : String(error),
+    }, 500);
+  }
+}
+
+async function syncPushWatchlist(env, payload) {
+  ensurePushD1(env);
+  const installationId = cleanString(payload?.installationId, 160);
+  const alerts = Array.isArray(payload?.alerts) ? payload.alerts : [];
+  if (!installationId) {
+    return { ok: false, error: "installationId is required" };
+  }
+
+  const installation = await env.APP_DATA_DB.prepare(
+    "SELECT installation_id FROM push_installations WHERE installation_id = ? AND disabled_at IS NULL",
+  ).bind(installationId).first();
+  if (!installation) {
+    return { ok: false, error: "installation is not registered" };
+  }
+
+  const now = Date.now();
+  const normalizedAlerts = alerts
+    .map((alert) => normalizePushAlert(alert))
+    .filter(Boolean)
+    .slice(0, 100);
+  const existingRows = await env.APP_DATA_DB.prepare(
+    "SELECT local_alert_id FROM push_watchlist_alerts WHERE installation_id = ?",
+  ).bind(installationId).all();
+  const nextIds = new Set(normalizedAlerts.map((alert) => alert.localAlertId));
+  const statements = [];
+
+  for (const row of existingRows.results ?? []) {
+    if (!nextIds.has(row.local_alert_id)) {
+      statements.push(
+        env.APP_DATA_DB.prepare(
+          "DELETE FROM push_watchlist_alerts WHERE installation_id = ? AND local_alert_id = ?",
+        ).bind(installationId, row.local_alert_id),
+      );
+    }
+  }
+
+  for (const alert of normalizedAlerts) {
+    statements.push(
+      env.APP_DATA_DB.prepare(
+        `
+          INSERT INTO push_watchlist_alerts (
+            installation_id, local_alert_id, park_key, attraction_id, type,
+            threshold_value, last_seen_value, last_notified_value, updated_at
+          )
+          VALUES (?, ?, ?, ?, ?, ?, NULL, NULL, ?)
+          ON CONFLICT(installation_id, local_alert_id) DO UPDATE SET
+            park_key = excluded.park_key,
+            attraction_id = excluded.attraction_id,
+            type = excluded.type,
+            threshold_value = excluded.threshold_value,
+            updated_at = excluded.updated_at
+        `,
+      ).bind(
+        installationId,
+        alert.localAlertId,
+        alert.parkKey,
+        alert.attractionId,
+        alert.type,
+        alert.threshold,
+        now,
+      ),
+    );
+  }
+
+  if (statements.length > 0) {
+    await env.APP_DATA_DB.batch(statements);
+  }
+  return { ok: true, alerts: normalizedAlerts.length };
+}
+
+async function unregisterPushInstallation(env, payload) {
+  ensurePushD1(env);
+  const installationId = cleanString(payload?.installationId, 160);
+  if (!installationId) {
+    return { ok: false, error: "installationId is required" };
+  }
+  await env.APP_DATA_DB.batch([
+    env.APP_DATA_DB.prepare("DELETE FROM push_watchlist_alerts WHERE installation_id = ?").bind(installationId),
+    env.APP_DATA_DB.prepare(
+      "UPDATE push_installations SET disabled_at = ?, updated_at = ? WHERE installation_id = ?",
+    ).bind(Date.now(), Date.now(), installationId),
+  ]);
+  return { ok: true };
+}
+
+async function runPushWatchlistScan(env) {
+  if (!hasD1(env) || !hasFcmConfig(env)) {
+    return { ok: true, skipped: true };
+  }
+
+  const limit = parsePositiveInt(env.PUSH_SCAN_LIMIT) ?? DEFAULT_PUSH_SCAN_LIMIT;
+  const rowsResult = await env.APP_DATA_DB.prepare(
+    `
+      SELECT
+        a.installation_id,
+        a.local_alert_id,
+        a.park_key,
+        a.attraction_id,
+        a.type,
+        a.threshold_value,
+        a.last_seen_value,
+        a.last_notified_value,
+        i.fcm_token,
+        i.language
+      FROM push_watchlist_alerts a
+      JOIN push_installations i ON i.installation_id = a.installation_id
+      WHERE i.disabled_at IS NULL
+      ORDER BY a.park_key, a.updated_at DESC
+      LIMIT ?
+    `,
+  ).bind(limit).all();
+  const rows = rowsResult.results ?? [];
+  const groupedByPark = groupBy(rows, (row) => row.park_key);
+  let scannedParks = 0;
+  let sent = 0;
+  const errors = [];
+
+  for (const [parkKey, alerts] of groupedByPark.entries()) {
+    try {
+      const snapshot = await collectParkSnapshot(parkKey, Date.now(), { includeCrowd: true });
+      scannedParks += 1;
+      for (const alert of alerts) {
+        const evaluation = evaluatePushAlert(alert, snapshot);
+        if (!evaluation) continue;
+
+        if (evaluation.nextSeenValue !== alert.last_seen_value) {
+          await updatePushAlertSeenValue(env, alert, evaluation.nextSeenValue);
+        }
+        if (!evaluation.shouldNotify) continue;
+
+        const message = {
+          title: evaluation.title,
+          body: evaluation.body,
+          parkKey,
+          attractionId: evaluation.attractionId ?? "",
+        };
+        const result = await sendFcmDataMessage(env, alert.fcm_token, message);
+        if (result.ok) {
+          sent += 1;
+          await updatePushAlertNotifiedValue(env, alert, evaluation.nextSeenValue);
+        } else {
+          errors.push({ parkKey, installationId: alert.installation_id, error: result.error });
+          if (result.disableToken) {
+            await disablePushInstallation(env, alert.installation_id);
+          }
+        }
+      }
+      await delay(REQUEST_DELAY_MILLIS);
+    } catch (error) {
+      errors.push({ parkKey, error: error instanceof Error ? error.message : String(error) });
+    }
+  }
+
+  return { ok: true, scannedParks, alerts: rows.length, sent, errors };
+}
+
+function evaluatePushAlert(alert, snapshot) {
+  const type = String(alert.type || "");
+  const threshold = Number(alert.threshold_value ?? 0);
+  const isParkOpen = isParkOpenNow(snapshot, Date.now());
+  const openAttractions = snapshot.attractions.filter((item) => item.statusCode === 0);
+  const target = alert.attraction_id
+    ? snapshot.attractions.find((item) => item.id === alert.attraction_id || stableAttractionId(item.name) === alert.attraction_id)
+    : null;
+
+  if (type === "NOW_OPENED") {
+    return booleanEvaluation(alert, isParkOpen, `Einlass bereit: ${snapshot.parkKey}`, "Der Park ist aktuell als geoeffnet gemeldet.", null);
+  }
+  if (type === "PARK_STATUS_CHANGED") {
+    const state = isParkOpen ? "open" : "closed";
+    return valueEvaluation(alert, state, false, `${snapshot.parkKey} im Park-Ticker`, isParkOpen ? "Heute geoeffnet. Pruefe jetzt deine Route." : "Aktuell geschlossen. Plane lieber um.", null);
+  }
+  if (type === "CROWD_LEVEL_BELOW" || type === "CROWD_LEVEL_ABOVE") {
+    const crowd = snapshot.displayCrowdLevel;
+    const triggered = isParkOpen && crowd != null && (
+      type === "CROWD_LEVEL_BELOW" ? crowd <= threshold : crowd >= threshold
+    );
+    const direction = type === "CROWD_LEVEL_BELOW" ? "unter" : "ueber";
+    return booleanEvaluation(
+      alert,
+      triggered,
+      type === "CROWD_LEVEL_BELOW" ? `Entspannter Park: ${snapshot.parkKey}` : `Andrang-Warnung: ${snapshot.parkKey}`,
+      `Auslastung ${crowd == null ? "unbekannt" : `${Math.round(crowd)}%`} und damit ${direction} deinem Grenzwert.`,
+      null,
+    );
+  }
+  if (type === "PARK_ALL_CHANGES") {
+    const state = [
+      `open=${isParkOpen}`,
+      `crowd=${snapshot.displayCrowdLevel == null ? "unknown" : Math.round(snapshot.displayCrowdLevel)}`,
+      `openAttractions=${openAttractions.length}`,
+      `totalAttractions=${snapshot.attractions.length}`,
+    ].join("|");
+    return valueEvaluation(
+      alert,
+      state,
+      false,
+      `Park-Aenderung: ${snapshot.parkKey}`,
+      `${openAttractions.length} von ${snapshot.attractions.length} Attraktionen offen${snapshot.displayCrowdLevel == null ? "" : `, Auslastung ${Math.round(snapshot.displayCrowdLevel)}%`}.`,
+      null,
+    );
+  }
+  if (type === "WAIT_TIME_BELOW" || type === "WAIT_TIME_ABOVE") {
+    const candidates = target ? [target] : openAttractions;
+    const selected = type === "WAIT_TIME_BELOW"
+      ? candidates.filter(hasOpenWait).sort((a, b) => a.value - b.value)[0]
+      : candidates.filter(hasOpenWait).sort((a, b) => b.value - a.value)[0];
+    const triggered = Boolean(selected) && (
+      type === "WAIT_TIME_BELOW" ? selected.value <= threshold : selected.value >= threshold
+    );
+    return booleanEvaluation(
+      alert,
+      triggered,
+      type === "WAIT_TIME_BELOW" ? `Ride-Fenster: ${selected?.name ?? snapshot.parkKey}` : `Zu voll: ${selected?.name ?? snapshot.parkKey}`,
+      `${selected?.name ?? "Eine Attraktion"} liegt bei ${selected?.value ?? "?"} Min.`,
+      selected?.id ?? target?.id ?? null,
+    );
+  }
+  if (
+    type === "ATTRACTION_OPEN" ||
+    type === "ATTRACTION_CLOSED" ||
+    type === "ATTRACTION_MAINTENANCE" ||
+    type === "ATTRACTION_STATUS_CHANGE" ||
+    type === "ATTRACTION_ALL_CHANGES"
+  ) {
+    if (!target) return null;
+    const status = normalizedAttractionStatus(target);
+    if (type === "ATTRACTION_OPEN") {
+      return booleanEvaluation(alert, status === "opened", `Wieder offen: ${target.name}`, "Wenn sie auf deiner Liste steht: jetzt hin.", target.id);
+    }
+    if (type === "ATTRACTION_CLOSED") {
+      return booleanEvaluation(alert, status === "closed", `Gerade zu: ${target.name}`, "Spar dir den Weg und nimm eine Alternative.", target.id);
+    }
+    if (type === "ATTRACTION_MAINTENANCE") {
+      return booleanEvaluation(alert, status === "maintenance", `Technikpause: ${target.name}`, "Plane die Attraktion spaeter nochmal ein.", target.id);
+    }
+    const state = type === "ATTRACTION_ALL_CHANGES" ? `${status}|wait=${target.value}` : status;
+    return valueEvaluation(
+      alert,
+      state,
+      type === "ATTRACTION_STATUS_CHANGE" && status === "opened",
+      type === "ATTRACTION_ALL_CHANGES" ? `Aenderung: ${target.name}` : `Status-Radar: ${target.name}`,
+      type === "ATTRACTION_ALL_CHANGES" ? `${target.name}: ${status}, ${hasOpenWait(target) ? `${target.value} Min.` : "keine Wartezeit"}` : readablePushStatus(status),
+      type === "ATTRACTION_ALL_CHANGES" ? null : target.id,
+    );
+  }
+  return null;
+}
+
+function booleanEvaluation(alert, triggered, title, body, attractionId) {
+  const nextSeenValue = String(Boolean(triggered));
+  return {
+    nextSeenValue,
+    shouldNotify: Boolean(triggered) && alert.last_seen_value !== nextSeenValue,
+    title,
+    body,
+    attractionId,
+  };
+}
+
+function valueEvaluation(alert, nextSeenValue, notifyOnFirstMatch, title, body, attractionId) {
+  return {
+    nextSeenValue,
+    shouldNotify: (alert.last_seen_value != null && alert.last_seen_value !== nextSeenValue) ||
+      (alert.last_seen_value == null && notifyOnFirstMatch),
+    title,
+    body,
+    attractionId,
+  };
+}
+
+async function updatePushAlertSeenValue(env, alert, value) {
+  await env.APP_DATA_DB.prepare(
+    "UPDATE push_watchlist_alerts SET last_seen_value = ?, updated_at = ? WHERE installation_id = ? AND local_alert_id = ?",
+  ).bind(value, Date.now(), alert.installation_id, alert.local_alert_id).run();
+}
+
+async function updatePushAlertNotifiedValue(env, alert, value) {
+  await env.APP_DATA_DB.prepare(
+    "UPDATE push_watchlist_alerts SET last_seen_value = ?, last_notified_value = ?, updated_at = ? WHERE installation_id = ? AND local_alert_id = ?",
+  ).bind(value, value, Date.now(), alert.installation_id, alert.local_alert_id).run();
+}
+
+async function disablePushInstallation(env, installationId) {
+  await env.APP_DATA_DB.prepare(
+    "UPDATE push_installations SET disabled_at = ?, updated_at = ? WHERE installation_id = ?",
+  ).bind(Date.now(), Date.now(), installationId).run();
+}
+
+async function sendFcmDataMessage(env, token, payload) {
+  const accessToken = await getFcmAccessToken(env);
+  const response = await fetch(`https://fcm.googleapis.com/v1/projects/${env.FCM_PROJECT_ID}/messages:send`, {
+    method: "POST",
+    headers: {
+      authorization: `Bearer ${accessToken}`,
+      "content-type": "application/json; charset=utf-8",
+    },
+    body: JSON.stringify({
+      message: {
+        token,
+        data: Object.fromEntries(
+          Object.entries(payload).map(([key, value]) => [key, String(value ?? "")]),
+        ),
+        android: {
+          priority: "HIGH",
+        },
+      },
+    }),
+  });
+
+  if (response.ok) return { ok: true };
+  const errorText = await response.text();
+  return {
+    ok: false,
+    error: `FCM HTTP ${response.status}: ${errorText.slice(0, 200)}`,
+    disableToken: response.status === 400 || response.status === 404,
+  };
+}
+
+async function getFcmAccessToken(env) {
+  const nowSeconds = Math.floor(Date.now() / 1000);
+  if (cachedFcmAccessToken && cachedFcmAccessToken.expiresAtSeconds - 60 > nowSeconds) {
+    return cachedFcmAccessToken.token;
+  }
+
+  const assertion = await createFcmJwt(env, nowSeconds);
+  const response = await fetch("https://oauth2.googleapis.com/token", {
+    method: "POST",
+    headers: { "content-type": "application/x-www-form-urlencoded" },
+    body: new URLSearchParams({
+      grant_type: "urn:ietf:params:oauth:grant-type:jwt-bearer",
+      assertion,
+    }),
+  });
+  if (!response.ok) {
+    throw new Error(`FCM OAuth failed with HTTP ${response.status}: ${(await response.text()).slice(0, 200)}`);
+  }
+  const body = await response.json();
+  cachedFcmAccessToken = {
+    token: body.access_token,
+    expiresAtSeconds: nowSeconds + Number(body.expires_in ?? 3600),
+  };
+  return cachedFcmAccessToken.token;
+}
+
+async function createFcmJwt(env, nowSeconds) {
+  const header = base64UrlString(JSON.stringify({ alg: "RS256", typ: "JWT" }));
+  const payload = base64UrlString(JSON.stringify({
+    iss: env.FCM_CLIENT_EMAIL,
+    scope: "https://www.googleapis.com/auth/firebase.messaging",
+    aud: "https://oauth2.googleapis.com/token",
+    iat: nowSeconds,
+    exp: nowSeconds + 3600,
+  }));
+  const signingInput = `${header}.${payload}`;
+  const key = await crypto.subtle.importKey(
+    "pkcs8",
+    pemToArrayBuffer(env.FCM_PRIVATE_KEY),
+    { name: "RSASSA-PKCS1-v1_5", hash: "SHA-256" },
+    false,
+    ["sign"],
+  );
+  const signature = await crypto.subtle.sign(
+    "RSASSA-PKCS1-v1_5",
+    key,
+    new TextEncoder().encode(signingInput),
+  );
+  return `${signingInput}.${base64UrlBytes(new Uint8Array(signature))}`;
+}
+
+function normalizePushAlert(alert) {
+  const localAlertId = cleanString(alert?.localAlertId, 80);
+  const parkKey = cleanString(alert?.parkKey, 160);
+  const type = cleanString(alert?.type, 80);
+  if (!localAlertId || !parkKey || !type) return null;
+  return {
+    localAlertId,
+    parkKey,
+    attractionId: cleanString(alert?.attractionId, 160) || null,
+    type,
+    threshold: Math.max(0, Math.min(999, Math.round(Number(alert?.threshold ?? 0) || 0))),
+  };
+}
+
+function isParkOpenNow(snapshot, now) {
+  if (!snapshot.openedToday) return false;
+  const openAt = Date.parse(snapshot.openFrom);
+  const closeAt = Date.parse(snapshot.closedFrom);
+  if (Number.isFinite(openAt) && now < openAt) return false;
+  if (Number.isFinite(closeAt) && now > closeAt) return false;
+  return true;
+}
+
+function hasOpenWait(item) {
+  return item && item.statusCode === 0 && Number.isFinite(item.value) && item.value >= 0;
+}
+
+function normalizedAttractionStatus(item) {
+  if (item.statusCode === 0) return "opened";
+  if (item.statusCode === -3) return "maintenance";
+  if (item.statusCode === -1 || item.statusCode === -2) return "closed";
+  return String(item.status || "unknown").toLowerCase();
+}
+
+function readablePushStatus(status) {
+  if (status === "opened") return "Wieder offen. Wenn sie auf deiner Liste steht: jetzt hin.";
+  if (status === "closed") return "Gerade geschlossen. Spar dir den Weg und nimm eine Alternative.";
+  if (status === "maintenance") return "Technikpause gemeldet. Plane die Attraktion spaeter nochmal ein.";
+  return `Status geaendert: ${status}`;
+}
+
+function hasFcmConfig(env) {
+  return Boolean(env.FCM_PROJECT_ID && env.FCM_CLIENT_EMAIL && env.FCM_PRIVATE_KEY);
+}
+
+function ensurePushD1(env) {
+  if (!hasD1(env)) {
+    throw new Error("APP_DATA_DB is required for push alerts");
+  }
+}
+
+function cleanString(value, maxLength) {
+  return String(value ?? "").trim().slice(0, maxLength);
+}
+
+function groupBy(items, keySelector) {
+  const grouped = new Map();
+  for (const item of items) {
+    const key = keySelector(item);
+    const list = grouped.get(key) ?? [];
+    list.push(item);
+    grouped.set(key, list);
+  }
+  return grouped;
+}
+
+function pemToArrayBuffer(pem) {
+  const normalized = String(pem || "")
+    .replace(/\\n/g, "\n")
+    .replace(/-----BEGIN PRIVATE KEY-----/g, "")
+    .replace(/-----END PRIVATE KEY-----/g, "")
+    .replace(/\s+/g, "");
+  const binary = atob(normalized);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i += 1) {
+    bytes[i] = binary.charCodeAt(i);
+  }
+  return bytes.buffer;
+}
+
+function base64UrlString(value) {
+  return btoa(value).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/g, "");
+}
+
+function base64UrlBytes(bytes) {
+  let binary = "";
+  for (const byte of bytes) {
+    binary += String.fromCharCode(byte);
+  }
+  return btoa(binary).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/g, "");
 }
 
 function recommendationScore(snapshot) {

@@ -32,6 +32,7 @@ import de.wartezeiten.app.data.local.dao.ParkDao
 import de.wartezeiten.app.data.local.dao.WatchlistDao
 import de.wartezeiten.app.data.local.entity.WatchlistEntity
 import de.wartezeiten.app.data.local.entity.WatchlistType
+import de.wartezeiten.app.push.PushRegistrationManager
 import de.wartezeiten.app.worker.NotificationScheduler
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
@@ -321,7 +322,8 @@ data class WatchlistAlertWithParkName(
 class WatchlistViewModel @Inject constructor(
     private val watchlistDao: WatchlistDao,
     private val parkDao: ParkDao,
-    private val parkDetailDao: de.wartezeiten.app.data.local.dao.ParkDetailDao
+    private val parkDetailDao: de.wartezeiten.app.data.local.dao.ParkDetailDao,
+    private val pushRegistrationManager: PushRegistrationManager,
 ) : ViewModel() {
     val watchlistItems: Flow<List<WatchlistAlertWithParkName>> = combine(
         watchlistDao.observeWatchlist(),
@@ -377,12 +379,14 @@ class WatchlistViewModel @Inject constructor(
                 )
             )
             onSaved(true)
+            pushRegistrationManager.syncCurrentWatchlist()
         }
     }
 
     fun deleteAlert(item: WatchlistEntity) {
         viewModelScope.launch {
             watchlistDao.delete(item)
+            pushRegistrationManager.syncCurrentWatchlist()
         }
     }
 }

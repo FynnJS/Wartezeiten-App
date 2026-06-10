@@ -44,6 +44,11 @@ jobs:
         shell: bash
 
       - name: Build release APK
+        env:
+          ORG_GRADLE_PROJECT_FIREBASE_APPLICATION_ID: ${{ vars.FIREBASE_APPLICATION_ID || secrets.FIREBASE_APPLICATION_ID }}
+          ORG_GRADLE_PROJECT_FIREBASE_API_KEY: ${{ vars.FIREBASE_API_KEY || secrets.FIREBASE_API_KEY }}
+          ORG_GRADLE_PROJECT_FIREBASE_PROJECT_ID: ${{ vars.FIREBASE_PROJECT_ID || secrets.FIREBASE_PROJECT_ID }}
+          ORG_GRADLE_PROJECT_FIREBASE_GCM_SENDER_ID: ${{ vars.FIREBASE_GCM_SENDER_ID || secrets.FIREBASE_GCM_SENDER_ID }}
         run: |
           chmod +x gradlew
           ./gradlew :app:assembleRelease

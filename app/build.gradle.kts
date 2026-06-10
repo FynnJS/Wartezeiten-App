@@ -38,12 +38,24 @@ android {
     }
 
     defaultConfig {
+        fun optionalStringBuildConfig(name: String): String {
+            val value = providers.gradleProperty(name).orElse("").get()
+                .replace("\\", "\\\\")
+                .replace("\"", "\\\"")
+            return "\"$value\""
+        }
+
         applicationId = "de.wartezeiten.app"
         minSdk = 26
         targetSdk = 35
         versionCode = 10009
         versionName = "1.0.9"
         buildConfigField("String", "UPDATE_BASE_URL", "\"https://wartezeiten-app.tutorialfynn.workers.dev/\"")
+        buildConfigField("String", "PUSH_API_BASE_URL", "\"https://wartezeiten-app.tutorialfynn.workers.dev/\"")
+        buildConfigField("String", "FIREBASE_APPLICATION_ID", optionalStringBuildConfig("FIREBASE_APPLICATION_ID"))
+        buildConfigField("String", "FIREBASE_API_KEY", optionalStringBuildConfig("FIREBASE_API_KEY"))
+        buildConfigField("String", "FIREBASE_PROJECT_ID", optionalStringBuildConfig("FIREBASE_PROJECT_ID"))
+        buildConfigField("String", "FIREBASE_GCM_SENDER_ID", optionalStringBuildConfig("FIREBASE_GCM_SENDER_ID"))
     }
 
     buildTypes {
@@ -92,6 +104,7 @@ dependencies {
     debugImplementation("androidx.compose.ui:ui-tooling")
 
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.9.0")
+    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-play-services:1.9.0")
 
     implementation("com.squareup.retrofit2:retrofit:2.11.0")
     implementation("com.squareup.retrofit2:converter-gson:2.11.0")
@@ -111,4 +124,5 @@ dependencies {
 
     implementation("androidx.datastore:datastore-preferences:1.1.1")
     implementation("androidx.work:work-runtime-ktx:2.11.2")
+    implementation("com.google.firebase:firebase-messaging-ktx:24.1.0")
 }
