@@ -15,11 +15,21 @@ import de.wartezeiten.app.data.remote.PushWatchlistAlertRequest
 import de.wartezeiten.app.data.remote.PushWatchlistSyncRequest
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.withContext
 import java.util.logging.Level
 import java.util.logging.Logger
 import javax.inject.Inject
 import javax.inject.Singleton
+
+enum class PushDeliveryStatus {
+    Disabled,
+    Syncing,
+    Active,
+    Error,
+}
 
 @Singleton
 class PushRegistrationManager @Inject constructor(
@@ -29,6 +39,11 @@ class PushRegistrationManager @Inject constructor(
     private val pushApi: PushApiService,
 ) {
     private val logger = Logger.getLogger("PushRegistration")
+    private val mutableStatus = MutableStateFlow(
+        if (isPushConfigured) PushDeliveryStatus.Syncing else PushDeliveryStatus.Disabled,
+    )
+
+    val status: StateFlow<PushDeliveryStatus> = mutableStatus.asStateFlow()
 
     val isPushConfigured: Boolean
         get() = BuildConfig.FIREBASE_APPLICATION_ID.isNotBlank() &&
@@ -37,39 +52,59 @@ class PushRegistrationManager @Inject constructor(
                 BuildConfig.FIREBASE_GCM_SENDER_ID.isNotBlank()
 
     suspend fun syncCurrentWatchlist() {
-        if (!ensureFirebaseInitialized()) return
+        if (!ensureFirebaseInitialized()) {
+            mutableStatus.value = PushDeliveryStatus.Disabled
+            return
+        }
+        mutableStatus.value = PushDeliveryStatus.Syncing
         runCatching {
+            val serverStatus = pushApi.getStatus()
+            check(serverStatus.isSuccessful && serverStatus.body()?.pushReady == true) {
+                "Push server is not fully configured"
+            }
             val token = withContext(Dispatchers.IO) {
                 Tasks.await(FirebaseMessaging.getInstance().token)
             }
-            registerToken(token)
-            syncWatchlistOnly()
+            check(registerTokenRequest(token)) { "Push token registration failed" }
+            check(syncWatchlistOnly()) { "Push watchlist sync failed" }
+            mutableStatus.value = PushDeliveryStatus.Active
         }.onFailure { error ->
+            mutableStatus.value = PushDeliveryStatus.Error
             logger.log(Level.WARNING, "Push watchlist sync failed", error)
         }
     }
 
     suspend fun registerToken(token: String) {
-        if (!ensureFirebaseInitialized()) return
+        if (!ensureFirebaseInitialized()) {
+            mutableStatus.value = PushDeliveryStatus.Disabled
+            return
+        }
         runCatching {
-            val installationId = preferences.getOrCreatePushInstallationId()
-            val language = preferences.language.first()
-            val response = pushApi.registerInstallation(
-                PushRegisterRequest(
-                    installationId = installationId,
-                    token = token,
-                    language = language,
-                )
-            )
-            if (!response.isSuccessful) {
-                logger.warning("Push registration failed with HTTP ${response.code()}")
-            }
+            check(registerTokenRequest(token)) { "Push token registration failed" }
+            mutableStatus.value = PushDeliveryStatus.Active
         }.onFailure { error ->
+            mutableStatus.value = PushDeliveryStatus.Error
             logger.log(Level.WARNING, "Push token registration failed", error)
         }
     }
 
-    private suspend fun syncWatchlistOnly() {
+    private suspend fun registerTokenRequest(token: String): Boolean {
+        val installationId = preferences.getOrCreatePushInstallationId()
+        val language = preferences.language.first()
+        val response = pushApi.registerInstallation(
+            PushRegisterRequest(
+                installationId = installationId,
+                token = token,
+                language = language,
+            )
+        )
+        if (!response.isSuccessful) {
+            logger.warning("Push registration failed with HTTP ${response.code()}")
+        }
+        return response.isSuccessful
+    }
+
+    private suspend fun syncWatchlistOnly(): Boolean {
         val installationId = preferences.getOrCreatePushInstallationId()
         val alerts = watchlistDao.observeWatchlist().first().map { alert ->
             PushWatchlistAlertRequest(
@@ -89,6 +124,7 @@ class PushRegistrationManager @Inject constructor(
         if (!response.isSuccessful) {
             logger.warning("Push watchlist sync failed with HTTP ${response.code()}")
         }
+        return response.isSuccessful
     }
 
     private fun ensureFirebaseInitialized(): Boolean {

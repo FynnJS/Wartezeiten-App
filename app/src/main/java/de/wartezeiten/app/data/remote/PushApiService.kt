@@ -2,9 +2,13 @@ package de.wartezeiten.app.data.remote
 
 import retrofit2.Response
 import retrofit2.http.Body
+import retrofit2.http.GET
 import retrofit2.http.POST
 
 interface PushApiService {
+    @GET("push/status")
+    suspend fun getStatus(): Response<PushStatusResponse>
+
     @POST("push/register")
     suspend fun registerInstallation(@Body request: PushRegisterRequest): Response<Unit>
 
@@ -14,6 +18,13 @@ interface PushApiService {
     @POST("push/unregister")
     suspend fun unregisterInstallation(@Body request: PushUnregisterRequest): Response<Unit>
 }
+
+data class PushStatusResponse(
+    val ok: Boolean,
+    val d1Configured: Boolean,
+    val fcmConfigured: Boolean,
+    val pushReady: Boolean,
+)
 
 data class PushRegisterRequest(
     val installationId: String,

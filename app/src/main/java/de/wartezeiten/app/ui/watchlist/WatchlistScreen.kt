@@ -1,5 +1,6 @@
 package de.wartezeiten.app.ui.watchlist
 
+import android.widget.Toast
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -20,16 +21,20 @@ import androidx.compose.material3.OutlinedCard
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import de.wartezeiten.app.data.local.entity.WatchlistEntity
 import de.wartezeiten.app.data.local.entity.WatchlistType
+import de.wartezeiten.app.push.NotificationDiagnostics
+import de.wartezeiten.app.push.PushDeliveryStatus
 import de.wartezeiten.app.ui.settings.SettingsViewModel
 import de.wartezeiten.app.ui.waitingtimes.WatchlistAlertWithParkName
 import de.wartezeiten.app.ui.waitingtimes.WatchlistViewModel
@@ -43,7 +48,9 @@ fun WatchlistRoute(
     settingsViewModel: SettingsViewModel = hiltViewModel(),
 ) {
     val watchlistItems by viewModel.watchlistItems.collectAsState(initial = emptyList())
+    val pushStatus by viewModel.pushStatus.collectAsState()
     val settingsState by settingsViewModel.uiState.collectAsState()
+    val context = LocalContext.current
     val language = settingsState.language
     val groupedWatchlist = watchlistItems.groupBy { it.parkName ?: it.alert.parkKey }
 
@@ -73,7 +80,19 @@ fun WatchlistRoute(
                 WatchlistSummaryCard(
                     totalAlerts = watchlistItems.size,
                     parkCount = groupedWatchlist.size,
+                    pushStatus = pushStatus,
                     language = language,
+                    onTestNotification = {
+                        val shown = NotificationDiagnostics.showTestNotification(context)
+                        if (!shown) {
+                            Toast.makeText(
+                                context,
+                                if (language == "en") "Notification permission is missing." else "Die Benachrichtigungsberechtigung fehlt.",
+                                Toast.LENGTH_LONG,
+                            ).show()
+                        }
+                    },
+                    onRetryPush = viewModel::retryPushSync,
                 )
             }
 
@@ -115,7 +134,10 @@ fun WatchlistRoute(
 private fun WatchlistSummaryCard(
     totalAlerts: Int,
     parkCount: Int,
+    pushStatus: PushDeliveryStatus,
     language: String,
+    onTestNotification: () -> Unit,
+    onRetryPush: () -> Unit,
 ) {
     Surface(
         modifier = Modifier.fillMaxWidth(),
@@ -136,6 +158,47 @@ private fun WatchlistSummaryCard(
                 },
                 style = MaterialTheme.typography.bodySmall,
             )
+            Text(
+                text = pushStatus.label(language),
+                style = MaterialTheme.typography.bodySmall,
+                color = when (pushStatus) {
+                    PushDeliveryStatus.Active -> MaterialTheme.colorScheme.primary
+                    PushDeliveryStatus.Disabled,
+                    PushDeliveryStatus.Error -> MaterialTheme.colorScheme.error
+                    PushDeliveryStatus.Syncing -> MaterialTheme.colorScheme.onPrimaryContainer
+                },
+            )
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                TextButton(onClick = onTestNotification) {
+                    Text(if (language == "en") "Test notification" else "Testbenachrichtigung")
+                }
+                if (pushStatus == PushDeliveryStatus.Error) {
+                    TextButton(onClick = onRetryPush) {
+                        Text(if (language == "en") "Retry push" else "Push erneut verbinden")
+                    }
+                }
+            }
+        }
+    }
+}
+
+private fun PushDeliveryStatus.label(language: String): String {
+    return when (this) {
+        PushDeliveryStatus.Active -> if (language == "en") {
+            "Standby push is active. Alerts are checked server-side every minute."
+        } else {
+            "Standby-Push ist aktiv. Alarme werden serverseitig jede Minute geprüft."
+        }
+        PushDeliveryStatus.Syncing -> if (language == "en") "Connecting standby push..." else "Standby-Push wird verbunden..."
+        PushDeliveryStatus.Error -> if (language == "en") {
+            "Standby push could not connect. The local fallback remains active."
+        } else {
+            "Standby-Push konnte nicht verbunden werden. Der lokale Fallback bleibt aktiv."
+        }
+        PushDeliveryStatus.Disabled -> if (language == "en") {
+            "Standby push is not configured in this APK. Only delayed local checks are available."
+        } else {
+            "Standby-Push ist in dieser APK nicht konfiguriert. Es bleiben nur verzögerte lokale Prüfungen."
         }
     }
 }

@@ -78,6 +78,7 @@ class NotificationWorker @AssistedInject constructor(
             .toMap()
         val notifications = mutableListOf<WatchlistNotification>()
         val language = preferences.language.first()
+        var successfulParkScans = 0
 
         groupedByPark.forEach { (parkKey, alerts) ->
             runCatching {
@@ -85,6 +86,14 @@ class NotificationWorker @AssistedInject constructor(
                 val openingResult = watchlistApiCall("/v1/openingtimes") { api.getOpeningTimes(parkKey) }
                 val waitingResult = watchlistApiCall("/v1/waitingtimes") { api.getWaitingTimes(parkKey, language) }
                 val crowdResult = watchlistApiCall("/v1/crowdlevel") { api.getCrowdLevel(parkKey) }
+                if (
+                    openingResult is WatchlistApiResult.Failure &&
+                    waitingResult is WatchlistApiResult.Failure &&
+                    crowdResult is WatchlistApiResult.Failure
+                ) {
+                    error("All watchlist API requests failed for $parkKey")
+                }
+                successfulParkScans += 1
                 val opening = (openingResult as? WatchlistApiResult.Success)?.data?.firstOrNull()
                 val isParkOpen = opening?.let {
                     isParkCurrentlyOpen(
@@ -132,7 +141,7 @@ class NotificationWorker @AssistedInject constructor(
             sendNotifications(notifications)
         }
 
-        return Result.success()
+        return if (successfulParkScans == 0) Result.retry() else Result.success()
     }
 
     private suspend fun collectParkNotifications(

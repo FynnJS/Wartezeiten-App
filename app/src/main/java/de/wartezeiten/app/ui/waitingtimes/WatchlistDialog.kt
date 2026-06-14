@@ -325,6 +325,14 @@ class WatchlistViewModel @Inject constructor(
     private val parkDetailDao: de.wartezeiten.app.data.local.dao.ParkDetailDao,
     private val pushRegistrationManager: PushRegistrationManager,
 ) : ViewModel() {
+    val pushStatus = pushRegistrationManager.status
+
+    fun retryPushSync() {
+        viewModelScope.launch {
+            pushRegistrationManager.syncCurrentWatchlist()
+        }
+    }
+
     val watchlistItems: Flow<List<WatchlistAlertWithParkName>> = combine(
         watchlistDao.observeWatchlist(),
         parkDao.observeParks(null),
