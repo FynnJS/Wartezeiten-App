@@ -33,9 +33,10 @@ Erwartete Antwort nach erfolgreichem Setup:
 
 ```json
 {
+  "ok": true,
   "pushReady": true,
-  "databaseReady": true,
-  "firebaseReady": true
+  "d1Configured": true,
+  "fcmConfigured": true
 }
 ```
 
