@@ -14,7 +14,7 @@ Die Website liest `website/release.json` und verlinkt auf den neuesten GitHub Re
 
 - Parkliste mit Länder-, Favoriten- und Öffnungsstatus-Filter
 - Gemeinsame Suche nach Parks und Attraktionen mit direktem Sprung zur passenden Attraktion
-- Parkdetails mit Wartezeiten, Öffnungszeiten, Wetter, Feiertagen, Auslastung und Trend-Chart
+- Parkdetails mit Wartezeiten, Öffnungszeiten, Wetter, Feiertagen, aktueller Auslastung und zentraler Parkstatistik
 - Zentrale Cloudflare App-Daten für Ranking-, Trend- und Attraktionsstatistik-Snapshots
 - Statistikbereich mit Park-, Datum- und Attraktionsauswahl für zentrale Tagesverläufe
 - Watchlist-Alarme für Wartezeiten, Attraktionsstatus, Parkstatus und Crowd-Level
@@ -42,6 +42,15 @@ Cloudflare Worker-Secrets fuer FCM HTTP v1:
 - `FCM_PRIVATE_KEY`
 
 Ohne diese Werte bleibt Push deaktiviert und die lokale WorkManager-Loesung uebernimmt.
+Der Endpunkt `/push/status` zeigt ohne Geheimnisse an, ob D1 und FCM im Worker einsatzbereit sind. Die App meldet Standby-Push erst dann als aktiv, wenn sowohl ihre Firebase-Konfiguration als auch dieser Serverstatus erfolgreich sind.
+
+Das vorbereitete Setup kann mit den beiden unveränderten Firebase-JSON-Dateien ausgeführt werden:
+
+```powershell
+.\scripts\configure-push.ps1 -GoogleServicesJson C:\Pfad\google-services.json -ServiceAccountJson C:\Pfad\firebase-service-account.json
+```
+
+Das Skript setzt die GitHub-Variablen, hinterlegt die Worker-Secrets, deployed den Worker und prüft den öffentlichen Bereitschaftsstatus. Details stehen in `docs/PUSH-SETUP.md`.
 
 ## Entwicklung
 
@@ -91,6 +100,7 @@ Cloudflare App-Daten für Ranking, Trends und zentrale Attraktionsstatistiken we
 Vor jedem Release prüfen:
 
 - `CHANGELOG.md` ist aktualisiert.
+- `/push/status` meldet `pushReady: true`, bevor ein Release mit Standby-Push veröffentlicht wird.
 - `website/release.json` zeigt erst dann auf Version, APK und Release-URL, wenn die APK als GitHub-Release-Asset verfügbar ist.
 - Diese README enthält neue relevante Informationen zu Installation, Website oder Release-Automation.
 - Die Attribution zu https://www.wartezeiten.app bleibt in der App sichtbar und anklickbar.

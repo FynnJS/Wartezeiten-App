@@ -9,6 +9,7 @@ Die Website stellt die aktuelle APK bereit und dient gleichzeitig als Cloudflare
 - `CLOUDFLARE-APP-DATA.md`: Setup fuer Worker, KV, D1 und Cron
 - `../worker/migrations/`: D1-Migrationen fuer Statistik- und Push-Tabellen
 - `download-from-github.ps1`: optionales Hilfsskript zum Aktualisieren von `release.json`
+- `../docs/PUSH-SETUP.md`: Firebase-, GitHub- und Cloudflare-Einrichtung für Standby-Push
 
 ## Release-Metadaten
 
@@ -60,4 +61,4 @@ Der Worker stellt zentrale JSON-Endpunkte bereit:
 
 Diese Daten werden per Cron aktualisiert und von der Android-App als schnelle Quelle fuer Ranking-, Trend- und Attraktionsdaten genutzt.
 
-Watchlist-Push nutzt zusaetzlich die Worker-Endpunkte `/push/register`, `/push/watchlist` und `/push/unregister`. Der Push-Cron laeuft separat minuetlich; ohne FCM-Secrets bleibt dieser Pfad inaktiv und die Android-App nutzt den lokalen WorkManager-Fallback.
+Watchlist-Push nutzt zusaetzlich die Worker-Endpunkte `/push/register`, `/push/watchlist`, `/push/unregister` und `/push/status`. Der Push-Cron laeuft separat minuetlich; ohne FCM-Secrets bleibt dieser Pfad inaktiv und die Android-App nutzt den lokalen WorkManager-Fallback. Vor einer Veroeffentlichung mit Standby-Push muss `/push/status` den Wert `pushReady: true` liefern.

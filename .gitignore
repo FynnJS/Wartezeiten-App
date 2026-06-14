@@ -16,6 +16,10 @@ build/
 .idea/
 *.iml
 .DS_Store
+local.properties
+google-services.json
+*service-account*.json
+firebase-admin*.json
 
 # Logs and dumps
 *.log

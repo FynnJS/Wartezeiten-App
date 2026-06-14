@@ -1,5 +1,15 @@
 # Changelog
 
+## v1.1.1 - 2026-06-14
+
+- Replaced the park-detail utilization card with complete central park statistics, including average wait times and the daily graph; current utilization remains visible as compact text.
+- Fixed parks remaining orange despite open attractions by combining fresh opening-time and attraction status signals and shortening the opening-time HTTP cache.
+- Fixed park-specific global trend loading by scoping the public trend-history endpoint to the selected park.
+- Added explicit standby-push diagnostics, a test notification, retry controls, and a server readiness check in the Watchlist UI.
+- Hardened local notification retries when upstream APIs are temporarily unavailable and added the Android wake-lock permission for background work.
+- Added automated Firebase and Cloudflare push setup plus a release-pipeline guard that prevents publishing APKs without Firebase configuration.
+- Documented the complete push deployment and v1.1.1 release process.
+
 ## v1.1.0 - 2026-06-10
 
 - Added a clearer offline mode with cache-age banners in the park list and park details.
