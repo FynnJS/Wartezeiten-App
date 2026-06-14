@@ -393,7 +393,11 @@ private fun WaitingTimesContent(
         }
 
         item {
-            ParkTrendDashboard(summary = state.trendSummary)
+            ParkStatisticsDashboard(
+                statistics = state.parkStatistics,
+                currentCrowdLevel = state.crowdEstimate?.level,
+                language = state.language,
+            )
         }
 
         state.highlightedAttractionId?.let { highlightedId ->

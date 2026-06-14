@@ -73,7 +73,11 @@ internal fun parkOpeningDisplayState(
             apiCrowdLevel = crowdLevel?.level,
         )
         ParkOpeningDisplayState(
-            tone = if (isCurrentlyOpen) ParkOpeningTone.Open else ParkOpeningTone.OpenOtherTimeToday,
+            tone = if (isCurrentlyOpen || hasOpenAttraction) {
+                ParkOpeningTone.Open
+            } else {
+                ParkOpeningTone.OpenOtherTimeToday
+            },
             statusText = buildOpeningWindowStatusText(openTime, closeTime),
             crowdText = buildCrowdText(level = estimate.level),
         )

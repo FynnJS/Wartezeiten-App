@@ -90,7 +90,7 @@ class ParkOpeningDisplayStateTest {
     }
 
     @Test
-    fun openAttractionBeforeOfficialOpeningShowsCrowdLevel() {
+    fun openAttractionBeforeOfficialOpeningMarksParkAsOpen() {
         val state = parkOpeningDisplayState(
             openingTimes = OpeningTimes(
                 opened = true,
@@ -107,7 +107,7 @@ class ParkOpeningDisplayStateTest {
             localTimeOffsetSeconds = 7200,
         )
 
-        assertEquals(ParkOpeningTone.OpenOtherTimeToday, state.tone)
+        assertEquals(ParkOpeningTone.Open, state.tone)
         assertEquals("Heute ge\u00f6ffnet von 10:00 Uhr bis 18:00 Uhr", state.statusText)
         assertEquals("Auslastung: ca. 15% (Wenig los)", state.crowdText)
     }

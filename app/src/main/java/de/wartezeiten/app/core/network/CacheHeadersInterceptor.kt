@@ -32,7 +32,7 @@ internal fun cachePolicyForPath(path: String): CachePolicy? {
             varyHeader = "language",
         )
         path.endsWith("/openingtimes") -> CachePolicy(
-            maxAgeSeconds = TimeUnit.HOURS.toSeconds(24),
+            maxAgeSeconds = TimeUnit.MINUTES.toSeconds(30),
             varyHeader = "park",
         )
         path.endsWith("/waitingtimes") -> CachePolicy(

@@ -39,7 +39,8 @@ export default {
     }
 
     if (url.pathname === "/app-data/trend-history.json") {
-      return jsonResponse(await readTrendHistory(env));
+      const parkKey = cleanString(url.searchParams.get("parkKey"), 160) || null;
+      return jsonResponse(await readTrendHistory(env, parkKey));
     }
 
     if (url.pathname === GLOBAL_MARKERS_PATH) {
@@ -80,6 +81,17 @@ export default {
 
     if (url.pathname === "/push/register" && request.method === "POST") {
       return pushJsonResponse(registerPushInstallation, env, request);
+    }
+
+    if (url.pathname === "/push/status" && request.method === "GET") {
+      const d1Configured = hasD1(env);
+      const fcmConfigured = hasFcmConfig(env);
+      return jsonResponse({
+        ok: true,
+        d1Configured,
+        fcmConfigured,
+        pushReady: d1Configured && fcmConfigured,
+      });
     }
 
     if (url.pathname === "/push/watchlist" && request.method === "POST") {
@@ -878,17 +890,19 @@ function toTrendSnapshot(snapshot) {
   };
 }
 
-async function readTrendHistory(env) {
+async function readTrendHistory(env, parkKey = null) {
   const legacyTrend = await readJson(env, TREND_KEY, emptyTrendHistory());
-  if (!hasD1(env)) return legacyTrend;
+  const filteredLegacyTrend = filterTrendHistoryByPark(legacyTrend, parkKey);
+  if (!hasD1(env)) return filteredLegacyTrend;
 
-  const d1Trend = await readTrendHistoryD1(env, Date.now());
-  return mergeTrendHistory(legacyTrend, d1Trend);
+  const d1Trend = await readTrendHistoryD1(env, Date.now(), parkKey);
+  return mergeTrendHistory(filteredLegacyTrend, d1Trend);
 }
 
-async function readTrendHistoryD1(env, now) {
+async function readTrendHistoryD1(env, now, parkKey = null) {
   const minCapturedAt = now - MAX_HISTORY_AGE_MILLIS;
-  const result = await env.APP_DATA_DB.prepare(`
+  const parkFilter = parkKey ? " AND park_key = ?" : "";
+  const statement = env.APP_DATA_DB.prepare(`
     SELECT
       park_key,
       captured_at_millis,
@@ -898,9 +912,12 @@ async function readTrendHistoryD1(env, now) {
       closed_from,
       attractions_json
     FROM attraction_history_snapshots
-    WHERE captured_at_millis >= ?
+    WHERE captured_at_millis >= ?${parkFilter}
     ORDER BY park_key, captured_at_millis
-  `).bind(minCapturedAt).all();
+  `);
+  const result = parkKey
+    ? await statement.bind(minCapturedAt, parkKey).all()
+    : await statement.bind(minCapturedAt).all();
 
   const byPark = new Map();
   let generatedAtMillis = 0;
@@ -939,6 +956,14 @@ async function readTrendHistoryD1(env, now) {
         .sort((a, b) => Number(a.capturedAtMillis) - Number(b.capturedAtMillis))
         .slice(-MAX_HISTORY_POINTS_PER_PARK),
     })),
+  };
+}
+
+function filterTrendHistoryByPark(trend, parkKey) {
+  if (!parkKey) return trend;
+  return {
+    generatedAtMillis: Number(trend.generatedAtMillis ?? 0),
+    parks: (trend.parks ?? []).filter((park) => park.parkKey === parkKey),
   };
 }
 

@@ -16,7 +16,6 @@ import de.wartezeiten.app.domain.model.DataQuality
 import de.wartezeiten.app.domain.model.HolidayInfo
 import de.wartezeiten.app.domain.model.OpeningTimes
 import de.wartezeiten.app.domain.model.Park
-import de.wartezeiten.app.domain.model.ParkTrendSummary
 import de.wartezeiten.app.domain.model.WaitingTime
 import de.wartezeiten.app.domain.model.estimateCrowdLevel
 import de.wartezeiten.app.domain.model.WeatherInfo
@@ -30,11 +29,13 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.take
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import java.time.OffsetDateTime
+import java.time.LocalDate
 import javax.inject.Inject
 
 enum class WaitingTimesSort {
@@ -75,7 +76,7 @@ data class WaitingTimesUiState(
     val dataQuality: DataQuality? = null,
     val weather: WeatherInfo? = null,
     val holidays: List<HolidayInfo> = emptyList(),
-    val trendSummary: ParkTrendSummary = ParkTrendSummary.Empty,
+    val parkStatistics: ParkWaitStatistics? = null,
     val language: String = PreferencesDataSource.DEFAULT_LANGUAGE,
     val highlightedAttractionId: String? = null,
 )
@@ -99,6 +100,7 @@ class WaitingTimesViewModel @Inject constructor(
     private val lastRefreshed = MutableStateFlow(0L)
     private val refreshTrigger = MutableStateFlow(0)
     private val currentLanguage = MutableStateFlow(PreferencesDataSource.DEFAULT_LANGUAGE)
+    private val parkStatistics = MutableStateFlow<ParkWaitStatistics?>(null)
     private var refreshJob: Job? = null
 
     // Aktuelle Uhrzeit Flow (aktualisiert jede Minute)
@@ -133,8 +135,8 @@ class WaitingTimesViewModel @Inject constructor(
         repository.observeParkDetail(parkKey),
         filterState,
         loadState,
-        repository.getParkTrendSummary(parkKey)
-    ) { detail, filterState, status, trendSummary ->
+        parkStatistics,
+    ) { detail, filterState, status, parkStatistics ->
         val (sort, filter, query, maxWait, plannedIds) = filterState
         val normalizedQuery = query.normalizedSearchText()
         val filtered = detail.waitingTimes
@@ -168,7 +170,7 @@ class WaitingTimesViewModel @Inject constructor(
                 offlineDataAgeMinutes = dataUpdatedAtMillis.toAgeMinutes(),
                 refreshTrigger = status.refreshTrigger,
                 currentLocalTime = status.currentTime,
-                trendSummary = trendSummary,
+                parkStatistics = parkStatistics,
                 language = status.language,
                 highlightedAttractionId = highlightedAttractionId,
             )
@@ -213,7 +215,7 @@ class WaitingTimesViewModel @Inject constructor(
                     freshness = if (System.currentTimeMillis() - dataUpdatedAtMillis < 300_000) DataFreshness.Fresh else DataFreshness.Stale,
                     confidenceScore = if (detail.crowdLevel != null) 0.9f else 0.7f
                 ),
-                trendSummary = if (canCalculateCrowdLevel) trendSummary else ParkTrendSummary.Empty,
+                parkStatistics = parkStatistics,
                 language = status.language,
                 highlightedAttractionId = highlightedAttractionId,
             )
@@ -228,7 +230,7 @@ class WaitingTimesViewModel @Inject constructor(
         recordRecentPark()
         restoreSavedFilters()
         observeLanguage()
-        refreshPublicTrendHistory()
+        refreshParkStatistics()
         startAutoRefresh()
     }
 
@@ -238,9 +240,24 @@ class WaitingTimesViewModel @Inject constructor(
         }
     }
 
-    private fun refreshPublicTrendHistory() {
+    private fun refreshParkStatistics() {
         viewModelScope.launch {
-            repository.refreshPublicTrendHistory(parkKey)
+            val indexResult = repository.getStatisticsIndex()
+            if (indexResult !is ApiResult.Success) return@launch
+            val parks = repository.observeParks(null).first()
+            val selectedPark = parks.firstOrNull { it.id == parkKey || it.uuid == parkKey }
+            val candidates = listOfNotNull(parkKey, selectedPark?.id, selectedPark?.uuid, selectedPark?.name)
+                .map { it.normalizedParkKey() }
+                .toSet()
+            val indexedPark = indexResult.data.parks.firstOrNull {
+                it.parkKey.normalizedParkKey() in candidates
+            } ?: return@launch
+            val today = LocalDate.now().toString()
+            val date = today.takeIf { it in indexedPark.dates } ?: indexedPark.latestDate ?: return@launch
+            when (val dayResult = repository.getAttractionHistoryDay(indexedPark.parkKey, date)) {
+                is ApiResult.Success -> parkStatistics.value = dayResult.data.toParkWaitStatistics()
+                is ApiResult.Error -> Unit
+            }
         }
     }
 
@@ -314,6 +331,7 @@ class WaitingTimesViewModel @Inject constructor(
                 is ApiResult.Success -> {
                     lastRefreshed.value = System.currentTimeMillis()
                     if (showFeedback) refreshTrigger.value += 1
+                    if (!silent) refreshParkStatistics()
                 }
                 is ApiResult.Error -> {
                     if (!silent || uiState.value.allWaitingTimes.isEmpty()) {
@@ -385,6 +403,15 @@ class WaitingTimesViewModel @Inject constructor(
         if (this <= 0L) return null
         return ((System.currentTimeMillis() - this).coerceAtLeast(0L) / 60_000L)
     }
+}
+
+private fun String.normalizedParkKey(): String {
+    return lowercase()
+        .replace("ä", "ae")
+        .replace("ö", "oe")
+        .replace("ü", "ue")
+        .replace("ß", "ss")
+        .filter { it.isLetterOrDigit() }
 }
 
 private data class FilterState(

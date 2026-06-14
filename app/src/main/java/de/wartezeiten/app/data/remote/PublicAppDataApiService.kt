@@ -7,13 +7,16 @@ import de.wartezeiten.app.data.remote.dto.PublicTrendHistoryDto
 import retrofit2.Response
 import retrofit2.http.GET
 import retrofit2.http.Path
+import retrofit2.http.Query
 
 interface PublicAppDataApiService {
     @GET("app-data/latest.json")
     suspend fun getLatestAppData(): Response<PublicLatestAppDataDto>
 
     @GET("app-data/trend-history.json")
-    suspend fun getTrendHistory(): Response<PublicTrendHistoryDto>
+    suspend fun getTrendHistory(
+        @Query("parkKey") parkKey: String? = null,
+    ): Response<PublicTrendHistoryDto>
 
     @GET("app-data/statistics/index.json")
     suspend fun getStatisticsIndex(): Response<PublicStatisticsIndexDto>

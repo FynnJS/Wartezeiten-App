@@ -9,7 +9,7 @@ class CacheHeadersInterceptorTest {
     @Test
     fun detailEndpointsVaryByParkHeader() {
         assertEquals(
-            CachePolicy(TimeUnit.HOURS.toSeconds(24), "park"),
+            CachePolicy(TimeUnit.MINUTES.toSeconds(30), "park"),
             cachePolicyForPath("/v1/openingtimes"),
         )
         assertEquals(

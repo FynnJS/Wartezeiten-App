@@ -683,7 +683,7 @@ class DefaultWartezeitenRepository @Inject constructor(
     }
 
     override suspend fun refreshPublicTrendHistory(parkKey: String): ApiResult<Unit> = withContext(ioDispatcher) {
-        when (val result = safeApiCall { publicAppDataApi.getTrendHistory() }) {
+        when (val result = safeApiCall { publicAppDataApi.getTrendHistory(parkKey) }) {
             is ApiResult.Success -> {
                 val remoteParks = result.data.parks
                     .filter { it.parkKey == parkKey }
