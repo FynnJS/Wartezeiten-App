@@ -15,9 +15,10 @@ Die Website liest `website/release.json` und verlinkt auf den neuesten GitHub Re
 - Parkliste mit Länder-, Favoriten- und Öffnungsstatus-Filter
 - Gemeinsame Suche nach Parks und Attraktionen mit direktem Sprung zur passenden Attraktion
 - Parkdetails mit Wartezeiten, Öffnungszeiten, Wetter, Feiertagen, aktueller Auslastung und zentraler Parkstatistik
+- Historisch gestützte "Jetzt oder später?"-Einordnung für geöffnete Attraktionen
 - Zentrale Cloudflare App-Daten für Ranking-, Trend- und Attraktionsstatistik-Snapshots
 - Statistikbereich mit Park-, Datum- und Attraktionsauswahl für zentrale Tagesverläufe
-- Watchlist-Alarme für Wartezeiten, Attraktionsstatus, Parkstatus und Crowd-Level
+- Watchlist-Alarme mit Ruhezeiten, Einmal-Zustellung, Parköffnungsregel, Mindestabstand und täglicher Parkzusammenfassung
 - Datenbasierter Multi-Park-Vergleich mit Suche, Sortierung und direktem Sprung zur Parkübersicht
 - Pflicht-Update-Sperre und Benachrichtigung bei neuer APK-Version
 - Offline-First-Datenhaltung über Room, Cache-Hinweis und automatische Aktualisierung für Live-Daten
@@ -43,6 +44,7 @@ Cloudflare Worker-Secrets fuer FCM HTTP v1:
 
 Ohne diese Werte bleibt Push deaktiviert und die lokale WorkManager-Loesung uebernimmt.
 Der Endpunkt `/push/status` zeigt ohne Geheimnisse an, ob D1 und FCM im Worker einsatzbereit sind. Die App meldet Standby-Push erst dann als aktiv, wenn sowohl ihre Firebase-Konfiguration als auch dieser Serverstatus erfolgreich sind.
+Lokale Builds können die Android-Werte alternativ aus einer unveränderten `app/google-services.json` lesen; die Datei bleibt durch `.gitignore` lokal.
 
 Das vorbereitete Setup kann mit den beiden unveränderten Firebase-JSON-Dateien ausgeführt werden:
 

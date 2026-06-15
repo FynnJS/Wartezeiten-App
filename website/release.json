@@ -1,17 +1,16 @@
 {
-  "versionName": "1.1.0",
-  "versionCode": 10100,
-  "releaseDate": "2026-06-10",
-  "releasePageUrl": "https://github.com/FynnJS/Wartezeiten-App/releases/tag/v1.1.0",
-  "apkUrl": "https://github.com/FynnJS/Wartezeiten-App/releases/download/v1.1.0/wartezeiten-app-1.1.0.apk",
-  "apkSize": "3.45",
+  "versionName": "1.1.1",
+  "versionCode": 10101,
+  "releaseDate": "2026-06-14",
+  "releasePageUrl": "https://github.com/FynnJS/Wartezeiten-App/releases/tag/v1.1.1",
+  "apkUrl": "https://github.com/FynnJS/Wartezeiten-App/releases/download/v1.1.1/wartezeiten-app-1.1.1.apk",
+  "apkSize": "20.46",
   "releaseNotes": [
-    "Offline-Banner zeigen klar, wenn gecachte Park- oder Wartezeitdaten genutzt werden.",
-    "Park-Suche, Suchhistorie, zuletzt angesehene Parks und Favoriten-Dashboard helfen beim schnelleren Wiederfinden.",
-    "Statistiken koennen als Screenshot geteilt werden, Parkdetails als kompakte Textzusammenfassung.",
-    "Watchlist-Alarme erkennen jetzt alle Park- und Attraktionsaenderungen und unterstuetzen optional serverseitige Push-Benachrichtigungen.",
-    "Zentrale Trend- und Statistikdaten wurden auf D1-Snapshots und stabilere globale Messpunkte umgestellt.",
-    "Pflicht-Updates und APK-Signaturpruefungen wurden fuer kompatible Releases gehaertet."
+    "Vollständige zentrale Parkstatistik mit durchschnittlichen Wartezeiten und Tagesgraph direkt auf der Parkseite.",
+    "Korrigierte Offen-Anzeige durch frische Öffnungszeiten- und Attraktionssignale.",
+    "Sichtbarer Standby-Push-Status mit Testbenachrichtigung und erneutem Verbindungsversuch.",
+    "Stabilere lokale Hintergrundprüfungen bei vorübergehenden API-Ausfällen.",
+    "Automatisiertes Firebase- und Cloudflare-Setup mit Release-Prüfung."
   ],
   "showBanner": true
 }

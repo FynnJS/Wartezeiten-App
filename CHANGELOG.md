@@ -1,5 +1,15 @@
 # Changelog
 
+## v1.1.2 - 2026-06-15
+
+- Added conservative "now or later" guidance for open attractions based on matching local-time samples from up to seven historical days.
+- Added configurable Watchlist delivery rules for one-time alerts, park-opening restrictions, quiet hours, cooldown intervals, and pausing or resuming individual alerts.
+- Added a daily park summary alert around 18:00 local park time and made the last successful trigger visible in the Watchlist.
+- Applied the same delivery rules to local WorkManager checks and server-side Firebase standby push.
+- Fixed local Firebase configuration by reading a validated `google-services.json` when Gradle properties are not supplied.
+- Improved push diagnostics and test notifications by requesting Android notification permission and linking to app notification settings after a denial.
+- Added release validation for Firebase configuration and a D1 migration guard before deploying the updated Cloudflare Worker.
+
 ## v1.1.1 - 2026-06-14
 
 - Replaced the park-detail utilization card with complete central park statistics, including average wait times and the daily graph; current utilization remains visible as compact text.
