@@ -24,10 +24,12 @@ Im Repository ausführen:
 Das Skript:
 
 1. prüft Paketname und Projekt-IDs der Firebase-Dateien,
-2. setzt die vier Firebase-Buildwerte als GitHub-Repository-Variablen,
-3. speichert Projekt-ID, Client-E-Mail und Private Key als Cloudflare-Worker-Secrets,
-4. deployed den Worker,
-5. prüft `https://wartezeiten-app.tutorialfynn.workers.dev/push/status`.
+2. kopiert `google-services.json` lokal nach `app/`, damit Debug- und lokale Release-Builds Firebase automatisch einbetten,
+3. setzt die vier Firebase-Buildwerte als GitHub-Repository-Variablen,
+4. speichert Projekt-ID, Client-E-Mail und Private Key als Cloudflare-Worker-Secrets,
+5. wendet ausstehende D1-Migrationen remote an,
+6. deployed den Worker,
+7. prüft `https://wartezeiten-app.tutorialfynn.workers.dev/push/status`.
 
 Erwartete Antwort nach erfolgreichem Setup:
 

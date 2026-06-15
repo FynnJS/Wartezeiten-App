@@ -49,6 +49,8 @@ if (-not $serviceAccount.client_email -or -not $serviceAccount.private_key) {
     throw "Service-account JSON is missing client_email or private_key."
 }
 
+Copy-Item -LiteralPath $googleServicesPath -Destination (Join-Path $PSScriptRoot "..\app\google-services.json") -Force
+
 $repoVariables = [ordered]@{
     FIREBASE_APPLICATION_ID = $applicationId
     FIREBASE_API_KEY = $apiKey
@@ -74,6 +76,11 @@ foreach ($entry in $workerSecrets.GetEnumerator()) {
     if ($LASTEXITCODE -ne 0) {
         throw "Could not set Cloudflare secret '$($entry.Key)'."
     }
+}
+
+& npx wrangler d1 migrations apply wartezeiten-app-data --remote
+if ($LASTEXITCODE -ne 0) {
+    throw "D1 migration failed. The Worker was not deployed."
 }
 
 & npx wrangler deploy

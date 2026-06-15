@@ -1,6 +1,7 @@
 import java.io.File
 import java.io.FileInputStream
 import java.util.Properties
+import groovy.json.JsonSlurper
 
 plugins {
     id("com.android.application")
@@ -9,6 +10,30 @@ plugins {
     id("com.google.devtools.ksp")
 }
 
+val googleServicesFile = listOf(
+    rootProject.file("app/google-services.json"),
+    rootProject.file("google-services.json"),
+).firstOrNull(File::isFile)
+val firebaseValuesFromJson: Map<String, String> = googleServicesFile?.let { file ->
+    @Suppress("UNCHECKED_CAST")
+    val root = JsonSlurper().parse(file) as Map<String, Any?>
+    val projectInfo = root["project_info"] as? Map<String, Any?>
+    val clients = root["client"] as? List<Map<String, Any?>> ?: emptyList()
+    val androidClient = clients.firstOrNull { client ->
+        val clientInfo = client["client_info"] as? Map<String, Any?>
+        val androidInfo = clientInfo?.get("android_client_info") as? Map<String, Any?>
+        androidInfo?.get("package_name") == "de.wartezeiten.app"
+    }
+    val clientInfo = androidClient?.get("client_info") as? Map<String, Any?>
+    val apiKeys = androidClient?.get("api_key") as? List<Map<String, Any?>> ?: emptyList()
+    mapOf(
+        "FIREBASE_APPLICATION_ID" to clientInfo?.get("mobilesdk_app_id")?.toString().orEmpty(),
+        "FIREBASE_API_KEY" to apiKeys.firstOrNull()?.get("current_key")?.toString().orEmpty(),
+        "FIREBASE_PROJECT_ID" to projectInfo?.get("project_id")?.toString().orEmpty(),
+        "FIREBASE_GCM_SENDER_ID" to projectInfo?.get("project_number")?.toString().orEmpty(),
+    )
+}.orEmpty()
+
 android {
     namespace = "de.wartezeiten.app"
     compileSdk = 35
@@ -16,7 +41,6 @@ android {
     val keystorePropertiesFile = rootProject.file("keystore.properties")
     val defaultDebugKeystore = File(System.getProperty("user.home"), ".android/debug.keystore")
     var hasValidKeystore = false
-
     signingConfigs {
         create("release") {
             val keystoreProperties = Properties()
@@ -39,10 +63,13 @@ android {
 
     defaultConfig {
         fun optionalStringBuildConfig(name: String): String {
-            val value = providers.gradleProperty(name).orElse("").get()
+            val value = providers.gradleProperty(name).orNull
+                ?.takeIf { it.isNotBlank() }
+                ?: firebaseValuesFromJson[name].orEmpty()
+            val escapedValue = value
                 .replace("\\", "\\\\")
                 .replace("\"", "\\\"")
-            return "\"$value\""
+            return "\"$escapedValue\""
         }
 
         applicationId = "de.wartezeiten.app"
@@ -125,4 +152,29 @@ dependencies {
     implementation("androidx.datastore:datastore-preferences:1.1.1")
     implementation("androidx.work:work-runtime-ktx:2.11.2")
     implementation("com.google.firebase:firebase-messaging-ktx:24.1.0")
+}
+
+val verifyReleaseFirebaseConfiguration by tasks.registering {
+    group = "verification"
+    description = "Fails release builds when the Firebase Android configuration is missing."
+
+    doLast {
+        val requiredProperties = listOf(
+            "FIREBASE_APPLICATION_ID",
+            "FIREBASE_API_KEY",
+            "FIREBASE_PROJECT_ID",
+            "FIREBASE_GCM_SENDER_ID",
+        )
+        val missingProperties = requiredProperties.filter { name ->
+            providers.gradleProperty(name).orNull.isNullOrBlank() && firebaseValuesFromJson[name].isNullOrBlank()
+        }
+        check(missingProperties.isEmpty()) {
+            "Release builds require Firebase Android configuration. Missing Gradle properties: " +
+                    missingProperties.joinToString()
+        }
+    }
+}
+
+tasks.matching { it.name == "preReleaseBuild" }.configureEach {
+    dependsOn(verifyReleaseFirebaseConfiguration)
 }
