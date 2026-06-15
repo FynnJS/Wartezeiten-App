@@ -452,6 +452,7 @@ private fun WaitingTimesContent(
             ) { index ->
                 WaitingTimeRow(
                     item = state.waitingTimes[index],
+                    waitAdvice = state.waitAdviceByAttractionId[state.waitingTimes[index].attractionId],
                     isPlanned = state.waitingTimes[index].attractionId in state.plannedAttractionIds,
                     onTogglePlanned = onTogglePlannedAttraction,
                     onAddWatchlist = onAddWatchlistForAttraction,
@@ -827,6 +828,7 @@ private fun ParkHeaderSection(
 @Composable
 private fun WaitingTimeRow(
     item: WaitingTime,
+    waitAdvice: AttractionWaitAdvice?,
     isPlanned: Boolean,
     onTogglePlanned: (String) -> Unit,
     onAddWatchlist: (String) -> Unit,
@@ -879,6 +881,12 @@ private fun WaitingTimeRow(
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
+                waitAdvice?.let { advice ->
+                    WaitAdviceLabel(
+                        advice = advice,
+                        language = language,
+                    )
+                }
             }
 
             IconButton(
@@ -943,6 +951,76 @@ private fun WaitingTimeRow(
             }
         }
     }
+}
+
+@Composable
+private fun WaitAdviceLabel(
+    advice: AttractionWaitAdvice,
+    language: String,
+) {
+    val colors = advice.colors()
+    Surface(
+        modifier = Modifier.padding(top = 5.dp),
+        shape = RoundedCornerShape(6.dp),
+        color = colors.container,
+        contentColor = colors.content,
+        border = androidx.compose.foundation.BorderStroke(1.dp, colors.border),
+    ) {
+        Text(
+            text = advice.label(language),
+            modifier = Modifier.padding(horizontal = 7.dp, vertical = 4.dp),
+            style = MaterialTheme.typography.labelSmall,
+            fontWeight = FontWeight.Bold,
+        )
+    }
+}
+
+private fun AttractionWaitAdvice.label(language: String): String {
+    return when (type) {
+        AttractionWaitAdviceType.GoNow -> if (language == "en") {
+            "NOW: Good time · typically $typicalWaitMinutes min"
+        } else {
+            "JETZT: Günstig · üblich $typicalWaitMinutes Min."
+        }
+        AttractionWaitAdviceType.WaitUntil -> {
+            val time = suggestedLocalTime?.format(DateTimeFormatter.ofPattern("HH:mm")) ?: return ""
+            if (language == "en") {
+                "LATER: Around $time about ${expectedWaitMinutes ?: typicalWaitMinutes} min"
+            } else {
+                "SPÄTER: Gegen $time etwa ${expectedWaitMinutes ?: typicalWaitMinutes} Min."
+            }
+        }
+        AttractionWaitAdviceType.Typical -> if (language == "en") {
+            "TYPICAL: Usually about $typicalWaitMinutes min"
+        } else {
+            "ÜBLICH: Meist etwa $typicalWaitMinutes Min."
+        }
+    }
+}
+
+private data class WaitAdviceColors(
+    val container: Color,
+    val content: Color,
+    val border: Color,
+)
+
+@Composable
+private fun AttractionWaitAdvice.colors(): WaitAdviceColors = when (type) {
+    AttractionWaitAdviceType.GoNow -> WaitAdviceColors(
+        container = Color(0xFFE2F4E3),
+        content = Color(0xFF163A18),
+        border = Color(0xFF4CAF50),
+    )
+    AttractionWaitAdviceType.WaitUntil -> WaitAdviceColors(
+        container = Color(0xFFFFEFC2),
+        content = Color(0xFF493100),
+        border = Color(0xFFFFB300),
+    )
+    AttractionWaitAdviceType.Typical -> WaitAdviceColors(
+        container = MaterialTheme.colorScheme.secondaryContainer,
+        content = MaterialTheme.colorScheme.onSecondaryContainer,
+        border = MaterialTheme.colorScheme.secondary,
+    )
 }
 
 private fun plannerLine(item: WaitingTime, language: String): String {
