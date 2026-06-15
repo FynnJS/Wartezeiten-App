@@ -19,12 +19,12 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           fetch-depth: 0
 
       - name: Set up JDK 17
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: 17
@@ -91,7 +91,7 @@ jobs:
 
       - name: Upload APK to GitHub release
         if: github.event_name == 'release' || inputs.release_tag != ''
-        uses: softprops/action-gh-release@v1
+        uses: softprops/action-gh-release@v3
         with:
           tag_name: ${{ github.event.release.tag_name || inputs.release_tag }}
           files: ${{ steps.metadata.outputs.apk_release_asset }}
@@ -112,7 +112,7 @@ jobs:
         shell: bash
 
       - name: Upload release.json as artifact for review
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: release-json
           path: website/release.json
