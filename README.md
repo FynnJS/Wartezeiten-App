@@ -94,8 +94,17 @@ Für veröffentlichte GitHub-Releases muss die Pipeline mit einem stabilen Relea
 - `RELEASE_STORE_PASSWORD`
 - `RELEASE_KEY_ALIAS`
 - `RELEASE_KEY_PASSWORD`
+- `RELEASE_CERT_SHA256`
 
 Fehlen diese Secrets bei einem Release-Event, bricht die Pipeline ab. Das verhindert APKs, die wegen abweichender Signatur nicht als Update über eine bestehende Installation installiert werden können.
+
+Der dauerhafte Schlüssel wird einmalig eingerichtet und anschließend lokal sowie in GitHub hinterlegt:
+
+```powershell
+.\scripts\configure-release-signing.ps1
+```
+
+Der dabei ausgegebene Sicherungsordner muss zusätzlich außerhalb des Rechners gesichert werden. Der private Keystore lässt sich aus einer veröffentlichten APK nicht wiederherstellen.
 
 Cloudflare App-Daten für Ranking, Trends und zentrale Attraktionsstatistiken werden vom Worker-Cron erzeugt. Setup-Hinweise stehen in `website/CLOUDFLARE-APP-DATA.md`.
 

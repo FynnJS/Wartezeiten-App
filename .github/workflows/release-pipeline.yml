@@ -4,6 +4,11 @@ on:
   release:
     types: [published]
   workflow_dispatch:
+    inputs:
+      release_tag:
+        description: Existing GitHub release tag to build and publish, for example v1.1.2
+        required: false
+        type: string
 
 permissions:
   contents: write
@@ -30,16 +35,17 @@ jobs:
           RELEASE_STORE_PASSWORD: ${{ secrets.RELEASE_STORE_PASSWORD }}
           RELEASE_KEY_ALIAS: ${{ secrets.RELEASE_KEY_ALIAS }}
           RELEASE_KEY_PASSWORD: ${{ secrets.RELEASE_KEY_PASSWORD }}
+          RELEASE_CERT_SHA256: ${{ secrets.RELEASE_CERT_SHA256 }}
         run: |
-          if [ "${{ github.event_name }}" = "release" ]; then
-            if [ -z "$RELEASE_KEYSTORE_BASE64" ] || [ -z "$RELEASE_STORE_PASSWORD" ] || [ -z "$RELEASE_KEY_ALIAS" ] || [ -z "$RELEASE_KEY_PASSWORD" ]; then
+          if [ "${{ github.event_name }}" = "release" ] || [ -n "${{ inputs.release_tag }}" ]; then
+            if [ -z "$RELEASE_KEYSTORE_BASE64" ] || [ -z "$RELEASE_STORE_PASSWORD" ] || [ -z "$RELEASE_KEY_ALIAS" ] || [ -z "$RELEASE_KEY_PASSWORD" ] || [ -z "$RELEASE_CERT_SHA256" ]; then
               echo "::error::Release signing secrets are required for APK releases to remain update-compatible."
               exit 1
             fi
           fi
           if [ -n "$RELEASE_KEYSTORE_BASE64" ]; then
             echo "$RELEASE_KEYSTORE_BASE64" | base64 --decode > release-keystore.jks
-            printf "storeFile=release-keystore.jks\nstorePassword=%s\nkeyAlias=%s\nkeyPassword=%s\n" "$RELEASE_STORE_PASSWORD" "$RELEASE_KEY_ALIAS" "$RELEASE_KEY_PASSWORD" > keystore.properties
+            printf "storeFile=../release-keystore.jks\nstorePassword=%s\nkeyAlias=%s\nkeyPassword=%s\n" "$RELEASE_STORE_PASSWORD" "$RELEASE_KEY_ALIAS" "$RELEASE_KEY_PASSWORD" > keystore.properties
           fi
         shell: bash
 
@@ -57,17 +63,37 @@ jobs:
           chmod +x gradlew
           ./gradlew :app:assembleRelease
 
+      - name: Verify release certificate
+        env:
+          RELEASE_CERT_SHA256: ${{ secrets.RELEASE_CERT_SHA256 }}
+        run: |
+          APK_FILE=$(find app/build/outputs/apk/release -maxdepth 1 -type f -name '*.apk' | head -n 1)
+          APKSIGNER=$(find "$ANDROID_HOME/build-tools" -type f -name apksigner | sort -V | tail -n 1)
+          if [ -z "$APK_FILE" ] || [ -z "$APKSIGNER" ]; then
+            echo "::error::Release APK or apksigner was not found."
+            exit 1
+          fi
+          ACTUAL_CERT=$($APKSIGNER verify --print-certs "$APK_FILE" | sed -n 's/.*certificate SHA-256 digest: //p' | head -n 1 | tr -d ':[:space:]' | tr '[:upper:]' '[:lower:]')
+          EXPECTED_CERT=$(printf '%s' "$RELEASE_CERT_SHA256" | tr -d ':[:space:]' | tr '[:upper:]' '[:lower:]')
+          if [ "$ACTUAL_CERT" != "$EXPECTED_CERT" ]; then
+            echo "::error::Release certificate mismatch. Expected $EXPECTED_CERT but built $ACTUAL_CERT."
+            exit 1
+          fi
+          echo "Release certificate verified: $ACTUAL_CERT"
+        shell: bash
+
       - name: Prepare release metadata and update website/release.json
         id: metadata
+        env:
+          RELEASE_TAG_OVERRIDE: ${{ inputs.release_tag }}
         run: python3 .github/scripts/prepare-release-metadata.py
         shell: bash
 
       - name: Upload APK to GitHub release
-        if: github.event_name == 'release'
+        if: github.event_name == 'release' || inputs.release_tag != ''
         uses: softprops/action-gh-release@v1
         with:
-          tag_name: ${{ github.event.release.tag_name }}
-          name: ${{ steps.metadata.outputs.apk_file_name }}
+          tag_name: ${{ github.event.release.tag_name || inputs.release_tag }}
           files: ${{ steps.metadata.outputs.apk_release_asset }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

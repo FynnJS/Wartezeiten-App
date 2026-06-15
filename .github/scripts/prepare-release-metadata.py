@@ -37,11 +37,17 @@ github_event = os.environ.get("GITHUB_EVENT_NAME", "")
 github_repo = os.environ.get("GITHUB_REPOSITORY", "")
 github_ref = os.environ.get("GITHUB_REF", "")
 event_path = os.environ.get("GITHUB_EVENT_PATH", "")
+release_tag_override = os.environ.get("RELEASE_TAG_OVERRIDE", "").strip()
 
 tag_name = None
 release_body = ""
 
-if github_event == "release" and event_path:
+if release_tag_override:
+    tag_name = release_tag_override
+    release_doc = pathlib.Path("docs/releases") / f"{release_tag_override}.md"
+    if release_doc.exists():
+        release_body = release_doc.read_text(encoding="utf-8").strip()
+elif github_event == "release" and event_path:
     with open(event_path, encoding="utf-8") as f:
         event = json.load(f)
     tag_name = event["release"]["tag_name"]

@@ -105,6 +105,7 @@ Nach jeder Änderung am Programm **MUSS** geprüft werden, ob die Änderung erfo
 - `android.useAndroidX=true` ist in `gradle.properties` gesetzt.
 - Die API-Integration in `WartezeitenApiService` wurde auf Header-Parameter korrigiert.
 - Release-APK-Updates müssen mit demselben Keystore signiert werden wie die zuvor installierte Version, um Paketkonflikte zu vermeiden. `app/build.gradle.kts` unterstützt jetzt eine `keystore.properties`-basierte Release-Signaturkonfiguration; ohne eigene Keystore-Datei wird lokal der Android-Debug-Keystore verwendet, damit Entwicklungs-Updates installierbar bleiben.
+- **Dauerhafter Release-Keystore:** GitHub-Releases verwenden ausschließlich den mit `scripts/configure-release-signing.ps1` erzeugten und als Repository-Secrets hinterlegten Keystore. Zusätzlich wird `RELEASE_CERT_SHA256` nach jedem Build gegen die fertige APK geprüft. Der lokale Sicherungsordner außerhalb des Repositories muss dauerhaft aufbewahrt und extern gesichert werden; ohne privaten Schlüssel sind signaturkompatible Updates nicht wiederherstellbar.
 
 ## Website & Release-Deployment
 

@@ -9,6 +9,7 @@
 - Fixed local Firebase configuration by reading a validated `google-services.json` when Gradle properties are not supplied.
 - Improved push diagnostics and test notifications by requesting Android notification permission and linking to app notification settings after a denial.
 - Added release validation for Firebase configuration and a D1 migration guard before deploying the updated Cloudflare Worker.
+- Established a permanent release keystore with certificate verification in CI; installations signed with the previous unrecoverable key require one final reinstall for v1.1.2.
 
 ## v1.1.1 - 2026-06-14
 
