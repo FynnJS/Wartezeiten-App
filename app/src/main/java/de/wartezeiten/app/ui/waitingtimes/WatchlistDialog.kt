@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -29,8 +30,10 @@ import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
 import de.wartezeiten.app.data.local.dao.ParkDao
+import de.wartezeiten.app.data.local.dao.AlertHistoryDao
 import de.wartezeiten.app.data.local.dao.WatchlistDao
 import de.wartezeiten.app.data.local.entity.WatchlistEntity
+import de.wartezeiten.app.data.local.entity.AlertHistoryEntity
 import de.wartezeiten.app.data.local.entity.WatchlistType
 import de.wartezeiten.app.push.PushRegistrationManager
 import de.wartezeiten.app.worker.NotificationScheduler
@@ -105,6 +108,10 @@ fun AddWatchlistDialog(
             else WatchlistType.NOW_OPENED
         )
     }
+    var notifyOnce by remember { mutableStateOf(false) }
+    var onlyWhenParkOpen by remember { mutableStateOf(false) }
+    var quietHoursEnabled by remember { mutableStateOf(false) }
+    var cooldownMinutes by remember { mutableIntStateOf(30) }
 
     val availableTypes = if (attractionId != null) {
         listOf(
@@ -121,6 +128,7 @@ fun AddWatchlistDialog(
             WatchlistType.WAIT_TIME_BELOW,
             WatchlistType.WAIT_TIME_ABOVE,
             WatchlistType.PARK_ALL_CHANGES,
+            WatchlistType.DAILY_SUMMARY,
             WatchlistType.NOW_OPENED,
             WatchlistType.PARK_STATUS_CHANGED,
             WatchlistType.CROWD_LEVEL_BELOW,
@@ -163,7 +171,10 @@ fun AddWatchlistDialog(
         onDismissRequest = onDismiss,
         title = { Text(if (language == "en") "Create park alert" else "Park-Alarm erstellen") },
         text = {
-            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            Column(
+                modifier = Modifier.verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
                 if (attractionName != null) {
                     Text(
                         text = if (language == "en") "Attraction: $attractionName" else "Attraktion: $attractionName",
@@ -250,6 +261,46 @@ fun AddWatchlistDialog(
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
+
+                HorizontalDivider()
+                Text(
+                    if (language == "en") "Delivery rules" else "Zustellregeln",
+                    style = MaterialTheme.typography.titleSmall,
+                )
+                RuleSwitch(
+                    checked = notifyOnce,
+                    onCheckedChange = { notifyOnce = it },
+                    title = if (language == "en") "Notify only once" else "Nur einmal benachrichtigen",
+                    description = if (language == "en") "The alert is paused after its first notification." else "Der Alarm wird nach der ersten Meldung pausiert.",
+                )
+                RuleSwitch(
+                    checked = onlyWhenParkOpen,
+                    onCheckedChange = { onlyWhenParkOpen = it },
+                    title = if (language == "en") "Only while the park is open" else "Nur während der Parköffnung",
+                    description = if (language == "en") "Suppresses alerts before opening and after closing." else "Unterdrückt Meldungen vor Öffnung und nach Schließung.",
+                )
+                RuleSwitch(
+                    checked = quietHoursEnabled,
+                    onCheckedChange = { quietHoursEnabled = it },
+                    title = if (language == "en") "Quiet hours 22:00–08:00" else "Ruhezeit 22:00–08:00",
+                    description = if (language == "en") "No alerts are delivered overnight." else "Über Nacht werden keine Alarme zugestellt.",
+                )
+                Text(
+                    if (language == "en") "Minimum interval" else "Mindestabstand",
+                    style = MaterialTheme.typography.labelLarge,
+                )
+                Row(
+                    modifier = Modifier.horizontalScroll(rememberScrollState()),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    listOf(15, 30, 60, 120).forEach { minutes ->
+                        FilterChip(
+                            selected = cooldownMinutes == minutes,
+                            onClick = { cooldownMinutes = minutes },
+                            label = { Text(if (minutes < 60) "$minutes Min." else "${minutes / 60} Std.") },
+                        )
+                    }
+                }
             }
         },
         confirmButton = {
@@ -261,6 +312,10 @@ fun AddWatchlistDialog(
                         attractionId = attractionId,
                         type = selectedType,
                         threshold = effectiveThreshold,
+                        notifyOnce = notifyOnce,
+                        onlyWhenParkOpen = onlyWhenParkOpen,
+                        quietHoursEnabled = quietHoursEnabled,
+                        cooldownMinutes = cooldownMinutes,
                         onSaved = { saved ->
                             if (saved) {
                                 NotificationScheduler.runSoonAndKeepChecking(context)
@@ -282,6 +337,26 @@ fun AddWatchlistDialog(
     )
 }
 
+@Composable
+private fun RuleSwitch(
+    checked: Boolean,
+    onCheckedChange: (Boolean) -> Unit,
+    title: String,
+    description: String,
+) {
+    Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+        Switch(checked = checked, onCheckedChange = onCheckedChange)
+        Column(modifier = Modifier.weight(1f)) {
+            Text(title, style = MaterialTheme.typography.bodyMedium)
+            Text(
+                description,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+    }
+}
+
 fun WatchlistType.label(language: String = "de"): String = when (this) {
     WatchlistType.WAIT_TIME_BELOW -> if (language == "en") "Ride window" else "Ride-Fenster"
     WatchlistType.WAIT_TIME_ABOVE -> if (language == "en") "Too crowded" else "Zu voll"
@@ -295,6 +370,7 @@ fun WatchlistType.label(language: String = "de"): String = when (this) {
     WatchlistType.ATTRACTION_CLOSED -> if (language == "en") "Just closed" else "Gerade zu"
     WatchlistType.ATTRACTION_MAINTENANCE -> if (language == "en") "Tech break" else "Technikpause"
     WatchlistType.PARK_STATUS_CHANGED -> if (language == "en") "Park ticker" else "Park-Ticker"
+    WatchlistType.DAILY_SUMMARY -> if (language == "en") "Daily summary" else "Tageszusammenfassung"
 }
 
 private fun WatchlistType.description(language: String): String = when (this) {
@@ -310,12 +386,14 @@ private fun WatchlistType.description(language: String): String = when (this) {
     WatchlistType.ATTRACTION_CLOSED -> if (language == "en") "To avoid wasted walks: you will know when the attraction closes." else "Für unnötige Wege: Du erfährst, wenn die Attraktion gerade schließt."
     WatchlistType.ATTRACTION_MAINTENANCE -> if (language == "en") "For detours: you will know when the attraction enters maintenance." else "Für Umwege: Du erfährst, wenn die Attraktion in eine Technikpause geht."
     WatchlistType.PARK_STATUS_CHANGED -> if (language == "en") "For day planning: you will know when the park status changes." else "Für Tagesplanung: Du erfährst, wenn sich der Parkstatus ändert."
+    WatchlistType.DAILY_SUMMARY -> if (language == "en") "Once per day around 18:00 park time: opening state, crowd level, and open attractions at a glance." else "Einmal täglich gegen 18 Uhr Parkzeit: Öffnung, Auslastung und offene Attraktionen auf einen Blick."
 }
 
 data class WatchlistAlertWithParkName(
     val alert: WatchlistEntity,
     val parkName: String?,
-    val attractionName: String?
+    val attractionName: String?,
+    val history: AlertHistoryEntity?,
 )
 
 @HiltViewModel
@@ -323,6 +401,7 @@ class WatchlistViewModel @Inject constructor(
     private val watchlistDao: WatchlistDao,
     private val parkDao: ParkDao,
     private val parkDetailDao: de.wartezeiten.app.data.local.dao.ParkDetailDao,
+    private val alertHistoryDao: AlertHistoryDao,
     private val pushRegistrationManager: PushRegistrationManager,
 ) : ViewModel() {
     val pushStatus = pushRegistrationManager.status
@@ -336,8 +415,9 @@ class WatchlistViewModel @Inject constructor(
     val watchlistItems: Flow<List<WatchlistAlertWithParkName>> = combine(
         watchlistDao.observeWatchlist(),
         parkDao.observeParks(null),
-        parkDetailDao.observeAllWaitingTimes()
-    ) { alerts, parks, waitingTimes ->
+        parkDetailDao.observeAllWaitingTimes(),
+        alertHistoryDao.observeAll(),
+    ) { alerts, parks, waitingTimes, histories ->
         val parkNamesById = parks.associate { it.id to it.name }
         val parkNamesByUuid = parks.associate { it.uuid to it.name }
         val parkKeysByKey = parks.flatMap { park ->
@@ -347,6 +427,7 @@ class WatchlistViewModel @Inject constructor(
             )
         }.toMap()
         val attractionNames = waitingTimes.associate { "${it.parkKey}:${it.attractionId}" to it.name }
+        val historiesByAlertId = histories.associateBy { it.alertId }
 
         alerts.map { alert ->
             val parkName = parkNamesById[alert.parkKey] ?: parkNamesByUuid[alert.parkKey]
@@ -355,7 +436,12 @@ class WatchlistViewModel @Inject constructor(
                     .firstNotNullOfOrNull { parkKey -> attractionNames["$parkKey:$attractionId"] }
             }
 
-            WatchlistAlertWithParkName(alert = alert, parkName = parkName, attractionName = attractionName)
+            WatchlistAlertWithParkName(
+                alert = alert,
+                parkName = parkName,
+                attractionName = attractionName,
+                history = historiesByAlertId[alert.id],
+            )
         }
     }
 
@@ -364,6 +450,10 @@ class WatchlistViewModel @Inject constructor(
         attractionId: String?,
         type: WatchlistType,
         threshold: Int,
+        notifyOnce: Boolean,
+        onlyWhenParkOpen: Boolean,
+        quietHoursEnabled: Boolean,
+        cooldownMinutes: Int,
         onSaved: (Boolean) -> Unit = {},
     ) {
         viewModelScope.launch {
@@ -383,7 +473,11 @@ class WatchlistViewModel @Inject constructor(
                     parkKey = parkKey,
                     attractionId = attractionId,
                     type = type,
-                    threshold = threshold
+                    threshold = threshold,
+                    notifyOnce = notifyOnce,
+                    onlyWhenParkOpen = onlyWhenParkOpen,
+                    quietHoursEnabled = quietHoursEnabled,
+                    cooldownMinutes = cooldownMinutes,
                 )
             )
             onSaved(true)
@@ -394,6 +488,13 @@ class WatchlistViewModel @Inject constructor(
     fun deleteAlert(item: WatchlistEntity) {
         viewModelScope.launch {
             watchlistDao.delete(item)
+            pushRegistrationManager.syncCurrentWatchlist()
+        }
+    }
+
+    fun setAlertEnabled(item: WatchlistEntity, enabled: Boolean) {
+        viewModelScope.launch {
+            watchlistDao.setEnabled(item.id, enabled)
             pushRegistrationManager.syncCurrentWatchlist()
         }
     }

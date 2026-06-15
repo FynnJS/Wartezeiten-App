@@ -1,6 +1,13 @@
 package de.wartezeiten.app.ui.watchlist
 
+import android.Manifest
+import android.content.Intent
+import android.content.pm.PackageManager
+import android.os.Build
+import android.provider.Settings
 import android.widget.Toast
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -12,6 +19,8 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Pause
+import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -31,6 +40,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.core.content.ContextCompat
 import de.wartezeiten.app.data.local.entity.WatchlistEntity
 import de.wartezeiten.app.data.local.entity.WatchlistType
 import de.wartezeiten.app.push.NotificationDiagnostics
@@ -39,6 +49,9 @@ import de.wartezeiten.app.ui.settings.SettingsViewModel
 import de.wartezeiten.app.ui.waitingtimes.WatchlistAlertWithParkName
 import de.wartezeiten.app.ui.waitingtimes.WatchlistViewModel
 import de.wartezeiten.app.ui.waitingtimes.label
+import java.time.Instant
+import java.time.ZoneId
+import java.time.format.DateTimeFormatter
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -53,6 +66,28 @@ fun WatchlistRoute(
     val context = LocalContext.current
     val language = settingsState.language
     val groupedWatchlist = watchlistItems.groupBy { it.parkName ?: it.alert.parkKey }
+    val testNotificationPermissionLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission(),
+    ) { granted ->
+        if (granted) {
+            NotificationDiagnostics.showTestNotification(context)
+        } else {
+            Toast.makeText(
+                context,
+                if (language == "en") {
+                    "Notification permission is required for the test."
+                } else {
+                    "Für die Testbenachrichtigung wird die Benachrichtigungsberechtigung benötigt."
+                },
+                Toast.LENGTH_LONG,
+            ).show()
+            context.startActivity(
+                Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS).apply {
+                    putExtra(Settings.EXTRA_APP_PACKAGE, context.packageName)
+                }
+            )
+        }
+    }
 
     Scaffold(
         topBar = {
@@ -83,13 +118,15 @@ fun WatchlistRoute(
                     pushStatus = pushStatus,
                     language = language,
                     onTestNotification = {
-                        val shown = NotificationDiagnostics.showTestNotification(context)
-                        if (!shown) {
-                            Toast.makeText(
-                                context,
-                                if (language == "en") "Notification permission is missing." else "Die Benachrichtigungsberechtigung fehlt.",
-                                Toast.LENGTH_LONG,
-                            ).show()
+                        val permissionRequired = Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU
+                        val permissionGranted = !permissionRequired || ContextCompat.checkSelfPermission(
+                            context,
+                            Manifest.permission.POST_NOTIFICATIONS,
+                        ) == PackageManager.PERMISSION_GRANTED
+                        if (permissionGranted) {
+                            NotificationDiagnostics.showTestNotification(context)
+                        } else {
+                            testNotificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
                         }
                     },
                     onRetryPush = viewModel::retryPushSync,
@@ -122,6 +159,7 @@ fun WatchlistRoute(
                             alert = alert,
                             language = language,
                             onDelete = viewModel::deleteAlert,
+                            onEnabledChange = viewModel::setAlertEnabled,
                         )
                     }
                 }
@@ -238,6 +276,7 @@ private fun WatchlistAlertCard(
     alert: WatchlistAlertWithParkName,
     language: String,
     onDelete: (WatchlistEntity) -> Unit,
+    onEnabledChange: (WatchlistEntity, Boolean) -> Unit,
 ) {
     val item = alert.alert
     OutlinedCard(
@@ -264,6 +303,32 @@ private fun WatchlistAlertCard(
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.primary,
                 )
+                Text(
+                    text = item.rulesLine(language),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = if (item.enabled) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.error,
+                )
+                alert.history?.lastTriggeredAtMillis?.takeIf { it > 0L }?.let { triggeredAt ->
+                    Text(
+                        text = if (language == "en") {
+                            "Last triggered: ${triggeredAt.formattedTimestamp()}"
+                        } else {
+                            "Zuletzt ausgelöst: ${triggeredAt.formattedTimestamp()}"
+                        },
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.tertiary,
+                    )
+                }
+            }
+            IconButton(onClick = { onEnabledChange(item, !item.enabled) }) {
+                Icon(
+                    imageVector = if (item.enabled) Icons.Default.Pause else Icons.Default.PlayArrow,
+                    contentDescription = if (item.enabled) {
+                        if (language == "en") "Pause" else "Pausieren"
+                    } else {
+                        if (language == "en") "Activate" else "Aktivieren"
+                    },
+                )
             }
             IconButton(onClick = { onDelete(item) }) {
                 Icon(
@@ -273,6 +338,20 @@ private fun WatchlistAlertCard(
             }
         }
     }
+}
+
+private fun Long.formattedTimestamp(): String = DateTimeFormatter.ofPattern("dd.MM.yyyy, HH:mm")
+    .format(Instant.ofEpochMilli(this).atZone(ZoneId.systemDefault()))
+
+private fun WatchlistEntity.rulesLine(language: String): String {
+    if (!enabled) return if (language == "en") "Paused" else "Pausiert"
+    val rules = buildList {
+        if (notifyOnce) add(if (language == "en") "once" else "einmalig")
+        if (onlyWhenParkOpen) add(if (language == "en") "park open" else "nur Parköffnung")
+        if (quietHoursEnabled) add(if (language == "en") "quiet 22–08" else "Ruhe 22–08")
+        add(if (language == "en") "$cooldownMinutes min interval" else "$cooldownMinutes Min. Abstand")
+    }
+    return rules.joinToString(" · ")
 }
 
 private fun WatchlistEntity.statusLine(language: String): String {

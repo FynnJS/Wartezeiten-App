@@ -1,6 +1,7 @@
 package de.wartezeiten.app.push
 
 import android.Manifest
+import android.annotation.SuppressLint
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.content.Context
@@ -15,6 +16,7 @@ object NotificationDiagnostics {
     private const val channelId = "watchlist_alerts"
     private const val testNotificationId = 59_001
 
+    @SuppressLint("MissingPermission")
     fun showTestNotification(context: Context): Boolean {
         if (
             Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&

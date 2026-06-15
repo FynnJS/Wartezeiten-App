@@ -1,6 +1,7 @@
 package de.wartezeiten.app.worker
 
 import android.Manifest
+import android.annotation.SuppressLint
 import android.app.PendingIntent
 import android.app.NotificationChannel
 import android.app.NotificationManager
@@ -27,6 +28,7 @@ import de.wartezeiten.app.data.local.entity.WatchlistType
 import de.wartezeiten.app.data.remote.WartezeitenApiService
 import de.wartezeiten.app.data.remote.dto.WaitingTimeDto
 import de.wartezeiten.app.MainActivity
+import de.wartezeiten.app.push.PushRegistrationManager
 import de.wartezeiten.app.domain.model.isParkCurrentlyOpen
 import kotlinx.coroutines.flow.first
 import java.util.Locale
@@ -40,6 +42,8 @@ private const val GROUP_KEY = "de.wartezeiten.app.WATCHLIST_ALERTS"
 private val logger: Logger = Logger.getLogger("NotificationWorker")
 
 private data class WatchlistNotification(
+    val alertId: Int,
+    val notifyOnce: Boolean,
     val title: String,
     val content: String,
     val parkKey: String,
@@ -61,12 +65,13 @@ class NotificationWorker @AssistedInject constructor(
     private val parkDao: ParkDao,
     private val preferences: PreferencesDataSource,
     private val api: WartezeitenApiService,
+    private val pushRegistrationManager: PushRegistrationManager,
 ) : CoroutineWorker(context, params) {
 
     override suspend fun doWork(): Result {
         createNotificationChannel()
 
-        val watchlistItems = watchlistDao.observeWatchlist().first()
+        val watchlistItems = watchlistDao.observeActiveWatchlist().first()
         if (watchlistItems.isEmpty()) {
             NotificationScheduler.cancelBackgroundChecks(applicationContext)
             return Result.success()
@@ -106,9 +111,13 @@ class NotificationWorker @AssistedInject constructor(
                 val hasLiveWaitingTimes = waitingResult is WatchlistApiResult.Success &&
                         liveWaitingTimes.any { it.normalizedStatus() == "opened" }
                 val canUseLiveAttractionAlerts = isParkOpen != false && hasLiveWaitingTimes
+                val eligibleAlerts = alerts.filter { alert ->
+                    !alert.isInQuietHours(System.currentTimeMillis(), opening?.opening) &&
+                            (!alert.onlyWhenParkOpen || isParkOpen == true)
+                }
 
                 if (isParkOpen != null) {
-                    collectParkNotifications(parkKey, parkName, isParkOpen, alerts, notifications)
+                    collectParkNotifications(parkKey, parkName, isParkOpen, eligibleAlerts, notifications)
                 }
 
                 val crowdValue = (crowdResult as? WatchlistApiResult.Success)
@@ -116,21 +125,31 @@ class NotificationWorker @AssistedInject constructor(
                     ?.crowdLevel
                     ?.replace(",", ".")
                     ?.toFloatOrNull()
-                collectCrowdNotifications(parkKey, parkName, isParkOpen == true, crowdValue, alerts, notifications)
+                collectCrowdNotifications(parkKey, parkName, isParkOpen == true, crowdValue, eligibleAlerts, notifications)
                 collectParkAllChangeNotifications(
                     parkKey = parkKey,
                     parkName = parkName,
                     isParkOpen = isParkOpen,
                     crowdValue = crowdValue,
                     waitingTimes = liveWaitingTimes,
-                    alerts = alerts,
+                    alerts = eligibleAlerts,
+                    notifications = notifications,
+                )
+                collectDailySummaryNotifications(
+                    parkKey = parkKey,
+                    parkName = parkName,
+                    isParkOpen = isParkOpen,
+                    crowdValue = crowdValue,
+                    waitingTimes = liveWaitingTimes,
+                    openingOffsetSource = opening?.opening,
+                    alerts = eligibleAlerts,
                     notifications = notifications,
                 )
 
                 if (canUseLiveAttractionAlerts) {
-                    collectWaitBelowNotifications(parkKey, parkName, liveWaitingTimes, alerts, notifications)
-                    collectWaitAboveNotifications(parkKey, parkName, liveWaitingTimes, alerts, notifications)
-                    collectStatusNotifications(parkKey, parkName, liveWaitingTimes, alerts, notifications)
+                    collectWaitBelowNotifications(parkKey, parkName, liveWaitingTimes, eligibleAlerts, notifications)
+                    collectWaitAboveNotifications(parkKey, parkName, liveWaitingTimes, eligibleAlerts, notifications)
+                    collectStatusNotifications(parkKey, parkName, liveWaitingTimes, eligibleAlerts, notifications)
                 }
             }.onFailure {
                 logger.log(Level.WARNING, "Watchlist notification scan failed for park $parkKey", it)
@@ -138,7 +157,15 @@ class NotificationWorker @AssistedInject constructor(
         }
 
         if (notifications.isNotEmpty()) {
-            sendNotifications(notifications)
+            if (sendNotifications(notifications)) {
+                val completedOneShotIds = notifications.filter { it.notifyOnce }.map { it.alertId }.distinct()
+                completedOneShotIds.forEach { alertId ->
+                    watchlistDao.setEnabled(alertId, false)
+                }
+                if (completedOneShotIds.isNotEmpty()) {
+                    pushRegistrationManager.syncCurrentWatchlist()
+                }
+            }
         }
 
         return if (successfulParkScans == 0) Result.retry() else Result.success()
@@ -152,9 +179,11 @@ class NotificationWorker @AssistedInject constructor(
         notifications: MutableList<WatchlistNotification>,
     ) {
         alerts.filter { it.type == WatchlistType.NOW_OPENED }.forEach { alert ->
-            if (shouldNotifyBoolean(alert.id, isParkOpen)) {
+            if (shouldNotifyBoolean(alert, isParkOpen)) {
                 notifications.add(
                     WatchlistNotification(
+                        alertId = alert.id,
+                        notifyOnce = alert.notifyOnce,
                         title = "Einlass bereit: $parkName",
                         content = "Der Park ist heute geöffnet. Prüfe jetzt Wartezeiten und starte mit den kurzen Wegen.",
                         parkKey = parkKey,
@@ -166,9 +195,11 @@ class NotificationWorker @AssistedInject constructor(
 
         alerts.filter { it.type == WatchlistType.PARK_STATUS_CHANGED }.forEach { alert ->
             val status = if (isParkOpen) "open" else "closed"
-            if (shouldNotifyValue(alert.id, status, notifyOnFirstMatch = false)) {
+            if (shouldNotifyValue(alert, status, notifyOnFirstMatch = false)) {
                 notifications.add(
                     WatchlistNotification(
+                        alertId = alert.id,
+                        notifyOnce = alert.notifyOnce,
                         title = "$parkName im Park-Ticker",
                         content = if (isParkOpen) {
                             "Heute geöffnet. Ein guter Moment, deine Route zu checken."
@@ -193,9 +224,11 @@ class NotificationWorker @AssistedInject constructor(
     ) {
         alerts.filter { it.type == WatchlistType.CROWD_LEVEL_BELOW }.forEach { alert ->
             val triggered = isParkOpen && crowdValue != null && crowdValue <= alert.threshold
-            if (shouldNotifyBoolean(alert.id, triggered)) {
+            if (shouldNotifyBoolean(alert, triggered)) {
                 notifications.add(
                     WatchlistNotification(
+                        alertId = alert.id,
+                        notifyOnce = alert.notifyOnce,
                         title = "Entspannter Park: $parkName",
                         content = "Auslastung bei ${crowdValue?.formatPercent() ?: "?"}%. Gute Zeit für Favoriten, Fotos oder die nächste Runde.",
                         parkKey = parkKey,
@@ -207,9 +240,11 @@ class NotificationWorker @AssistedInject constructor(
 
         alerts.filter { it.type == WatchlistType.CROWD_LEVEL_ABOVE }.forEach { alert ->
             val triggered = isParkOpen && crowdValue != null && crowdValue >= alert.threshold
-            if (shouldNotifyBoolean(alert.id, triggered)) {
+            if (shouldNotifyBoolean(alert, triggered)) {
                 notifications.add(
                     WatchlistNotification(
+                        alertId = alert.id,
+                        notifyOnce = alert.notifyOnce,
                         title = "Andrang-Warnung: $parkName",
                         content = "Auslastung bei ${crowdValue?.formatPercent() ?: "?"}%. Plane Snackpause, Shows oder ruhigere Ecken ein.",
                         parkKey = parkKey,
@@ -238,9 +273,11 @@ class NotificationWorker @AssistedInject constructor(
                 "openAttractions=$openAttractions",
                 "totalAttractions=$totalAttractions",
             ).joinToString("|")
-            if (shouldNotifyValue(alert.id, state, notifyOnFirstMatch = false)) {
+            if (shouldNotifyValue(alert, state, notifyOnFirstMatch = false)) {
                 notifications.add(
                     WatchlistNotification(
+                        alertId = alert.id,
+                        notifyOnce = alert.notifyOnce,
                         title = "Park-Änderung: $parkName",
                         content = buildParkChangeNotificationContent(
                             isParkOpen = isParkOpen,
@@ -273,10 +310,12 @@ class NotificationWorker @AssistedInject constructor(
                     .minByOrNull { it.waitingTime ?: Int.MAX_VALUE }
             val triggered = best?.waitingTime != null && best.waitingTime <= alert.threshold
 
-            if (shouldNotifyBoolean(alert.id, triggered)) {
+            if (shouldNotifyBoolean(alert, triggered)) {
                 val waitMinutes = best?.waitingTime ?: 0
                 notifications.add(
                     WatchlistNotification(
+                        alertId = alert.id,
+                        notifyOnce = alert.notifyOnce,
                         title = if (target != null) "Ride-Fenster: ${target.safeName()}" else "Ride-Fenster in $parkName",
                         content = "${best?.safeName() ?: "Eine Attraktion"} liegt bei $waitMinutes Min. Jetzt lohnt sich der Weg.",
                         parkKey = parkKey,
@@ -305,10 +344,12 @@ class NotificationWorker @AssistedInject constructor(
                     .maxByOrNull { it.waitingTime ?: Int.MIN_VALUE }
             val triggered = longest?.waitingTime != null && longest.waitingTime >= alert.threshold
 
-            if (shouldNotifyBoolean(alert.id, triggered)) {
+            if (shouldNotifyBoolean(alert, triggered)) {
                 val waitMinutes = longest?.waitingTime ?: 0
                 notifications.add(
                     WatchlistNotification(
+                        alertId = alert.id,
+                        notifyOnce = alert.notifyOnce,
                         title = if (target != null) "Zu voll: ${target.safeName()}" else "Zu voll in $parkName",
                         content = "${longest?.safeName() ?: "Eine Attraktion"} steht bei $waitMinutes Min. Lieber Route ändern oder später wiederkommen.",
                         parkKey = parkKey,
@@ -341,16 +382,16 @@ class NotificationWorker @AssistedInject constructor(
                 } ?: return@forEach
 
                 val shouldSend = when (alert.type) {
-                    WatchlistType.ATTRACTION_OPEN -> shouldNotifyBoolean(alert.id, current.normalizedStatus() == "opened")
-                    WatchlistType.ATTRACTION_CLOSED -> shouldNotifyBoolean(alert.id, current.normalizedStatus() == "closed")
-                    WatchlistType.ATTRACTION_MAINTENANCE -> shouldNotifyBoolean(alert.id, current.normalizedStatus() == "maintenance")
+                    WatchlistType.ATTRACTION_OPEN -> shouldNotifyBoolean(alert, current.normalizedStatus() == "opened")
+                    WatchlistType.ATTRACTION_CLOSED -> shouldNotifyBoolean(alert, current.normalizedStatus() == "closed")
+                    WatchlistType.ATTRACTION_MAINTENANCE -> shouldNotifyBoolean(alert, current.normalizedStatus() == "maintenance")
                     WatchlistType.ATTRACTION_STATUS_CHANGE -> shouldNotifyValue(
-                        alert.id,
+                        alert,
                         current.normalizedStatus(),
                         notifyOnFirstMatch = current.normalizedStatus() == "opened",
                     )
                     WatchlistType.ATTRACTION_ALL_CHANGES -> shouldNotifyValue(
-                        alert.id,
+                        alert,
                         current.changeState(),
                         notifyOnFirstMatch = false,
                     )
@@ -365,6 +406,8 @@ class NotificationWorker @AssistedInject constructor(
                     }
                     notifications.add(
                         WatchlistNotification(
+                            alertId = alert.id,
+                            notifyOnce = alert.notifyOnce,
                             title = current.safeName().toStatusNotificationTitle(current.safeStatus()),
                             content = content,
                             parkKey = parkKey,
@@ -415,8 +458,9 @@ class NotificationWorker @AssistedInject constructor(
         manager.createNotificationChannel(channel)
     }
 
-    private fun sendNotifications(notifications: List<WatchlistNotification>) {
-        if (!canPostNotifications()) return
+    @SuppressLint("MissingPermission")
+    private fun sendNotifications(notifications: List<WatchlistNotification>): Boolean {
+        if (!canPostNotifications()) return false
 
         val notificationManager = NotificationManagerCompat.from(applicationContext)
         val groupedByPark = notifications.groupBy { it.parkKey }
@@ -467,6 +511,7 @@ class NotificationWorker @AssistedInject constructor(
             .build()
 
         notificationManager.notify(SUMMARY_NOTIFICATION_ID, summary)
+        return true
     }
 
     private fun normalizeAttractionId(dto: WaitingTimeDto): String {
@@ -499,25 +544,77 @@ class NotificationWorker @AssistedInject constructor(
         }
     }
 
-    private suspend fun shouldNotifyBoolean(alertId: Int, triggered: Boolean): Boolean {
-        val lastValue = alertHistoryDao.getHistory(alertId)?.lastNotifiedValue
+    private suspend fun shouldNotifyBoolean(alert: WatchlistEntity, triggered: Boolean): Boolean {
+        val history = alertHistoryDao.getHistory(alert.id)
+        val lastValue = history?.lastNotifiedValue
         val currentValue = triggered.toString()
+        val shouldNotify = triggered && lastValue != currentValue && alert.cooldownElapsed(history)
         if (lastValue != currentValue) {
-            alertHistoryDao.upsertHistory(AlertHistoryEntity(alertId, currentValue, System.currentTimeMillis()))
+            alertHistoryDao.upsertHistory(
+                AlertHistoryEntity(
+                    alertId = alert.id,
+                    lastNotifiedValue = currentValue,
+                    lastNotifiedAtMillis = System.currentTimeMillis(),
+                    lastTriggeredAtMillis = if (shouldNotify) System.currentTimeMillis() else history?.lastTriggeredAtMillis ?: 0L,
+                )
+            )
         }
-        return triggered && lastValue != currentValue
+        return shouldNotify
+    }
+
+    private suspend fun collectDailySummaryNotifications(
+        parkKey: String,
+        parkName: String,
+        isParkOpen: Boolean?,
+        crowdValue: Float?,
+        waitingTimes: List<WaitingTimeDto>,
+        openingOffsetSource: String?,
+        alerts: List<WatchlistEntity>,
+        notifications: MutableList<WatchlistNotification>,
+    ) {
+        val dayKey = dailySummaryDayKey(System.currentTimeMillis(), openingOffsetSource) ?: return
+        val openAttractions = waitingTimes.count { it.normalizedStatus() == "opened" }
+        alerts.filter { it.type == WatchlistType.DAILY_SUMMARY }.forEach { alert ->
+            if (shouldNotifyValue(alert, dayKey, notifyOnFirstMatch = true)) {
+                notifications.add(
+                    WatchlistNotification(
+                        alertId = alert.id,
+                        notifyOnce = alert.notifyOnce,
+                        title = "Tagesblick: $parkName",
+                        content = buildParkChangeNotificationContent(
+                            isParkOpen = isParkOpen,
+                            crowdValue = crowdValue,
+                            openAttractions = openAttractions,
+                            totalAttractions = waitingTimes.size,
+                        ),
+                        parkKey = parkKey,
+                        parkName = parkName,
+                    )
+                )
+            }
+        }
     }
 
     private suspend fun shouldNotifyValue(
-        alertId: Int,
+        alert: WatchlistEntity,
         currentValue: String,
         notifyOnFirstMatch: Boolean,
     ): Boolean {
-        val lastValue = alertHistoryDao.getHistory(alertId)?.lastNotifiedValue
+        val history = alertHistoryDao.getHistory(alert.id)
+        val lastValue = history?.lastNotifiedValue
+        val changed = (lastValue != null && lastValue != currentValue) || (lastValue == null && notifyOnFirstMatch)
+        val shouldNotify = changed && alert.cooldownElapsed(history)
         if (lastValue != currentValue) {
-            alertHistoryDao.upsertHistory(AlertHistoryEntity(alertId, currentValue, System.currentTimeMillis()))
+            alertHistoryDao.upsertHistory(
+                AlertHistoryEntity(
+                    alertId = alert.id,
+                    lastNotifiedValue = currentValue,
+                    lastNotifiedAtMillis = System.currentTimeMillis(),
+                    lastTriggeredAtMillis = if (shouldNotify) System.currentTimeMillis() else history?.lastTriggeredAtMillis ?: 0L,
+                )
+            )
         }
-        return (lastValue != null && lastValue != currentValue) || (lastValue == null && notifyOnFirstMatch)
+        return shouldNotify
     }
 
     private fun WaitingTimeDto.isOpenWithWaitTime(): Boolean {

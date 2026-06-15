@@ -43,6 +43,12 @@ data class PushWatchlistAlertRequest(
     val attractionId: String?,
     val type: String,
     val threshold: Int,
+    val notifyOnce: Boolean,
+    val onlyWhenParkOpen: Boolean,
+    val quietHoursEnabled: Boolean,
+    val quietStartMinutes: Int,
+    val quietEndMinutes: Int,
+    val cooldownMinutes: Int,
 )
 
 data class PushUnregisterRequest(

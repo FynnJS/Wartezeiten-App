@@ -1,6 +1,7 @@
 package de.wartezeiten.app.push
 
 import android.Manifest
+import android.annotation.SuppressLint
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
@@ -17,6 +18,7 @@ import com.google.firebase.messaging.RemoteMessage
 import dagger.hilt.android.AndroidEntryPoint
 import de.wartezeiten.app.MainActivity
 import de.wartezeiten.app.R
+import de.wartezeiten.app.data.local.dao.WatchlistDao
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -30,6 +32,7 @@ private const val CHANNEL_NAME = "Park-Alarme"
 @AndroidEntryPoint
 class WartezeitenFirebaseMessagingService : FirebaseMessagingService() {
     @Inject lateinit var pushRegistrationManager: PushRegistrationManager
+    @Inject lateinit var watchlistDao: WatchlistDao
 
     private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
@@ -39,6 +42,7 @@ class WartezeitenFirebaseMessagingService : FirebaseMessagingService() {
         }
     }
 
+    @SuppressLint("MissingPermission")
     override fun onMessageReceived(message: RemoteMessage) {
         createNotificationChannel()
         val data = message.data
@@ -52,6 +56,8 @@ class WartezeitenFirebaseMessagingService : FirebaseMessagingService() {
             ?: message.notification?.body
             ?: ""
         val attractionId = data["attractionId"]?.takeIf { it.isNotBlank() }
+        val localAlertId = data["localAlertId"]?.toIntOrNull()
+        val notifyOnce = data["notifyOnce"].toBoolean()
         val notification = NotificationCompat.Builder(this, CHANNEL_ID)
             .setSmallIcon(R.drawable.ic_stat_notification)
             .setContentTitle(title)
@@ -64,6 +70,11 @@ class WartezeitenFirebaseMessagingService : FirebaseMessagingService() {
             .build()
 
         NotificationManagerCompat.from(this).notify((parkKey + (attractionId ?: "") + title).notificationId(), notification)
+        if (notifyOnce && localAlertId != null) {
+            serviceScope.launch {
+                watchlistDao.setEnabled(localAlertId, false)
+            }
+        }
     }
 
     override fun onDestroy() {

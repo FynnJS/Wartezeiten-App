@@ -7,5 +7,6 @@ import androidx.room.PrimaryKey
 data class AlertHistoryEntity(
     @PrimaryKey val alertId: Int,
     val lastNotifiedValue: String,
-    val lastNotifiedAtMillis: Long
+    val lastNotifiedAtMillis: Long,
+    val lastTriggeredAtMillis: Long = 0L,
 )

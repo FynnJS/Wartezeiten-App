@@ -9,7 +9,14 @@ data class WatchlistEntity(
     val parkKey: String,
     val attractionId: String?, // Nullable for park-level alerts
     val type: WatchlistType,
-    val threshold: Int
+    val threshold: Int,
+    val notifyOnce: Boolean = false,
+    val onlyWhenParkOpen: Boolean = false,
+    val quietHoursEnabled: Boolean = false,
+    val quietStartMinutes: Int = 22 * 60,
+    val quietEndMinutes: Int = 8 * 60,
+    val cooldownMinutes: Int = 30,
+    val enabled: Boolean = true,
 )
 
 enum class WatchlistType {
@@ -23,6 +30,7 @@ enum class WatchlistType {
     ATTRACTION_CLOSED,
     ATTRACTION_MAINTENANCE,
     PARK_STATUS_CHANGED,
+    DAILY_SUMMARY,
     PARK_ALL_CHANGES,
     ATTRACTION_ALL_CHANGES
 }

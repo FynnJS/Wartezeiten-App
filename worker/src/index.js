@@ -438,14 +438,22 @@ async function syncPushWatchlist(env, payload) {
         `
           INSERT INTO push_watchlist_alerts (
             installation_id, local_alert_id, park_key, attraction_id, type,
-            threshold_value, last_seen_value, last_notified_value, updated_at
+            threshold_value, notify_once, only_when_park_open, quiet_hours_enabled,
+            quiet_start_minutes, quiet_end_minutes, cooldown_minutes,
+            last_seen_value, last_notified_value, updated_at
           )
-          VALUES (?, ?, ?, ?, ?, ?, NULL, NULL, ?)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, NULL, ?)
           ON CONFLICT(installation_id, local_alert_id) DO UPDATE SET
             park_key = excluded.park_key,
             attraction_id = excluded.attraction_id,
             type = excluded.type,
             threshold_value = excluded.threshold_value,
+            notify_once = excluded.notify_once,
+            only_when_park_open = excluded.only_when_park_open,
+            quiet_hours_enabled = excluded.quiet_hours_enabled,
+            quiet_start_minutes = excluded.quiet_start_minutes,
+            quiet_end_minutes = excluded.quiet_end_minutes,
+            cooldown_minutes = excluded.cooldown_minutes,
             updated_at = excluded.updated_at
         `,
       ).bind(
@@ -455,6 +463,12 @@ async function syncPushWatchlist(env, payload) {
         alert.attractionId,
         alert.type,
         alert.threshold,
+        alert.notifyOnce ? 1 : 0,
+        alert.onlyWhenParkOpen ? 1 : 0,
+        alert.quietHoursEnabled ? 1 : 0,
+        alert.quietStartMinutes,
+        alert.quietEndMinutes,
+        alert.cooldownMinutes,
         now,
       ),
     );
@@ -496,6 +510,13 @@ async function runPushWatchlistScan(env) {
         a.attraction_id,
         a.type,
         a.threshold_value,
+        a.notify_once,
+        a.only_when_park_open,
+        a.quiet_hours_enabled,
+        a.quiet_start_minutes,
+        a.quiet_end_minutes,
+        a.cooldown_minutes,
+        a.last_notified_at,
         a.last_seen_value,
         a.last_notified_value,
         i.fcm_token,
@@ -518,6 +539,7 @@ async function runPushWatchlistScan(env) {
       const snapshot = await collectParkSnapshot(parkKey, Date.now(), { includeCrowd: true });
       scannedParks += 1;
       for (const alert of alerts) {
+        if (!pushAlertDeliveryAllowed(alert, snapshot, Date.now())) continue;
         const evaluation = evaluatePushAlert(alert, snapshot);
         if (!evaluation) continue;
 
@@ -531,11 +553,18 @@ async function runPushWatchlistScan(env) {
           body: evaluation.body,
           parkKey,
           attractionId: evaluation.attractionId ?? "",
+          localAlertId: alert.local_alert_id,
+          notifyOnce: Number(alert.notify_once) === 1 ? "true" : "false",
         };
         const result = await sendFcmDataMessage(env, alert.fcm_token, message);
         if (result.ok) {
           sent += 1;
           await updatePushAlertNotifiedValue(env, alert, evaluation.nextSeenValue);
+          if (Number(alert.notify_once) === 1) {
+            await env.APP_DATA_DB.prepare(
+              "DELETE FROM push_watchlist_alerts WHERE installation_id = ? AND local_alert_id = ?",
+            ).bind(alert.installation_id, alert.local_alert_id).run();
+          }
         } else {
           errors.push({ parkKey, installationId: alert.installation_id, error: result.error });
           if (result.disableToken) {
@@ -595,6 +624,19 @@ function evaluatePushAlert(alert, snapshot) {
       false,
       `Park-Aenderung: ${snapshot.parkKey}`,
       `${openAttractions.length} von ${snapshot.attractions.length} Attraktionen offen${snapshot.displayCrowdLevel == null ? "" : `, Auslastung ${Math.round(snapshot.displayCrowdLevel)}%`}.`,
+      null,
+    );
+  }
+  if (type === "DAILY_SUMMARY") {
+    const local = parkLocalDateParts(Date.now(), snapshot.openFrom);
+    if (local.hour !== 18) return null;
+    const state = `summary=${local.date}`;
+    return valueEvaluation(
+      alert,
+      state,
+      true,
+      `Tagesblick: ${snapshot.parkKey}`,
+      `${isParkOpen ? "Park geoeffnet" : "Park geschlossen"}, ${openAttractions.length} von ${snapshot.attractions.length} Attraktionen offen${snapshot.displayCrowdLevel == null ? "" : `, Auslastung ${Math.round(snapshot.displayCrowdLevel)}%`}.`,
       null,
     );
   }
@@ -675,8 +717,40 @@ async function updatePushAlertSeenValue(env, alert, value) {
 
 async function updatePushAlertNotifiedValue(env, alert, value) {
   await env.APP_DATA_DB.prepare(
-    "UPDATE push_watchlist_alerts SET last_seen_value = ?, last_notified_value = ?, updated_at = ? WHERE installation_id = ? AND local_alert_id = ?",
-  ).bind(value, value, Date.now(), alert.installation_id, alert.local_alert_id).run();
+    "UPDATE push_watchlist_alerts SET last_seen_value = ?, last_notified_value = ?, last_notified_at = ?, updated_at = ? WHERE installation_id = ? AND local_alert_id = ?",
+  ).bind(value, value, Date.now(), Date.now(), alert.installation_id, alert.local_alert_id).run();
+}
+
+function pushAlertDeliveryAllowed(alert, snapshot, now) {
+  if (Number(alert.only_when_park_open) === 1 && !isParkOpenNow(snapshot, now)) return false;
+  const lastNotifiedAt = Number(alert.last_notified_at ?? 0);
+  const cooldownMillis = Math.max(0, Number(alert.cooldown_minutes ?? 0)) * 60 * 1000;
+  if (lastNotifiedAt > 0 && now - lastNotifiedAt < cooldownMillis) return false;
+  if (Number(alert.quiet_hours_enabled) !== 1) return true;
+
+  const offsetMinutes = openingOffsetMinutes(snapshot.openFrom) ?? 0;
+  const localMinutes = ((Math.floor(now / 60000) + offsetMinutes) % 1440 + 1440) % 1440;
+  const start = Number(alert.quiet_start_minutes ?? 1320);
+  const end = Number(alert.quiet_end_minutes ?? 480);
+  return start <= end
+    ? !(localMinutes >= start && localMinutes < end)
+    : !(localMinutes >= start || localMinutes < end);
+}
+
+function openingOffsetMinutes(value) {
+  const match = String(value || "").match(/([+-])(\d{2}):(\d{2})$/);
+  if (!match) return null;
+  const minutes = Number(match[2]) * 60 + Number(match[3]);
+  return match[1] === "-" ? -minutes : minutes;
+}
+
+function parkLocalDateParts(now, openingOffsetSource) {
+  const offsetMinutes = openingOffsetMinutes(openingOffsetSource) ?? 0;
+  const local = new Date(now + offsetMinutes * 60 * 1000);
+  return {
+    date: local.toISOString().slice(0, 10),
+    hour: local.getUTCHours(),
+  };
 }
 
 async function disablePushInstallation(env, installationId) {
@@ -777,7 +851,18 @@ function normalizePushAlert(alert) {
     attractionId: cleanString(alert?.attractionId, 160) || null,
     type,
     threshold: Math.max(0, Math.min(999, Math.round(Number(alert?.threshold ?? 0) || 0))),
+    notifyOnce: Boolean(alert?.notifyOnce),
+    onlyWhenParkOpen: alert?.onlyWhenParkOpen !== false,
+    quietHoursEnabled: Boolean(alert?.quietHoursEnabled),
+    quietStartMinutes: clampMinutes(alert?.quietStartMinutes, 1320),
+    quietEndMinutes: clampMinutes(alert?.quietEndMinutes, 480),
+    cooldownMinutes: Math.max(0, Math.min(1440, Math.round(Number(alert?.cooldownMinutes ?? 30) || 0))),
   };
+}
+
+function clampMinutes(value, fallback) {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? Math.max(0, Math.min(1439, Math.round(parsed))) : fallback;
 }
 
 function isParkOpenNow(snapshot, now) {

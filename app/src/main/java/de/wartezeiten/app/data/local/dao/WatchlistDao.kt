@@ -12,6 +12,9 @@ interface WatchlistDao {
     @Query("SELECT * FROM watchlist")
     fun observeWatchlist(): Flow<List<WatchlistEntity>>
 
+    @Query("SELECT * FROM watchlist WHERE enabled = 1")
+    fun observeActiveWatchlist(): Flow<List<WatchlistEntity>>
+
     @Insert
     suspend fun insert(item: WatchlistEntity)
 
@@ -36,4 +39,7 @@ interface WatchlistDao {
 
     @Delete
     suspend fun delete(item: WatchlistEntity)
+
+    @Query("UPDATE watchlist SET enabled = :enabled WHERE id = :id")
+    suspend fun setEnabled(id: Int, enabled: Boolean)
 }

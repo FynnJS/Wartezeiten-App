@@ -106,13 +106,19 @@ class PushRegistrationManager @Inject constructor(
 
     private suspend fun syncWatchlistOnly(): Boolean {
         val installationId = preferences.getOrCreatePushInstallationId()
-        val alerts = watchlistDao.observeWatchlist().first().map { alert ->
+        val alerts = watchlistDao.observeActiveWatchlist().first().map { alert ->
             PushWatchlistAlertRequest(
                 localAlertId = alert.id.toString(),
                 parkKey = alert.parkKey,
                 attractionId = alert.attractionId,
                 type = alert.type.name,
                 threshold = alert.threshold,
+                notifyOnce = alert.notifyOnce,
+                onlyWhenParkOpen = alert.onlyWhenParkOpen,
+                quietHoursEnabled = alert.quietHoursEnabled,
+                quietStartMinutes = alert.quietStartMinutes,
+                quietEndMinutes = alert.quietEndMinutes,
+                cooldownMinutes = alert.cooldownMinutes,
             )
         }
         val response = pushApi.syncWatchlist(
