@@ -309,27 +309,7 @@ fun ParkListScreen(
                             }
                         }
 
-                        if (state.recentParks.isNotEmpty() && state.query.isBlank()) {
-                            item {
-                                RecentParksSection(
-                                    parks = state.recentParks,
-                                    language = state.language,
-                                    onParkClick = onParkClick,
-                                )
-                            }
-                        }
-
-                        if (state.favoriteDashboardItems.isNotEmpty() && state.query.isBlank()) {
-                            item {
-                                FavoriteDashboardSection(
-                                    items = state.favoriteDashboardItems,
-                                    language = state.language,
-                                    onParkClick = onParkClick,
-                                )
-                            }
-                        }
-
-                        item {
+                        item(key = "park_search_field") {
                             OutlinedTextField(
                                 value = state.query,
                                 onValueChange = onQueryChange,
@@ -354,6 +334,26 @@ fun ParkListScreen(
                                     focusedBorderColor = MaterialTheme.colorScheme.primary
                                 )
                             )
+                        }
+
+                        if (state.recentParks.isNotEmpty() && state.query.isBlank()) {
+                            item {
+                                RecentParksSection(
+                                    parks = state.recentParks,
+                                    language = state.language,
+                                    onParkClick = onParkClick,
+                                )
+                            }
+                        }
+
+                        if (state.favoriteDashboardItems.isNotEmpty() && state.query.isBlank()) {
+                            item {
+                                FavoriteDashboardSection(
+                                    items = state.favoriteDashboardItems,
+                                    language = state.language,
+                                    onParkClick = onParkClick,
+                                )
+                            }
                         }
 
                         if (state.searchHistory.isNotEmpty()) {

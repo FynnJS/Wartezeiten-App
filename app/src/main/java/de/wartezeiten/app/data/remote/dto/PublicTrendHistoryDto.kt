@@ -71,6 +71,34 @@ data class PublicParkRecommendationDto(
     val reason: String?,
 )
 
+data class PublicGlobalMarkersDto(
+    @SerializedName("generatedAtMillis")
+    val generatedAtMillis: Long?,
+    @SerializedName("date")
+    val date: String?,
+    @SerializedName("markers")
+    val markers: List<PublicGlobalMarkerDto> = emptyList(),
+)
+
+data class PublicGlobalMarkerDto(
+    @SerializedName("parkKey")
+    val parkKey: String,
+    @SerializedName("capturedAtMillis")
+    val capturedAtMillis: Long,
+    @SerializedName("openedToday")
+    val openedToday: Boolean?,
+    @SerializedName("openFrom")
+    val openFrom: String?,
+    @SerializedName("closedFrom")
+    val closedFrom: String?,
+    @SerializedName("openAttractions")
+    val openAttractions: Int?,
+    @SerializedName("totalAttractions")
+    val totalAttractions: Int?,
+    @SerializedName("attractionCount")
+    val attractionCount: Int?,
+)
+
 data class PublicTrendHistoryDto(
     @SerializedName("generatedAtMillis")
     val generatedAtMillis: Long?,

@@ -1,5 +1,15 @@
 # Changelog
 
+## v1.1.3 - 2026-06-16
+
+- Added a configurable Android home-screen widget for a favorite park with opening status, average and highest wait time, selected attractions, data age, and direct park deep link.
+- Improved the widget configuration flow and launcher preview, including a clearly marked example preview and a loading state for configured widgets while data is still unavailable.
+- Fixed the open-parks filter by using fresh global markers and a local scan fallback instead of stale central latest data.
+- Fixed restored park search state so a fresh install no longer opens with an old search term.
+- Stabilized park-list search focus so the keyboard no longer closes unexpectedly during typing.
+- Fixed park and attraction statistics loading after the central D1 snapshot migration, including a same-day live fallback.
+- Fixed park-detail statistic graphs so today's chart does not show future measurement points and X-axis labels use the park timezone.
+
 ## v1.1.2 - 2026-06-15
 
 - Added conservative "now or later" guidance for open attractions based on matching local-time samples from up to seven historical days.

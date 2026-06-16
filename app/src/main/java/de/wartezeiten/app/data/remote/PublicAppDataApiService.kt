@@ -2,6 +2,7 @@ package de.wartezeiten.app.data.remote
 
 import de.wartezeiten.app.data.remote.dto.PublicLatestAppDataDto
 import de.wartezeiten.app.data.remote.dto.PublicAttractionHistoryDayDto
+import de.wartezeiten.app.data.remote.dto.PublicGlobalMarkersDto
 import de.wartezeiten.app.data.remote.dto.PublicStatisticsIndexDto
 import de.wartezeiten.app.data.remote.dto.PublicTrendHistoryDto
 import retrofit2.Response
@@ -12,6 +13,9 @@ import retrofit2.http.Query
 interface PublicAppDataApiService {
     @GET("app-data/latest.json")
     suspend fun getLatestAppData(): Response<PublicLatestAppDataDto>
+
+    @GET("app-data/global-markers/latest.json")
+    suspend fun getGlobalMarkers(): Response<PublicGlobalMarkersDto>
 
     @GET("app-data/trend-history.json")
     suspend fun getTrendHistory(

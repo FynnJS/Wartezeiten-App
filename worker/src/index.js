@@ -1518,6 +1518,29 @@ async function readAttractionDay(env, parkKey, date) {
   const unshardedAggregate = await readJson(env, attractionDailyKey(date), null);
   const unshardedDay = unshardedAggregate?.parks?.find((park) => park.parkKey === parkKey);
   if (unshardedDay) return unshardedDay;
+  if (date === isoDate(Date.now())) {
+    try {
+      const snapshot = await collectParkSnapshot(parkKey, Date.now(), { includeCrowd: false });
+      if ((snapshot.attractions ?? []).length > 0) {
+        return buildAttractionDayData(
+          parkKey,
+          date,
+          [{
+            capturedAtMillis: snapshot.capturedAtMillis,
+            openedToday: snapshot.openedToday,
+            openFrom: snapshot.openFrom,
+            closedFrom: snapshot.closedFrom,
+            attractions: snapshot.attractions,
+          }],
+          Date.now(),
+          snapshot.openFrom,
+          snapshot.closedFrom,
+        );
+      }
+    } catch (error) {
+      console.warn("Could not build live attraction day fallback", parkKey, error);
+    }
+  }
   return readJson(env, attractionDayKey(parkKey, date), emptyAttractionDay(parkKey, date));
 }
 

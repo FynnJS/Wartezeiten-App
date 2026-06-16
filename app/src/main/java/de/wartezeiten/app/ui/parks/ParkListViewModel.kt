@@ -191,7 +191,7 @@ class ParkListViewModel @Inject constructor(
             }
         }
         if (country != null) filtered = filtered.filter { it.country == country }
-        if (openOnly) filtered = filtered.filter { it.id in openParkKeys || it.uuid in openParkKeys }
+        if (openOnly) filtered = filtered.filter { it.matchesOpenParkKey(openParkKeys) }
         if (favoritesOnly) filtered = filtered.filter { it.isFavorite }
         filtered = filtered.sortedBy(currentSort)
         val currentAttractionResults = currentAttractionEntries.toSearchResults(
@@ -248,16 +248,12 @@ class ParkListViewModel @Inject constructor(
         observeParkSearchState()
         observeParkSort()
         observeLanguage()
+        refreshPublicOpenSnapshots()
         startAutoRefresh()
         refreshStatisticsIndex()
     }
 
     private fun observeParkSearchState() {
-        viewModelScope.launch {
-            preferences.parkSearchQuery.distinctUntilChanged().collect { savedQuery ->
-                query.value = savedQuery
-            }
-        }
         viewModelScope.launch {
             preferences.parkSearchHistory.distinctUntilChanged().collect { savedHistory ->
                 searchHistory.value = savedHistory
@@ -299,9 +295,6 @@ class ParkListViewModel @Inject constructor(
 
     fun onQueryChange(value: String) {
         query.value = value
-        viewModelScope.launch {
-            preferences.setParkSearchQuery(value)
-        }
     }
 
     fun recordCurrentSearch() {
@@ -336,7 +329,9 @@ class ParkListViewModel @Inject constructor(
     }
 
     fun onToggleOpenOnly() {
-        showOpenOnly.value = !showOpenOnly.value
+        val enabled = !showOpenOnly.value
+        showOpenOnly.value = enabled
+        if (enabled) refreshRecommendationsInBackground(currentLanguage.value)
     }
 
     fun onToggleFavoritesOnly() {
@@ -350,7 +345,6 @@ class ParkListViewModel @Inject constructor(
 
     fun clearFilters() {
         query.value = ""
-        viewModelScope.launch { preferences.setParkSearchQuery("") }
         selectedCountry.value = null
         showOpenOnly.value = false
         showFavoritesOnly.value = false
@@ -378,6 +372,7 @@ class ParkListViewModel @Inject constructor(
             errorMessage.value = null
             when (val result = repository.refreshParks(language)) {
                 is ApiResult.Success -> {
+                    repository.refreshPublicAppData()
                     if (showFeedback) refreshTrigger.value += 1
                     if (!silent) {
                         refreshRecommendationsInBackground(language)
@@ -402,6 +397,13 @@ class ParkListViewModel @Inject constructor(
                 is ApiResult.Error -> Unit
             }
             isStatisticsIndexLoading.value = false
+        }
+    }
+
+    private fun refreshPublicOpenSnapshots() {
+        viewModelScope.launch {
+            preferences.setParkSearchQuery("")
+            repository.refreshParkRecommendationSnapshots(currentLanguage.value)
         }
     }
 
@@ -466,16 +468,18 @@ class ParkListViewModel @Inject constructor(
         return map { park ->
             val parkAttractions = attractions.filter { it.parkKey == park.id || it.parkKey == park.uuid }
             val openAttractions = parkAttractions.filter { it.status == AttractionStatus.Opened }
+            val isOpen = park.matchesOpenParkKey(openParkKeys)
+            val currentOpenAttractions = openAttractions.takeIf { isOpen }.orEmpty()
             val latestUpdate = listOfNotNull(
                 park.updatedAtMillis.takeIf { it > 0L },
                 parkAttractions.maxOfOrNull { it.updatedAtMillis },
             ).maxOrNull()
             FavoriteDashboardItem(
                 park = park,
-                isOpen = park.id in openParkKeys || park.uuid in openParkKeys || openAttractions.isNotEmpty(),
-                openAttractions = openAttractions.size,
+                isOpen = isOpen,
+                openAttractions = currentOpenAttractions.size,
                 totalAttractions = parkAttractions.size,
-                maxWaitMinutes = openAttractions.mapNotNull { it.waitingTime }.maxOrNull(),
+                maxWaitMinutes = currentOpenAttractions.mapNotNull { it.waitingTime }.maxOrNull(),
                 dataAgeMinutes = latestUpdate?.let { ((System.currentTimeMillis() - it).coerceAtLeast(0L) / 60_000L) },
             )
         }
@@ -616,6 +620,24 @@ private fun Park.matchesSearchQuery(normalizedQuery: String): Boolean {
         addAll(searchAliases())
     }
     return candidates.any { it.normalizedSearchText().contains(normalizedQuery) }
+}
+
+private fun Park.matchesOpenParkKey(openParkKeys: Set<String>): Boolean {
+    if (id in openParkKeys || uuid in openParkKeys) return true
+    val candidates = listOf(id, uuid, name)
+        .map { it.normalizedParkKey() }
+        .filter { it.isNotBlank() }
+    val normalizedOpenKeys = openParkKeys
+        .map { it.normalizedParkKey() }
+        .filter { it.isNotBlank() }
+        .toSet()
+    return candidates.any { candidate ->
+        candidate in normalizedOpenKeys ||
+            normalizedOpenKeys.any { openKey ->
+                candidate.length >= 4 && openKey.length >= 4 &&
+                    (candidate.contains(openKey) || openKey.contains(candidate))
+            }
+    }
 }
 
 private fun Park.searchAliases(): List<String> {

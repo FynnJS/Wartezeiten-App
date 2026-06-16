@@ -75,8 +75,8 @@ android {
         applicationId = "de.wartezeiten.app"
         minSdk = 26
         targetSdk = 35
-        versionCode = 10102
-        versionName = "1.1.2"
+        versionCode = 10103
+        versionName = "1.1.3"
         buildConfigField("String", "UPDATE_BASE_URL", "\"https://wartezeiten-app.tutorialfynn.workers.dev/\"")
         buildConfigField("String", "PUSH_API_BASE_URL", "\"https://wartezeiten-app.tutorialfynn.workers.dev/\"")
         buildConfigField("String", "FIREBASE_APPLICATION_ID", optionalStringBuildConfig("FIREBASE_APPLICATION_ID"))
@@ -129,6 +129,8 @@ dependencies {
     implementation("androidx.compose.material3:material3")
     implementation("androidx.compose.material:material-icons-extended")
     debugImplementation("androidx.compose.ui:ui-tooling")
+    implementation("androidx.glance:glance-appwidget:1.1.1")
+    implementation("androidx.glance:glance-material3:1.1.1")
 
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.9.0")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-play-services:1.9.0")

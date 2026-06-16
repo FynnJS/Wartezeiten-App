@@ -25,6 +25,7 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import java.time.Instant
+import java.time.OffsetDateTime
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import java.util.Locale
@@ -118,6 +119,8 @@ fun ParkStatisticsDashboard(
 
             ParkAverageWaitChart(
                 points = statistics.points,
+                openFrom = statistics.openFrom,
+                closedFrom = statistics.closedFrom,
                 language = language,
                 modifier = Modifier
                     .fillMaxWidth()
@@ -142,6 +145,8 @@ private fun StatisticsMetric(
 @Composable
 private fun ParkAverageWaitChart(
     points: List<ParkWaitStatisticsPoint>,
+    openFrom: String?,
+    closedFrom: String?,
     language: String,
     modifier: Modifier = Modifier,
 ) {
@@ -162,7 +167,14 @@ private fun ParkAverageWaitChart(
         val maximum = ceil(sortedPoints.maxOf { it.averageWaitMinutes }).toInt()
         ((maximum.coerceAtLeast(10) + 9) / 10) * 10
     }
-    val timeFormatter = remember { DateTimeFormatter.ofPattern("HH:mm").withZone(ZoneId.systemDefault()) }
+    val chartZoneId = remember(openFrom, closedFrom) {
+        openFrom.toOffsetZoneIdOrNull()
+            ?: closedFrom.toOffsetZoneIdOrNull()
+            ?: ZoneId.systemDefault()
+    }
+    val timeFormatter = remember(chartZoneId) {
+        DateTimeFormatter.ofPattern("HH:mm").withZone(chartZoneId)
+    }
 
     Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(4.dp)) {
         Row(
@@ -246,3 +258,9 @@ private fun ParkAverageWaitChart(
 private fun Float.minutesText(): String = "${String.format(Locale.GERMAN, "%.1f", this)} Min."
 
 private fun Float.percentText(): String = "${String.format(Locale.GERMAN, "%.0f", coerceIn(0f, 100f))}%"
+
+private fun String?.toOffsetZoneIdOrNull(): ZoneId? {
+    return this?.let { value ->
+        runCatching { OffsetDateTime.parse(value).offset }.getOrNull()
+    }
+}

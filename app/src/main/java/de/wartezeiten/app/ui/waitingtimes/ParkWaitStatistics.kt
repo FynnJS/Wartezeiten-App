@@ -1,6 +1,9 @@
 package de.wartezeiten.app.ui.waitingtimes
 
 import de.wartezeiten.app.domain.model.AttractionHistoryDay
+import java.time.Instant
+import java.time.OffsetDateTime
+import java.time.ZoneId
 
 data class ParkWaitStatisticsPoint(
     val capturedAtMillis: Long,
@@ -10,6 +13,8 @@ data class ParkWaitStatisticsPoint(
 
 data class ParkWaitStatistics(
     val date: String,
+    val openFrom: String?,
+    val closedFrom: String?,
     val averageWaitMinutes: Float,
     val minAverageWaitMinutes: Float,
     val maxAverageWaitMinutes: Float,
@@ -18,8 +23,16 @@ data class ParkWaitStatistics(
     val points: List<ParkWaitStatisticsPoint>,
 )
 
-internal fun AttractionHistoryDay.toParkWaitStatistics(): ParkWaitStatistics? {
-    val points = snapshots.mapNotNull { snapshot ->
+internal fun AttractionHistoryDay.toParkWaitStatistics(
+    nowMillis: Long = System.currentTimeMillis(),
+): ParkWaitStatistics? {
+    val relevantSnapshots = snapshots.withoutFutureSnapshotsForToday(
+        date = date,
+        openFrom = openFrom,
+        closedFrom = closedFrom,
+        nowMillis = nowMillis,
+    )
+    val points = relevantSnapshots.mapNotNull { snapshot ->
         val waits = snapshot.attractions
             .filter { point ->
                 point.value >= 0 && (
@@ -41,6 +54,8 @@ internal fun AttractionHistoryDay.toParkWaitStatistics(): ParkWaitStatistics? {
     val averages = points.map { it.averageWaitMinutes }
     return ParkWaitStatistics(
         date = date,
+        openFrom = openFrom,
+        closedFrom = closedFrom,
         averageWaitMinutes = averages.average().toFloat(),
         minAverageWaitMinutes = averages.min(),
         maxAverageWaitMinutes = averages.max(),
@@ -49,3 +64,26 @@ internal fun AttractionHistoryDay.toParkWaitStatistics(): ParkWaitStatistics? {
         points = points,
     )
 }
+
+private fun List<de.wartezeiten.app.domain.model.AttractionHistorySnapshot>.withoutFutureSnapshotsForToday(
+    date: String,
+    openFrom: String?,
+    closedFrom: String?,
+    nowMillis: Long,
+): List<de.wartezeiten.app.domain.model.AttractionHistorySnapshot> {
+    val zoneId = openFrom.toOffsetZoneIdOrNull()
+        ?: closedFrom.toOffsetZoneIdOrNull()
+        ?: ZoneId.systemDefault()
+    val localToday = Instant.ofEpochMilli(nowMillis).atZone(zoneId).toLocalDate().toString()
+    if (date != localToday) return this
+    val maxAllowedTimestamp = nowMillis + FUTURE_SNAPSHOT_TOLERANCE_MILLIS
+    return filter { it.capturedAtMillis <= maxAllowedTimestamp }
+}
+
+private fun String?.toOffsetZoneIdOrNull(): ZoneId? {
+    return this?.let { value ->
+        runCatching { OffsetDateTime.parse(value).offset }.getOrNull()
+    }
+}
+
+private const val FUTURE_SNAPSHOT_TOLERANCE_MILLIS = 2 * 60 * 1000L

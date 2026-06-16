@@ -564,7 +564,14 @@ private fun AttractionHistoryChart(
     val yStep = remember(yMax) { calculateNiceTickStep(yMax) }
     val yLabels = remember(yMax, yStep) { (0..yMax step yStep).toList() }
     val hasStatusLane = statusPoints.isNotEmpty()
-    val timeFormatter = remember { DateTimeFormatter.ofPattern("HH:mm").withZone(ZoneId.systemDefault()) }
+    val chartZoneId = remember(day?.openFrom, day?.closedFrom) {
+        day?.openFrom.toOffsetZoneIdOrNull()
+            ?: day?.closedFrom.toOffsetZoneIdOrNull()
+            ?: ZoneId.systemDefault()
+    }
+    val timeFormatter = remember(chartZoneId) {
+        DateTimeFormatter.ofPattern("HH:mm").withZone(chartZoneId)
+    }
 
     OutlinedCard(modifier = modifier, shape = RoundedCornerShape(14.dp)) {
         Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -729,7 +736,14 @@ private fun ParkAverageWaitChart(
     }
     val yStep = remember(yMax) { calculateNiceTickStep(yMax) }
     val yLabels = remember(yMax, yStep) { (0..yMax step yStep).toList() }
-    val timeFormatter = remember { DateTimeFormatter.ofPattern("HH:mm").withZone(ZoneId.systemDefault()) }
+    val chartZoneId = remember(day?.openFrom, day?.closedFrom) {
+        day?.openFrom.toOffsetZoneIdOrNull()
+            ?: day?.closedFrom.toOffsetZoneIdOrNull()
+            ?: ZoneId.systemDefault()
+    }
+    val timeFormatter = remember(chartZoneId) {
+        DateTimeFormatter.ofPattern("HH:mm").withZone(chartZoneId)
+    }
 
     OutlinedCard(modifier = modifier, shape = RoundedCornerShape(14.dp)) {
         Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -982,6 +996,12 @@ private fun calculateAxisBounds(
 private fun String.parseInstantMillis(): Long? {
     return runCatching { OffsetDateTime.parse(this).toInstant().toEpochMilli() }
         .getOrElse { runCatching { Instant.parse(this).toEpochMilli() }.getOrNull() }
+}
+
+private fun String?.toOffsetZoneIdOrNull(): ZoneId? {
+    return this?.let { value ->
+        runCatching { OffsetDateTime.parse(value).offset }.getOrNull()
+    }
 }
 
 private fun calculateNiceYAxisMax(maxValue: Int): Int {

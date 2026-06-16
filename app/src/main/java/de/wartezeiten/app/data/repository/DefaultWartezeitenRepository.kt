@@ -74,8 +74,23 @@ class DefaultWartezeitenRepository @Inject constructor(
             .flowOn(ioDispatcher)
 
     override fun observeLatestOpenParkKeys(capturedAfterMillis: Long): Flow<Set<String>> {
-        return parkSnapshotDao.observeLatestOpenParkKeys(capturedAfterMillis)
-            .map { it.toSet() }
+        return parkSnapshotDao.observeLatestSnapshots()
+            .map { snapshots ->
+                val now = System.currentTimeMillis()
+                snapshots
+                    .asSequence()
+                    .filter { it.capturedAtMillis >= capturedAfterMillis }
+                    .filter {
+                        isParkCurrentlyOpen(
+                            openedToday = it.openedToday,
+                            openFrom = it.openFrom,
+                            closedFrom = it.closedFrom,
+                            now = Instant.ofEpochMilli(now),
+                        )
+                    }
+                    .map { it.parkKey }
+                    .toSet()
+            }
             .flowOn(ioDispatcher)
     }
 
@@ -98,7 +113,14 @@ class DefaultWartezeitenRepository @Inject constructor(
             snapshots
                 .asSequence()
                 .filter { now - it.capturedAtMillis <= RECOMMENDATION_CURRENT_MAX_AGE_MILLIS }
-                .filter { it.openedToday == true && it.openAttractions > 0 }
+                .filter {
+                    it.openAttractions > 0 && isParkCurrentlyOpen(
+                        openedToday = it.openedToday,
+                        openFrom = it.openFrom,
+                        closedFrom = it.closedFrom,
+                        now = Instant.ofEpochMilli(now),
+                    )
+                }
                 .mapNotNull { snapshot ->
                     val park = parksByKey[snapshot.parkKey] ?: return@mapNotNull null
                     val crowd = snapshot.displayCrowdLevel
@@ -150,7 +172,19 @@ class DefaultWartezeitenRepository @Inject constructor(
         onProgress: (ParkRecommendationScanProgress) -> Unit,
     ): ApiResult<Unit> = withContext(ioDispatcher) {
         val publicResult = refreshPublicAppData()
-        if (publicResult is ApiResult.Success) {
+        val now = System.currentTimeMillis()
+        val hasFreshOpenSnapshot = parkSnapshotDao.observeLatestSnapshots()
+            .first()
+            .any { snapshot ->
+                now - snapshot.capturedAtMillis <= RECOMMENDATION_CURRENT_MAX_AGE_MILLIS &&
+                    isParkCurrentlyOpen(
+                        openedToday = snapshot.openedToday,
+                        openFrom = snapshot.openFrom,
+                        closedFrom = snapshot.closedFrom,
+                        now = Instant.ofEpochMilli(now),
+                    )
+            }
+        if (publicResult is ApiResult.Success && hasFreshOpenSnapshot) {
             onProgress(ParkRecommendationScanProgress(completedParks = 0, totalParks = 0, estimatedRemainingMillis = 0L))
             return@withContext publicResult
         }
@@ -158,7 +192,6 @@ class DefaultWartezeitenRepository @Inject constructor(
         pruneOldLocalParkSnapshots()
         val parks = parkDao.observeParks(null).first()
         if (parks.isEmpty()) return@withContext ApiResult.Success(Unit)
-        val now = System.currentTimeMillis()
         val freshParkKeys = parkSnapshotDao.observeLatestSnapshots()
             .first()
             .filter { now - it.capturedAtMillis <= RECOMMENDATION_SNAPSHOT_MAX_AGE_MILLIS }
@@ -496,6 +529,31 @@ class DefaultWartezeitenRepository @Inject constructor(
     }
 
     override suspend fun refreshPublicAppData(): ApiResult<Unit> = withContext(ioDispatcher) {
+        val markersResult = safeApiCall { publicAppDataApi.getGlobalMarkers() }
+        (markersResult as? ApiResult.Success)?.let { result ->
+            val snapshots = result.data.markers.mapNotNull { marker ->
+                val capturedAt = marker.capturedAtMillis.takeIf { it > 0L }
+                    ?: result.data.generatedAtMillis
+                    ?: return@mapNotNull null
+                ParkSnapshotEntity(
+                    parkKey = marker.parkKey,
+                    capturedAtMillis = capturedAt,
+                    apiCrowdLevel = null,
+                    calculatedCrowdLevel = null,
+                    displayCrowdLevel = null,
+                    openedToday = marker.openedToday,
+                    openFrom = marker.openFrom,
+                    closedFrom = marker.closedFrom,
+                    openAttractions = marker.openAttractions ?: 0,
+                    totalAttractions = marker.totalAttractions ?: marker.attractionCount ?: 0,
+                    source = "public",
+                )
+            }
+            if (snapshots.isNotEmpty()) {
+                parkSnapshotDao.insertAll(snapshots)
+            }
+        }
+
         when (val result = safeApiCall { publicAppDataApi.getLatestAppData() }) {
             is ApiResult.Success -> {
                 val now = System.currentTimeMillis()
@@ -503,18 +561,24 @@ class DefaultWartezeitenRepository @Inject constructor(
                     val capturedAt = snapshot.capturedAtMillis.takeIf { it > 0L }
                         ?: result.data.generatedAtMillis
                         ?: return@mapNotNull null
+                    val currentlyOpen = isParkCurrentlyOpen(
+                        openedToday = snapshot.openedToday,
+                        openFrom = snapshot.openFrom,
+                        closedFrom = snapshot.closedFrom,
+                        now = Instant.ofEpochMilli(now),
+                    )
                     ParkSnapshotEntity(
                         parkKey = snapshot.parkKey,
                         capturedAtMillis = capturedAt,
                         apiCrowdLevel = snapshot.apiCrowdLevel,
                         calculatedCrowdLevel = snapshot.calculatedCrowdLevel,
                         displayCrowdLevel = snapshot.displayCrowdLevel?.takeIf {
-                            snapshot.openedToday == true && it in 0f..100f
+                            currentlyOpen && it in 0f..100f
                         },
                         openedToday = snapshot.openedToday,
                         openFrom = snapshot.openFrom,
                         closedFrom = snapshot.closedFrom,
-                        openAttractions = snapshot.openAttractions,
+                        openAttractions = snapshot.openAttractions.takeIf { currentlyOpen } ?: 0,
                         totalAttractions = snapshot.totalAttractions,
                         source = "public",
                     )
@@ -548,7 +612,12 @@ class DefaultWartezeitenRepository @Inject constructor(
                 }
                 ApiResult.Success(Unit)
             }
-            is ApiResult.Error -> result
+            is ApiResult.Error -> {
+                when (markersResult) {
+                    is ApiResult.Success -> ApiResult.Success(Unit)
+                    is ApiResult.Error -> result
+                }
+            }
         }
     }
 
@@ -692,8 +761,14 @@ class DefaultWartezeitenRepository @Inject constructor(
                 val snapshots = remoteParks
                     .flatMap { parkHistory ->
                         parkHistory.snapshots.mapNotNull { snapshot ->
+                            val currentlyOpen = isParkCurrentlyOpen(
+                                openedToday = snapshot.openedToday,
+                                openFrom = snapshot.openFrom,
+                                closedFrom = snapshot.closedFrom,
+                                now = Instant.ofEpochMilli(snapshot.capturedAtMillis),
+                            )
                             val displayLevel = snapshot.displayCrowdLevel?.takeIf {
-                                snapshot.openedToday == true && it in 0f..100f
+                                currentlyOpen && it in 0f..100f
                             }
                             if (displayLevel == null) return@mapNotNull null
                             ParkSnapshotEntity(
@@ -705,7 +780,7 @@ class DefaultWartezeitenRepository @Inject constructor(
                                 openedToday = snapshot.openedToday,
                                 openFrom = snapshot.openFrom,
                                 closedFrom = snapshot.closedFrom,
-                                openAttractions = snapshot.openAttractions,
+                                openAttractions = snapshot.openAttractions.takeIf { currentlyOpen } ?: 0,
                                 totalAttractions = snapshot.totalAttractions,
                                 source = "public",
                             )

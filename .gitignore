@@ -9,6 +9,7 @@
 
 # Gradle files
 .gradle/
+.kotlin/
 build/
 **/build/
 

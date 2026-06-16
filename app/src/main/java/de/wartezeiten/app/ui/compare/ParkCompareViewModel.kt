@@ -225,15 +225,16 @@ class ParkCompareViewModel @Inject constructor(
         openParkKeys: Set<String>,
     ): ParkCompareItem {
         val parkAttractions = attractions.filter { it.parkKey == id || it.parkKey == uuid }
+        val isOpen = matchesOpenParkKey(openParkKeys)
         val openAttractions = parkAttractions.filter { it.status == AttractionStatus.Opened }
-        val waitValues = openAttractions.mapNotNull { it.waitingTime }
+        val currentOpenAttractions = openAttractions.takeIf { isOpen }.orEmpty()
+        val waitValues = currentOpenAttractions.mapNotNull { it.waitingTime }
         val averageWait = waitValues.takeIf { it.isNotEmpty() }?.average()?.toFloat()
         val openShare = if (parkAttractions.isNotEmpty()) {
-            openAttractions.size.toFloat() / parkAttractions.size.toFloat()
+            currentOpenAttractions.size.toFloat() / parkAttractions.size.toFloat()
         } else {
             0f
         }
-        val isOpen = id in openParkKeys || uuid in openParkKeys || openAttractions.isNotEmpty()
         val waitScore = (100f - (averageWait ?: 70f)).coerceIn(0f, 100f)
         val score = if (!isOpen || parkAttractions.isEmpty()) {
             0f
@@ -244,7 +245,7 @@ class ParkCompareViewModel @Inject constructor(
             park = this,
             isOpen = isOpen,
             totalAttractions = parkAttractions.size,
-            openAttractions = openAttractions.size,
+            openAttractions = currentOpenAttractions.size,
             averageWaitMinutes = averageWait,
             maxWaitMinutes = waitValues.maxOrNull(),
             lastUpdatedMillis = parkAttractions.maxOfOrNull { it.updatedAtMillis },
@@ -281,6 +282,24 @@ class ParkCompareViewModel @Inject constructor(
     private fun Park.matchesSearch(normalizedQuery: String): Boolean {
         return name.normalizedSearchKey().contains(normalizedQuery) ||
             country.normalizedSearchKey().contains(normalizedQuery)
+    }
+
+    private fun Park.matchesOpenParkKey(openParkKeys: Set<String>): Boolean {
+        if (id in openParkKeys || uuid in openParkKeys) return true
+        val candidates = listOf(id, uuid, name)
+            .map { it.normalizedSearchKey().filter { char -> char.isLetterOrDigit() } }
+            .filter { it.isNotBlank() }
+        val normalizedOpenKeys = openParkKeys
+            .map { it.normalizedSearchKey().filter { char -> char.isLetterOrDigit() } }
+            .filter { it.isNotBlank() }
+            .toSet()
+        return candidates.any { candidate ->
+            candidate in normalizedOpenKeys ||
+                normalizedOpenKeys.any { openKey ->
+                    candidate.length >= 4 && openKey.length >= 4 &&
+                        (candidate.contains(openKey) || openKey.contains(candidate))
+                }
+        }
     }
 }
 

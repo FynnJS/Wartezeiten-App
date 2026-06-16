@@ -20,6 +20,7 @@ Die Website liest `website/release.json` und verlinkt auf den neuesten GitHub Re
 - Statistikbereich mit Park-, Datum- und Attraktionsauswahl für zentrale Tagesverläufe
 - Watchlist-Alarme mit Ruhezeiten, Einmal-Zustellung, Parköffnungsregel, Mindestabstand und täglicher Parkzusammenfassung
 - Datenbasierter Multi-Park-Vergleich mit Suche, Sortierung und direktem Sprung zur Parkübersicht
+- Startbildschirm-Widget fuer einen Lieblingspark mit Oeffnungsstatus, Wartezeit-Kennzahlen, drei Attraktionen und Datenalter
 - Pflicht-Update-Sperre und Benachrichtigung bei neuer APK-Version
 - Offline-First-Datenhaltung über Room, Cache-Hinweis und automatische Aktualisierung für Live-Daten
 

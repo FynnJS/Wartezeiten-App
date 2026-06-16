@@ -1,3 +1,5 @@
 <resources>
     <string name="app_name">Wartezeiten</string>
+    <string name="widget_loading">Wartezeiten werden geladen</string>
+    <string name="widget_description">Lieblingspark mit Status und Wartezeiten</string>
 </resources>

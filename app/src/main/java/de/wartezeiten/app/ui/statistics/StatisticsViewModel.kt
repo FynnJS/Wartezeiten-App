@@ -394,7 +394,8 @@ private fun chooseInitialDate(
     val today = LocalDate.now().toString()
     val hasCurrentAttractions = currentAttractions.any { it.matchesParkKey(parkKey) }
     return when {
-        currentDate != null && (currentDate in parkIndexDates || currentDate == today) -> currentDate
+        currentDate != null && currentDate in parkIndexDates -> currentDate
+        currentDate == today && hasCurrentAttractions -> currentDate
         today in parkIndexDates -> today
         hasCurrentAttractions && latestDate == null -> today
         latestDate != null -> latestDate
