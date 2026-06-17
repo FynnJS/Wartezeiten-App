@@ -71,9 +71,9 @@ fun ParkStatisticsDashboard(
             if (statistics == null) {
                 Text(
                     text = if (language == "en") {
-                        "No central wait-time measurements are available for this park yet."
+                        "No central wait-time measurements are available for today yet."
                     } else {
-                        "Für diesen Park sind noch keine zentralen Wartezeit-Messpunkte verfügbar."
+                        "Für heute sind noch keine zentralen Wartezeit-Messpunkte verfügbar."
                     },
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,

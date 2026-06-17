@@ -50,6 +50,18 @@ class AttractionWaitAdviceTest {
     }
 
     @Test
+    fun hidesTypicalAdviceWhenCurrentWaitIsFarAboveHistory() {
+        val result = buildAttractionWaitAdvice(
+            waitingTimes = listOf(waitingTime(60)),
+            historyDays = historyDays(8, 10),
+            currentTimeMillis = epochMillis(LocalDate.of(2026, 6, 15), LocalTime.NOON),
+            localTimeOffsetSeconds = 0,
+        )
+
+        assertTrue(result.isEmpty())
+    }
+
+    @Test
     fun ignoresLiveAttractionsWithoutAWaitValue() {
         val result = buildAttractionWaitAdvice(
             waitingTimes = listOf(WaitingTime(ATTRACTION_ID, "Ride", null, AttractionStatus.Opened)),
@@ -97,7 +109,11 @@ class AttractionWaitAdviceTest {
 
     private fun snapshot(date: LocalDate, time: LocalTime, wait: Int) = AttractionHistorySnapshot(
         capturedAtMillis = epochMillis(date, time),
-        attractions = listOf(AttractionHistoryPoint(ATTRACTION_ID, "Ride", wait, 0, "opened")),
+        attractions = listOf(
+            AttractionHistoryPoint(ATTRACTION_ID, "Ride", wait, 0, "opened"),
+        ) + (1..10).map { index ->
+            AttractionHistoryPoint("filler-$index", "Filler $index", 5, 0, "opened")
+        },
     )
 
     private fun waitingTime(wait: Int) = WaitingTime(ATTRACTION_ID, "Ride", wait, AttractionStatus.Opened)

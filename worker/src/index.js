@@ -174,7 +174,6 @@ async function updateAppData(env, options = {}) {
   const recommendations = [];
   const errors = [];
   const attractionDayUpdates = [];
-  const d1AttractionSnapshots = [];
 
   for (const parkKey of parkKeys) {
     try {
@@ -207,7 +206,7 @@ async function updateAppData(env, options = {}) {
 
       if (snapshot.attractions.length > 0) {
         if (hasD1(env)) {
-          d1AttractionSnapshots.push(toAttractionSnapshotRow(snapshot, now));
+          await writeAttractionSnapshotsD1(env, [toAttractionSnapshotRow(snapshot, now)]);
         } else {
           attractionDayUpdates.push(await buildUpdatedAttractionHistory(env, snapshot, now));
         }
@@ -243,9 +242,6 @@ async function updateAppData(env, options = {}) {
   }
   if (options.writeTrend !== false) {
     await env.APP_DATA.put(TREND_KEY, JSON.stringify(trendHistory));
-  }
-  if (d1AttractionSnapshots.length > 0) {
-    await writeAttractionSnapshotsD1(env, d1AttractionSnapshots);
   }
   if (attractionDayUpdates.length > 0) {
     await writeAttractionHistoryBatch(env, attractionDayUpdates, now);
@@ -299,7 +295,7 @@ async function collectParkSnapshot(parkKey, now, options = {}) {
   const openingTimes = settledValue(openingResult);
   const waitingTimes = settledValue(waitingResult);
   const crowdLevel = settledValue(crowdResult);
-  const opening = Array.isArray(openingTimes) ? openingTimes[0] : null;
+  const opening = firstItem(openingTimes);
   const waitingItems = Array.isArray(waitingTimes) ? waitingTimes : [];
   const attractionItems = waitingItems.map((item) => toAttractionSnapshotItem(item));
   const openedToday = opening?.opened_today === true;
@@ -342,6 +338,11 @@ async function collectParkSnapshot(parkKey, now, options = {}) {
 
 function settledValue(result) {
   return result.status === "fulfilled" ? result.value : null;
+}
+
+function firstItem(value) {
+  if (Array.isArray(value)) return value[0] ?? null;
+  return value && typeof value === "object" ? value : null;
 }
 
 function settledError(label, result) {

@@ -106,7 +106,7 @@ private fun formatDataAge(latestDataMillis: Long, nowMillis: Long): String {
     if (latestDataMillis <= 0L) return "keine Daten"
     val ageMinutes = ((nowMillis - latestDataMillis).coerceAtLeast(0L) / 60_000L).toInt()
     return when {
-        ageMinutes < 1 -> "gerade eben"
+        ageMinutes < 1 -> "jetzt"
         ageMinutes < 60 -> "vor $ageMinutes min"
         ageMinutes < 24 * 60 -> "vor ${ageMinutes / 60} h"
         else -> "vor ${ageMinutes / (24 * 60)} d"

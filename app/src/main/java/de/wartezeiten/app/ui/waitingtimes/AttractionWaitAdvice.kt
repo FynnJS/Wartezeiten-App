@@ -81,6 +81,7 @@ internal fun buildAttractionWaitAdvice(
                     comparisonDays = currentSamples.size,
                 )
             }
+            abs(currentWait - typicalWait) > MAX_TYPICAL_DIFFERENCE_MINUTES -> null
             else -> AttractionWaitAdvice(
                 type = AttractionWaitAdviceType.Typical,
                 currentWaitMinutes = currentWait,
@@ -88,7 +89,7 @@ internal fun buildAttractionWaitAdvice(
                 comparisonDays = currentSamples.size,
             )
         }
-        waitingTime.attractionId to advice
+        advice?.let { waitingTime.attractionId to it }
     }.toMap()
 }
 
@@ -103,11 +104,13 @@ private fun List<AttractionHistoryDay>.perDayWaits(
     val values = day.snapshots.mapNotNull { snapshot ->
         val localTime = Instant.ofEpochMilli(snapshot.capturedAtMillis).atOffset(dayOffset).toLocalTime()
         if (localTime.minuteDistanceTo(targetTime) > windowMinutes) return@mapNotNull null
+        val openParkAttractions = snapshot.attractions.count { it.isOpenMeasurement() }
+        if (openParkAttractions < MIN_OPEN_ATTRACTIONS_FOR_COMPARISON) return@mapNotNull null
         snapshot.attractions.firstOrNull { point ->
             point.id == attractionId && point.isOpenMeasurement()
         }?.value?.toFloat()
     }
-    values.takeIf { it.isNotEmpty() }?.average()?.toFloat()
+    values.takeIf { it.isNotEmpty() }?.median()
 }
 
 private fun AttractionHistoryPoint.isOpenMeasurement(): Boolean {
@@ -135,10 +138,12 @@ private data class FutureWaitOption(
 )
 
 private const val MIN_COMPARISON_DAYS = 3
+private const val MIN_OPEN_ATTRACTIONS_FOR_COMPARISON = 10
 private const val CURRENT_WINDOW_MINUTES = 30
 private const val FUTURE_WINDOW_MINUTES = 25
 private const val MIN_MEANINGFUL_DIFFERENCE_MINUTES = 10
 private const val MIN_FUTURE_IMPROVEMENT_MINUTES = 5
 private const val MIN_GO_NOW_DIFFERENCE_MINUTES = 5
+private const val MAX_TYPICAL_DIFFERENCE_MINUTES = 15
 private const val MINUTES_PER_DAY = 24 * 60
 private val FUTURE_OFFSETS_MINUTES = listOf(30, 60, 90, 120)

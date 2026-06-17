@@ -5,6 +5,7 @@ import androidx.hilt.work.HiltWorkerFactory
 import androidx.work.Configuration
 import dagger.hilt.android.HiltAndroidApp
 import de.wartezeiten.app.push.PushRegistrationManager
+import de.wartezeiten.app.ui.widget.ParkWidgetUpdateScheduler
 import de.wartezeiten.app.worker.NotificationScheduler
 import de.wartezeiten.app.worker.RecommendationScanScheduler
 import de.wartezeiten.app.worker.UpdateScheduler
@@ -29,6 +30,7 @@ class WartezeitenApplication : Application(), Configuration.Provider {
         NotificationScheduler.ensureBackgroundChecks(this)
         RecommendationScanScheduler.ensureBackgroundScans(this)
         UpdateScheduler.ensureBackgroundChecks(this)
+        ParkWidgetUpdateScheduler.ensureBackgroundUpdates(this)
         CoroutineScope(SupervisorJob() + Dispatchers.IO).launch {
             pushRegistrationManager.syncCurrentWatchlist()
         }

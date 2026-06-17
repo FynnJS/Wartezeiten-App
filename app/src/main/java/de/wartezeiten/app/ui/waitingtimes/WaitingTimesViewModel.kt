@@ -263,19 +263,21 @@ class WaitingTimesViewModel @Inject constructor(
                 it.parkKey.normalizedParkKey() in candidates
             } ?: return@launch
             val today = LocalDate.now().toString()
-            val date = today.takeIf { it in indexedPark.dates } ?: indexedPark.latestDate ?: return@launch
+            val statisticDate = today.takeIf { it in indexedPark.dates }
             val loadedDays = mutableListOf<AttractionHistoryDay>()
             val comparisonDates = indexedPark.dates.asReversed()
                 .filter { it != today }
                 .take(7)
-            val datesToLoad = (listOf(date) + comparisonDates).distinct()
+            val datesToLoad = (listOfNotNull(statisticDate) + comparisonDates).distinct()
             datesToLoad.forEach { historyDate ->
                 when (val dayResult = repository.getAttractionHistoryDay(indexedPark.parkKey, historyDate)) {
                     is ApiResult.Success -> loadedDays += dayResult.data
                     is ApiResult.Error -> Unit
                 }
             }
-            parkStatistics.value = loadedDays.firstOrNull { it.date == date }?.toParkWaitStatistics()
+            parkStatistics.value = statisticDate?.let { date ->
+                loadedDays.firstOrNull { it.date == date }?.toParkWaitStatistics()
+            }
             comparisonHistoryDays.value = loadedDays.filter { it.date != today }
         }
     }

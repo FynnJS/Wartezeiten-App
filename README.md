@@ -20,7 +20,7 @@ Die Website liest `website/release.json` und verlinkt auf den neuesten GitHub Re
 - Statistikbereich mit Park-, Datum- und Attraktionsauswahl für zentrale Tagesverläufe
 - Watchlist-Alarme mit Ruhezeiten, Einmal-Zustellung, Parköffnungsregel, Mindestabstand und täglicher Parkzusammenfassung
 - Datenbasierter Multi-Park-Vergleich mit Suche, Sortierung und direktem Sprung zur Parkübersicht
-- Startbildschirm-Widget fuer einen Lieblingspark mit Oeffnungsstatus, Wartezeit-Kennzahlen, drei Attraktionen und Datenalter
+- Startbildschirm-Widget fuer einen Lieblingspark mit Oeffnungsstatus, Wartezeit-Kennzahlen, drei Attraktionen, Datenalter sowie manuellem und periodischem Refresh
 - Pflicht-Update-Sperre und Benachrichtigung bei neuer APK-Version
 - Offline-First-Datenhaltung über Room, Cache-Hinweis und automatische Aktualisierung für Live-Daten
 
@@ -107,7 +107,7 @@ Der dauerhafte Schlüssel wird einmalig eingerichtet und anschließend lokal sow
 
 Der dabei ausgegebene Sicherungsordner muss zusätzlich außerhalb des Rechners gesichert werden. Der private Keystore lässt sich aus einer veröffentlichten APK nicht wiederherstellen.
 
-Cloudflare App-Daten für Ranking, Trends und zentrale Attraktionsstatistiken werden vom Worker-Cron erzeugt. Setup-Hinweise stehen in `website/CLOUDFLARE-APP-DATA.md`.
+Cloudflare App-Daten für Ranking, Trends und zentrale Attraktionsstatistiken werden vom Worker-Cron erzeugt. Der Cron schreibt D1-Statistik-Snapshots parkweise, damit erfolgreiche Messpunkte auch bei späteren Shard-Problemen erhalten bleiben. Setup-Hinweise stehen in `website/CLOUDFLARE-APP-DATA.md`.
 
 Vor jedem Release prüfen:
 

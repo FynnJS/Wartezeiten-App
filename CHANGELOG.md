@@ -1,5 +1,15 @@
 # Changelog
 
+## v1.1.4 - 2026-06-17
+
+- Fixed park-detail statistics so outdated central days are no longer shown as today's live park statistics.
+- Added a clear empty state when today's central wait-time measurements are not available yet.
+- Made attraction wait-time advice more conservative by ignoring weak historical samples and hiding misleading "typical" labels for large current deviations.
+- Fixed the Phantasialand-style 60-minute versus "typical 8 minutes" case with a regression test.
+- Improved the favorite-park widget with a manual refresh action, WorkManager refreshes every 30 minutes, and a more compact MIUI-friendly layout.
+- Hardened central Cloudflare statistics collection by accepting object-shaped opening-time responses and writing successful D1 park snapshots immediately during cron runs.
+- Documented the new statistics, comparison-label, widget-refresh, and D1 snapshot safeguards for future maintenance.
+
 ## v1.1.3 - 2026-06-16
 
 - Added a configurable Android home-screen widget for a favorite park with opening status, average and highest wait time, selected attractions, data age, and direct park deep link.

@@ -10,10 +10,13 @@ import androidx.compose.ui.unit.sp
 import androidx.datastore.preferences.core.Preferences
 import androidx.glance.GlanceId
 import androidx.glance.GlanceModifier
+import androidx.glance.action.ActionParameters
 import androidx.glance.action.clickable
 import androidx.glance.appwidget.GlanceAppWidget
 import androidx.glance.appwidget.GlanceAppWidgetManager
+import androidx.glance.appwidget.action.ActionCallback
 import androidx.glance.appwidget.action.actionStartActivity
+import androidx.glance.appwidget.action.actionRunCallback
 import androidx.glance.appwidget.provideContent
 import androidx.glance.appwidget.state.getAppWidgetState
 import androidx.glance.background
@@ -112,19 +115,19 @@ private fun ParkWidgetContent(
             .fillMaxSize()
             .background(ColorProvider(WidgetSurface))
             .clickable(actionStartActivity(openParkIntent(parkKey)))
-            .padding(12.dp),
+            .padding(10.dp),
     ) {
         Row(
             modifier = GlanceModifier.fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Column(modifier = GlanceModifier.width(156.dp)) {
+            Column(modifier = GlanceModifier.width(126.dp)) {
                 Text(
                     text = data.parkName,
                     maxLines = 1,
                     style = TextStyle(
                         color = ColorProvider(WidgetOnSurface),
-                        fontSize = 16.sp,
+                        fontSize = 15.sp,
                         fontWeight = FontWeight.Bold,
                     ),
                 )
@@ -133,7 +136,7 @@ private fun ParkWidgetContent(
                     maxLines = 1,
                     style = TextStyle(
                         color = ColorProvider(data.status.color()),
-                        fontSize = 12.sp,
+                        fontSize = 11.sp,
                         fontWeight = FontWeight.Medium,
                     ),
                 )
@@ -141,40 +144,53 @@ private fun ParkWidgetContent(
             Text(
                 text = data.dataAgeLabel,
                 maxLines = 1,
-                modifier = GlanceModifier.width(70.dp),
+                modifier = GlanceModifier.width(38.dp),
                 style = TextStyle(
                     color = ColorProvider(WidgetMuted),
-                    fontSize = 11.sp,
+                    fontSize = 10.sp,
+                ),
+            )
+            Spacer(modifier = GlanceModifier.width(6.dp))
+            Text(
+                text = "Neu",
+                maxLines = 1,
+                modifier = GlanceModifier
+                    .width(28.dp)
+                    .clickable(actionRunCallback<RefreshParkWidgetAction>()),
+                style = TextStyle(
+                    color = ColorProvider(WidgetAccent),
+                    fontSize = 10.sp,
+                    fontWeight = FontWeight.Bold,
                 ),
             )
         }
-        Spacer(modifier = GlanceModifier.height(7.dp))
+        Spacer(modifier = GlanceModifier.height(6.dp))
         Row(modifier = GlanceModifier.fillMaxWidth()) {
-            MetricColumn(label = "Schnitt", value = data.averageWaitingTimeLabel, width = 76)
-            Spacer(modifier = GlanceModifier.width(8.dp))
-            MetricColumn(label = "H\u00f6chste", value = data.highestWaitingTimeLabel, width = 76)
-            Spacer(modifier = GlanceModifier.width(8.dp))
-            MetricColumn(label = "Attr.", value = data.attractions.size.toString(), width = 48)
+            MetricColumn(label = "Schnitt", value = data.averageWaitingTimeLabel, width = 70)
+            Spacer(modifier = GlanceModifier.width(7.dp))
+            MetricColumn(label = "H\u00f6chste", value = data.highestWaitingTimeLabel, width = 70)
+            Spacer(modifier = GlanceModifier.width(7.dp))
+            MetricColumn(label = "Attr.", value = data.attractions.size.toString(), width = 38)
         }
-        Spacer(modifier = GlanceModifier.height(7.dp))
+        Spacer(modifier = GlanceModifier.height(6.dp))
         data.attractions.take(3).forEach { attraction ->
             Row(modifier = GlanceModifier.fillMaxWidth()) {
                 Text(
                     text = attraction.name,
                     maxLines = 1,
-                    modifier = GlanceModifier.width(170.dp),
+                    modifier = GlanceModifier.width(146.dp),
                     style = TextStyle(
                         color = ColorProvider(WidgetOnSurface),
-                        fontSize = 11.sp,
+                        fontSize = 10.sp,
                     ),
                 )
                 Text(
                     text = attraction.waitingTimeLabel,
                     maxLines = 1,
-                    modifier = GlanceModifier.width(54.dp),
+                    modifier = GlanceModifier.width(48.dp),
                     style = TextStyle(
                         color = ColorProvider(WidgetAccent),
-                        fontSize = 11.sp,
+                        fontSize = 10.sp,
                         fontWeight = FontWeight.Medium,
                     ),
                 )
@@ -191,7 +207,7 @@ private fun MetricColumn(label: String, value: String, width: Int) {
             maxLines = 1,
             style = TextStyle(
                 color = ColorProvider(WidgetOnSurface),
-                fontSize = 15.sp,
+                fontSize = 14.sp,
                 fontWeight = FontWeight.Bold,
             ),
         )
@@ -200,7 +216,7 @@ private fun MetricColumn(label: String, value: String, width: Int) {
             maxLines = 1,
             style = TextStyle(
                 color = ColorProvider(WidgetMuted),
-                fontSize = 10.sp,
+                fontSize = 9.sp,
             ),
         )
     }
@@ -281,6 +297,17 @@ private fun openParkIntent(parkKey: String): Intent {
         data = Uri.parse("wartezeiten://parks/${Uri.encode(parkKey)}")
         setClassName("de.wartezeiten.app", MainActivity::class.java.name)
         flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
+    }
+}
+
+class RefreshParkWidgetAction : ActionCallback {
+    override suspend fun onAction(
+        context: Context,
+        glanceId: GlanceId,
+        parameters: ActionParameters,
+    ) {
+        ParkHomeWidget().update(context, glanceId)
+        ParkWidgetUpdateScheduler.refreshSoon(context)
     }
 }
 

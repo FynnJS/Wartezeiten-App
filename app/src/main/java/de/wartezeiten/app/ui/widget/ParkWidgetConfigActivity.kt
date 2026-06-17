@@ -122,6 +122,8 @@ class ParkWidgetConfigActivity : ComponentActivity() {
                     )
                 }
                 ParkHomeWidget().update(this@ParkWidgetConfigActivity, glanceId)
+                ParkWidgetUpdateScheduler.ensureBackgroundUpdates(this@ParkWidgetConfigActivity)
+                ParkWidgetUpdateScheduler.refreshSoon(this@ParkWidgetConfigActivity)
             }
             val result = Intent().putExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, appWidgetId)
             setResult(Activity.RESULT_OK, result)
