@@ -1,19 +1,19 @@
 {
-  "versionName": "1.1.3",
-  "versionCode": 10103,
-  "releaseDate": "2026-06-16",
-  "releasePageUrl": "https://github.com/FynnJS/Wartezeiten-App/releases/tag/v1.1.3",
-  "apkUrl": "https://github.com/FynnJS/Wartezeiten-App/releases/download/v1.1.3/wartezeiten-app-1.1.3.apk",
-  "apkSize": "4.11",
+  "versionName": "1.1.4",
+  "versionCode": 10104,
+  "releaseDate": "2026-06-17",
+  "releasePageUrl": "https://github.com/FynnJS/Wartezeiten-App/releases/tag/v1.1.4",
+  "apkUrl": "https://github.com/FynnJS/Wartezeiten-App/releases/download/v1.1.4/wartezeiten-app-1.1.4.apk",
+  "apkSize": "4.13",
   "releaseNotes": [
-    "## v1.1.3 - 2026-06-16",
-    "- Added a configurable Android home-screen widget for a favorite park with opening status, average and highest wait time, selected attractions, data age, and direct park deep link.",
-    "- Improved the widget configuration flow and launcher preview, including a clearly marked example preview and a loading state for configured widgets while data is still unavailable.",
-    "- Fixed the open-parks filter by using fresh global markers and a local scan fallback instead of stale central latest data.",
-    "- Fixed restored park search state so a fresh install no longer opens with an old search term.",
-    "- Stabilized park-list search focus so the keyboard no longer closes unexpectedly during typing.",
-    "- Fixed park and attraction statistics loading after the central D1 snapshot migration, including a same-day live fallback.",
-    "- Fixed park-detail statistic graphs so today's chart does not show future measurement points and X-axis labels use the park timezone."
+    "## v1.1.4 - 2026-06-17",
+    "- Fixed park-detail statistics so outdated central days are no longer shown as today's live park statistics.",
+    "- Added a clear empty state when today's central wait-time measurements are not available yet.",
+    "- Made attraction wait-time advice more conservative by ignoring weak historical samples and hiding misleading \"typical\" labels for large current deviations.",
+    "- Fixed the Phantasialand-style 60-minute versus \"typical 8 minutes\" case with a regression test.",
+    "- Improved the favorite-park widget with a manual refresh action, WorkManager refreshes every 30 minutes, and a more compact MIUI-friendly layout.",
+    "- Hardened central Cloudflare statistics collection by accepting object-shaped opening-time responses and writing successful D1 park snapshots immediately during cron runs.",
+    "- Documented the new statistics, comparison-label, widget-refresh, and D1 snapshot safeguards for future maintenance."
   ],
   "showBanner": true
 }
