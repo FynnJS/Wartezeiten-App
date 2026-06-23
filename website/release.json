@@ -1,19 +1,15 @@
 {
-  "versionName": "1.1.4",
-  "versionCode": 10104,
-  "releaseDate": "2026-06-17",
-  "releasePageUrl": "https://github.com/FynnJS/Wartezeiten-App/releases/tag/v1.1.4",
-  "apkUrl": "https://github.com/FynnJS/Wartezeiten-App/releases/download/v1.1.4/wartezeiten-app-1.1.4.apk",
+  "versionName": "1.1.5",
+  "versionCode": 10105,
+  "releaseDate": "2026-06-23",
+  "releasePageUrl": "https://github.com/FynnJS/Wartezeiten-App/releases/tag/v1.1.5",
+  "apkUrl": "https://github.com/FynnJS/Wartezeiten-App/releases/download/v1.1.5/wartezeiten-app-1.1.5.apk",
   "apkSize": "4.13",
   "releaseNotes": [
-    "## v1.1.4 - 2026-06-17",
-    "- Fixed park-detail statistics so outdated central days are no longer shown as today's live park statistics.",
-    "- Added a clear empty state when today's central wait-time measurements are not available yet.",
-    "- Made attraction wait-time advice more conservative by ignoring weak historical samples and hiding misleading \"typical\" labels for large current deviations.",
-    "- Fixed the Phantasialand-style 60-minute versus \"typical 8 minutes\" case with a regression test.",
-    "- Improved the favorite-park widget with a manual refresh action, WorkManager refreshes every 30 minutes, and a more compact MIUI-friendly layout.",
-    "- Hardened central Cloudflare statistics collection by accepting object-shaped opening-time responses and writing successful D1 park snapshots immediately during cron runs.",
-    "- Documented the new statistics, comparison-label, widget-refresh, and D1 snapshot safeguards for future maintenance."
+    "## v1.1.5 - 2026-06-23",
+    "- Fixed central worker statistics so D1 cron collection no longer uses legacy history shards, stale upstream wait-time dates are skipped, and the statistics index only advertises days with deliverable measurement points.",
+    "- Added worker tests for D1 cron sharding, stale wait-time filtering, and statistics index consistency.",
+    "- Bumped Android release metadata to `versionCode 10105` / `versionName 1.1.5`."
   ],
   "showBanner": true
 }
