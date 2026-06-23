@@ -1,15 +1,17 @@
 {
-  "versionName": "1.1.5",
-  "versionCode": 10105,
+  "versionName": "1.1.6",
+  "versionCode": 10106,
   "releaseDate": "2026-06-23",
-  "releasePageUrl": "https://github.com/FynnJS/Wartezeiten-App/releases/tag/v1.1.5",
-  "apkUrl": "https://github.com/FynnJS/Wartezeiten-App/releases/download/v1.1.5/wartezeiten-app-1.1.5.apk",
+  "releasePageUrl": "https://github.com/FynnJS/Wartezeiten-App/releases/tag/v1.1.6",
+  "apkUrl": "https://github.com/FynnJS/Wartezeiten-App/releases/download/v1.1.6/wartezeiten-app-1.1.6.apk",
   "apkSize": "4.13",
   "releaseNotes": [
-    "## v1.1.5 - 2026-06-23",
-    "- Fixed central worker statistics so D1 cron collection no longer uses legacy history shards, stale upstream wait-time dates are skipped, and the statistics index only advertises days with deliverable measurement points.",
-    "- Added worker tests for D1 cron sharding, stale wait-time filtering, and statistics index consistency.",
-    "- Bumped Android release metadata to `versionCode 10105` / `versionName 1.1.5`."
+    "## v1.1.6 - 2026-06-23",
+    "- Added attraction detail cards with status badge, historical wait chart, 1-3 hour wait forecast, personal Room-backed notes, direct Watchlist setup, and deep-link sharing for parks and attractions.",
+    "- Moved park aliases into a maintainable local asset file.",
+    "- Improved attraction-detail charts with clearer wait-time and time axes.",
+    "- Fixed broken umlauts and special characters in the attraction detail UI.",
+    "- Bumped Android release metadata to `versionCode 10106` / `versionName 1.1.6`."
   ],
   "showBanner": true
 }
