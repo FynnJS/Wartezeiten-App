@@ -1,8 +1,10 @@
 package de.wartezeiten.app.ui.parks
 
+import android.content.Context
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
+import dagger.hilt.android.qualifiers.ApplicationContext
 import de.wartezeiten.app.core.network.ApiResult
 import de.wartezeiten.app.core.network.NetworkError
 import de.wartezeiten.app.core.network.toUserMessage
@@ -100,6 +102,7 @@ private fun String.normalizedParkKey(): String {
 class ParkListViewModel @Inject constructor(
     private val repository: WartezeitenRepository,
     private val preferences: PreferencesDataSource,
+    @param:ApplicationContext private val context: Context,
 ) : ViewModel() {
     private val query = MutableStateFlow("")
     private val searchHistory = MutableStateFlow<List<String>>(emptyList())
@@ -116,6 +119,7 @@ class ParkListViewModel @Inject constructor(
     private val refreshTrigger = MutableStateFlow(0)
     private val statisticsIndex = MutableStateFlow(StatisticsIndex(generatedAtMillis = 0L, parks = emptyList()))
     private val isStatisticsIndexLoading = MutableStateFlow(false)
+    private val parkAliases = MutableStateFlow<Map<String, List<String>>>(emptyMap())
     private var refreshJob: Job? = null
     private var recommendationRefreshJob: Job? = null
 
@@ -151,7 +155,8 @@ class ParkListViewModel @Inject constructor(
         errorMessage,
         refreshTrigger,
         statisticsIndex,
-        isStatisticsIndexLoading
+        isStatisticsIndexLoading,
+        parkAliases
     ) { args: Array<Any?> ->
         val parks = args[0] as List<Park>
         val currentAttractionEntries = args[1] as List<CurrentAttractionSearchEntry>
@@ -172,6 +177,7 @@ class ParkListViewModel @Inject constructor(
         val trigger = args[16] as Int
         val statsIndex = args[17] as StatisticsIndex
         val statsLoading = args[18] as Boolean
+        val aliases = args[19] as Map<String, List<String>>
 
         val favorites = parks.filter { it.isFavorite }
         val recent = currentRecentParkKeys.mapNotNull { key ->
@@ -187,7 +193,7 @@ class ParkListViewModel @Inject constructor(
         var filtered = parks
         if (normalizedQuery.isNotBlank()) {
             filtered = filtered.filter { park ->
-                park.matchesSearchQuery(normalizedQuery)
+                park.matchesSearchQuery(normalizedQuery, aliases)
             }
         }
         if (country != null) filtered = filtered.filter { it.country == country }
@@ -251,6 +257,19 @@ class ParkListViewModel @Inject constructor(
         refreshPublicOpenSnapshots()
         startAutoRefresh()
         refreshStatisticsIndex()
+        loadParkAliases()
+    }
+
+    private fun loadParkAliases() {
+        viewModelScope.launch {
+            parkAliases.value = runCatching {
+                context.assets.open("park_aliases.csv").bufferedReader().useLines { lines ->
+                    lines.drop(1)
+                        .mapNotNull { line -> line.toAliasEntryOrNull() }
+                        .toMap()
+                }
+            }.getOrElse { emptyMap() }
+        }
     }
 
     private fun observeParkSearchState() {
@@ -611,15 +630,24 @@ private fun String.normalizedSearchText(): String {
         .replace("ß", "ss")
 }
 
-private fun Park.matchesSearchQuery(normalizedQuery: String): Boolean {
+private fun Park.matchesSearchQuery(normalizedQuery: String, aliasMap: Map<String, List<String>>): Boolean {
     val candidates = buildList {
         add(name)
         add(country)
         add(id)
         add(uuid)
+        addAll(assetAliases(aliasMap))
         addAll(searchAliases())
     }
     return candidates.any { it.normalizedSearchText().contains(normalizedQuery) }
+}
+
+private fun Park.assetAliases(aliasMap: Map<String, List<String>>): List<String> {
+    val candidates = listOf(id, uuid, name).map { it.normalizedSearchText().filter(Char::isLetterOrDigit) }
+    return aliasMap
+        .filterKeys { key -> candidates.any { candidate -> candidate.contains(key) || key.contains(candidate) } }
+        .values
+        .flatten()
 }
 
 private fun Park.matchesOpenParkKey(openParkKeys: Set<String>): Boolean {
@@ -652,4 +680,17 @@ private fun Park.searchAliases(): List<String> {
         if ("disney" in normalizedId || "disney" in normalizedName) addAll(listOf("dlp", "disney", "disneyland"))
         if ("efteling" in normalizedId || "efteling" in normalizedName) add("eft")
     }
+}
+
+private fun String.toAliasEntryOrNull(): Pair<String, List<String>>? {
+    val separator = indexOf(',')
+    if (separator <= 0) return null
+    val match = substring(0, separator).trim().normalizedSearchText().filter(Char::isLetterOrDigit)
+    val aliases = substring(separator + 1)
+        .trim()
+        .trim('"')
+        .split('|')
+        .map { it.trim() }
+        .filter { it.isNotBlank() }
+    return match.takeIf { it.isNotBlank() }?.let { it to aliases }
 }

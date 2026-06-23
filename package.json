@@ -1,5 +1,8 @@
 {
+  "type": "module",
   "scripts": {
+    "test": "node --test worker/src/index.test.mjs",
+    "test:worker": "node --test worker/src/index.test.mjs",
     "worker:dev": "wrangler dev --test-scheduled",
     "worker:deploy": "wrangler deploy",
     "worker:tail": "wrangler tail"

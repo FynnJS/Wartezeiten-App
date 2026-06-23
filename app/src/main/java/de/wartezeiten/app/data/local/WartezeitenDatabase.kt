@@ -17,6 +17,7 @@ import de.wartezeiten.app.data.local.entity.WeatherEntity
 import de.wartezeiten.app.data.local.entity.WeatherForecastEntity
 import de.wartezeiten.app.data.local.entity.HolidayEntity
 import de.wartezeiten.app.data.local.entity.AlertHistoryEntity
+import de.wartezeiten.app.data.local.entity.AttractionNoteEntity
 
 @Database(
     entities = [
@@ -29,9 +30,10 @@ import de.wartezeiten.app.data.local.entity.AlertHistoryEntity
         WeatherEntity::class,
         WeatherForecastEntity::class,
         HolidayEntity::class,
-        AlertHistoryEntity::class
+        AlertHistoryEntity::class,
+        AttractionNoteEntity::class
     ],
-    version = 7,
+    version = 8,
     exportSchema = true
 )
 @TypeConverters(WatchlistTypeConverter::class)
@@ -41,4 +43,5 @@ abstract class WartezeitenDatabase : RoomDatabase() {
     abstract fun parkSnapshotDao(): ParkSnapshotDao
     abstract fun watchlistDao(): de.wartezeiten.app.data.local.dao.WatchlistDao
     abstract fun alertHistoryDao(): de.wartezeiten.app.data.local.dao.AlertHistoryDao
+    abstract fun attractionNoteDao(): de.wartezeiten.app.data.local.dao.AttractionNoteDao
 }

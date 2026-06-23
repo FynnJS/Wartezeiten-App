@@ -7,6 +7,8 @@ import dagger.hilt.android.lifecycle.HiltViewModel
 import de.wartezeiten.app.core.network.ApiResult
 import de.wartezeiten.app.core.network.toUserMessage
 import de.wartezeiten.app.data.local.PreferencesDataSource
+import de.wartezeiten.app.data.local.dao.AttractionNoteDao
+import de.wartezeiten.app.data.local.entity.AttractionNoteEntity
 import de.wartezeiten.app.domain.model.AttractionStatus
 import de.wartezeiten.app.domain.model.AttractionHistoryDay
 import de.wartezeiten.app.domain.model.CrowdLevel
@@ -30,6 +32,7 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.take
@@ -79,8 +82,17 @@ data class WaitingTimesUiState(
     val holidays: List<HolidayInfo> = emptyList(),
     val parkStatistics: ParkWaitStatistics? = null,
     val waitAdviceByAttractionId: Map<String, AttractionWaitAdvice> = emptyMap(),
+    val forecastByAttractionId: Map<String, AttractionWaitForecast> = emptyMap(),
+    val historyByAttractionId: Map<String, List<AttractionWaitForecastPoint>> = emptyMap(),
     val language: String = PreferencesDataSource.DEFAULT_LANGUAGE,
     val highlightedAttractionId: String? = null,
+    val highlightedAttractionNote: String = "",
+)
+
+private data class DetailAuxState(
+    val parkStatistics: ParkWaitStatistics?,
+    val historyDays: List<AttractionHistoryDay>,
+    val note: AttractionNoteEntity?,
 )
 
 @HiltViewModel
@@ -89,6 +101,7 @@ class WaitingTimesViewModel @Inject constructor(
     private val repository: WartezeitenRepository,
     private val refreshParkDetail: RefreshParkDetailUseCase,
     private val preferences: PreferencesDataSource,
+    private val attractionNoteDao: AttractionNoteDao,
 ) : ViewModel() {
     private val parkKey: String = checkNotNull(savedStateHandle["parkKey"])
     private val highlightedAttractionId: String? = savedStateHandle["attractionId"]
@@ -103,7 +116,10 @@ class WaitingTimesViewModel @Inject constructor(
     private val refreshTrigger = MutableStateFlow(0)
     private val currentLanguage = MutableStateFlow(PreferencesDataSource.DEFAULT_LANGUAGE)
     private val parkStatistics = MutableStateFlow<ParkWaitStatistics?>(null)
-    private val comparisonHistoryDays = MutableStateFlow<List<AttractionHistoryDay>>(emptyList())
+    private val historyDays = MutableStateFlow<List<AttractionHistoryDay>>(emptyList())
+    private val highlightedAttractionNote = highlightedAttractionId?.let {
+        attractionNoteDao.observeNote(parkKey, it)
+    } ?: flowOf(null)
     private var refreshJob: Job? = null
 
     // Aktuelle Uhrzeit Flow (aktualisiert jede Minute)
@@ -134,13 +150,16 @@ class WaitingTimesViewModel @Inject constructor(
         }
     }
 
+    private val detailAuxState = combine(parkStatistics, historyDays, highlightedAttractionNote) { statistics, days, note ->
+        DetailAuxState(statistics, days, note)
+    }
+
     val uiState = combine(
         repository.observeParkDetail(parkKey),
         filterState,
         loadState,
-        parkStatistics,
-        comparisonHistoryDays,
-    ) { detail, filterState, status, parkStatistics, historyDays ->
+        detailAuxState,
+    ) { detail, filterState, status, aux ->
         val (sort, filter, query, maxWait, plannedIds) = filterState
         val normalizedQuery = query.normalizedSearchText()
         val filtered = detail.waitingTimes
@@ -174,9 +193,10 @@ class WaitingTimesViewModel @Inject constructor(
                 offlineDataAgeMinutes = dataUpdatedAtMillis.toAgeMinutes(),
                 refreshTrigger = status.refreshTrigger,
                 currentLocalTime = status.currentTime,
-                parkStatistics = parkStatistics,
+                parkStatistics = aux.parkStatistics,
                 language = status.language,
                 highlightedAttractionId = highlightedAttractionId,
+                highlightedAttractionNote = aux.note?.note.orEmpty(),
             )
         } else {
             val dataUpdatedAtMillis = detail.latestDataUpdatedAtMillis()
@@ -190,6 +210,13 @@ class WaitingTimesViewModel @Inject constructor(
             } else {
                 CrowdLevelEstimate(level = null, source = CrowdLevelSource.None)
             }
+            val openWaitingTimes = detail.waitingTimes.filter { it.status == AttractionStatus.Opened }
+            val forecasts = buildAttractionWaitForecasts(
+                waitingTimes = openWaitingTimes,
+                historyDays = aux.historyDays.filter { it.date != LocalDate.now().toString() },
+                currentTimeMillis = status.currentTime,
+                localTimeOffsetSeconds = detail.localTimeOffsetSeconds(),
+            )
             WaitingTimesUiState(
                 park = detail.park,
                 openingTimes = detail.openingTimes,
@@ -219,15 +246,20 @@ class WaitingTimesViewModel @Inject constructor(
                     freshness = if (System.currentTimeMillis() - dataUpdatedAtMillis < 300_000) DataFreshness.Fresh else DataFreshness.Stale,
                     confidenceScore = if (detail.crowdLevel != null) 0.9f else 0.7f
                 ),
-                parkStatistics = parkStatistics,
+                parkStatistics = aux.parkStatistics,
                 waitAdviceByAttractionId = buildAttractionWaitAdvice(
-                    waitingTimes = detail.waitingTimes.filter { it.status == AttractionStatus.Opened },
-                    historyDays = historyDays,
+                    waitingTimes = openWaitingTimes,
+                    historyDays = aux.historyDays.filter { it.date != LocalDate.now().toString() },
                     currentTimeMillis = status.currentTime,
                     localTimeOffsetSeconds = detail.localTimeOffsetSeconds(),
                 ),
+                forecastByAttractionId = forecasts,
+                historyByAttractionId = detail.waitingTimes.associate { waitingTime ->
+                    waitingTime.attractionId to buildAttractionHistorySeries(waitingTime.attractionId, aux.historyDays)
+                },
                 language = status.language,
                 highlightedAttractionId = highlightedAttractionId,
+                highlightedAttractionNote = aux.note?.note.orEmpty(),
             )
         }
     }.stateIn(
@@ -278,7 +310,7 @@ class WaitingTimesViewModel @Inject constructor(
             parkStatistics.value = statisticDate?.let { date ->
                 loadedDays.firstOrNull { it.date == date }?.toParkWaitStatistics()
             }
-            comparisonHistoryDays.value = loadedDays.filter { it.date != today }
+            historyDays.value = loadedDays
         }
     }
 
@@ -336,6 +368,32 @@ class WaitingTimesViewModel @Inject constructor(
         val currentPark = uiState.value.park ?: return
         viewModelScope.launch {
             repository.toggleFavorite(currentPark.id, !currentPark.isFavorite)
+        }
+    }
+
+    fun saveAttractionNote(note: String) {
+        val attractionId = highlightedAttractionId ?: return
+        viewModelScope.launch {
+            val cleaned = note.trim()
+            if (cleaned.isBlank()) {
+                attractionNoteDao.deleteNote(parkKey, attractionId)
+            } else {
+                attractionNoteDao.upsertNote(
+                    AttractionNoteEntity(
+                        parkKey = parkKey,
+                        attractionId = attractionId,
+                        note = cleaned,
+                        updatedAtMillis = System.currentTimeMillis(),
+                    )
+                )
+            }
+        }
+    }
+
+    fun deleteAttractionNote() {
+        val attractionId = highlightedAttractionId ?: return
+        viewModelScope.launch {
+            attractionNoteDao.deleteNote(parkKey, attractionId)
         }
     }
 

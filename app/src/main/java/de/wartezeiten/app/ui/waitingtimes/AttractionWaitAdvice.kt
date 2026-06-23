@@ -24,6 +24,17 @@ data class AttractionWaitAdvice(
     val comparisonDays: Int,
 )
 
+data class AttractionWaitForecastPoint(
+    val localTime: LocalTime,
+    val expectedWaitMinutes: Int,
+    val comparisonDays: Int,
+)
+
+data class AttractionWaitForecast(
+    val attractionId: String,
+    val points: List<AttractionWaitForecastPoint>,
+)
+
 internal fun buildAttractionWaitAdvice(
     waitingTimes: List<WaitingTime>,
     historyDays: List<AttractionHistoryDay>,
@@ -93,6 +104,59 @@ internal fun buildAttractionWaitAdvice(
     }.toMap()
 }
 
+internal fun buildAttractionWaitForecasts(
+    waitingTimes: List<WaitingTime>,
+    historyDays: List<AttractionHistoryDay>,
+    currentTimeMillis: Long,
+    localTimeOffsetSeconds: Int?,
+): Map<String, AttractionWaitForecast> {
+    if (historyDays.size < MIN_COMPARISON_DAYS) return emptyMap()
+    val offset = ZoneOffset.ofTotalSeconds(localTimeOffsetSeconds ?: 0)
+    val currentTime = Instant.ofEpochMilli(currentTimeMillis).atOffset(offset).toLocalTime()
+    return waitingTimes.mapNotNull { waitingTime ->
+        val points = FORECAST_OFFSETS_MINUTES.mapNotNull { minutesAhead ->
+            val targetTime = currentTime.plusMinutes(minutesAhead.toLong())
+            val samples = historyDays.perDayWaits(
+                attractionId = waitingTime.attractionId,
+                targetTime = targetTime,
+                windowMinutes = FUTURE_WINDOW_MINUTES,
+                fallbackOffset = offset,
+            )
+            if (samples.size < MIN_COMPARISON_DAYS) {
+                null
+            } else {
+                AttractionWaitForecastPoint(
+                    localTime = targetTime,
+                    expectedWaitMinutes = samples.median().roundToInt(),
+                    comparisonDays = samples.size,
+                )
+            }
+        }
+        points.takeIf { it.size >= 2 }?.let {
+            waitingTime.attractionId to AttractionWaitForecast(waitingTime.attractionId, it)
+        }
+    }.toMap()
+}
+
+internal fun buildAttractionHistorySeries(
+    attractionId: String,
+    historyDays: List<AttractionHistoryDay>,
+): List<AttractionWaitForecastPoint> {
+    val today = historyDays.firstOrNull() ?: return emptyList()
+    return today.snapshots.mapNotNull { snapshot ->
+        val point = snapshot.attractions.firstOrNull {
+            it.id == attractionId && it.isOpenMeasurement()
+        } ?: return@mapNotNull null
+        val offset = today.openFrom?.let { runCatching { java.time.OffsetDateTime.parse(it).offset }.getOrNull() }
+            ?: ZoneOffset.UTC
+        AttractionWaitForecastPoint(
+            localTime = Instant.ofEpochMilli(snapshot.capturedAtMillis).atOffset(offset).toLocalTime(),
+            expectedWaitMinutes = point.value,
+            comparisonDays = 1,
+        )
+    }.sortedBy { it.localTime }
+}
+
 private fun List<AttractionHistoryDay>.perDayWaits(
     attractionId: String,
     targetTime: LocalTime,
@@ -147,3 +211,4 @@ private const val MIN_GO_NOW_DIFFERENCE_MINUTES = 5
 private const val MAX_TYPICAL_DIFFERENCE_MINUTES = 15
 private const val MINUTES_PER_DAY = 24 * 60
 private val FUTURE_OFFSETS_MINUTES = listOf(30, 60, 90, 120)
+private val FORECAST_OFFSETS_MINUTES = listOf(30, 60, 90, 120, 150, 180)

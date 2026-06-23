@@ -25,7 +25,7 @@ object DatabaseModule {
             WartezeitenDatabase::class.java,
             "wartezeiten.db"
         )
-            .addMigrations(MIGRATION_5_6, MIGRATION_6_7)
+            .addMigrations(MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8)
             .fallbackToDestructiveMigration(true)
             .build()
     }
@@ -45,6 +45,9 @@ object DatabaseModule {
     @Provides
     fun provideAlertHistoryDao(database: WartezeitenDatabase) = database.alertHistoryDao()
 
+    @Provides
+    fun provideAttractionNoteDao(database: WartezeitenDatabase) = database.attractionNoteDao()
+
     private val MIGRATION_5_6 = object : Migration(5, 6) {
         override fun migrate(db: SupportSQLiteDatabase) {
             db.execSQL("ALTER TABLE park_snapshots ADD COLUMN source TEXT NOT NULL DEFAULT 'local'")
@@ -61,6 +64,22 @@ object DatabaseModule {
             db.execSQL("ALTER TABLE watchlist ADD COLUMN cooldownMinutes INTEGER NOT NULL DEFAULT 0")
             db.execSQL("ALTER TABLE watchlist ADD COLUMN enabled INTEGER NOT NULL DEFAULT 1")
             db.execSQL("ALTER TABLE alert_history ADD COLUMN lastTriggeredAtMillis INTEGER NOT NULL DEFAULT 0")
+        }
+    }
+
+    private val MIGRATION_7_8 = object : Migration(7, 8) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            db.execSQL(
+                """
+                CREATE TABLE IF NOT EXISTS attraction_notes (
+                    parkKey TEXT NOT NULL,
+                    attractionId TEXT NOT NULL,
+                    note TEXT NOT NULL,
+                    updatedAtMillis INTEGER NOT NULL,
+                    PRIMARY KEY(parkKey, attractionId)
+                )
+                """.trimIndent()
+            )
         }
     }
 }

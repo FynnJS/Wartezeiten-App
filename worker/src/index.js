@@ -118,39 +118,70 @@ export default {
 };
 
 async function updateScheduledAppData(controller, env) {
+  const scheduledOptions = buildScheduledAppDataOptions(controller, env);
+  if (scheduledOptions.skipped) {
+    return scheduledOptions.result;
+  }
+  return updateAppData(env, scheduledOptions.options);
+}
+
+function buildScheduledAppDataOptions(controller, env, now = Date.now()) {
   const cronShardCount = parsePositiveInt(env.APP_DATA_CRON_SHARDS) ?? DEFAULT_CRON_SHARDS;
-  const historyShardCount = parsePositiveInt(env.APP_DATA_HISTORY_SHARDS) ?? DEFAULT_ATTRACTION_HISTORY_SHARDS;
   const cronShardIndex = scheduledShardIndex(controller?.cron, cronShardCount);
+  if (hasD1(env)) {
+    return {
+      skipped: false,
+      options: {
+        shardIndex: cronShardIndex,
+        shardCount: cronShardCount,
+        historyShardIndex: null,
+        historyShardCount: null,
+        writeLatest: false,
+        writeTrend: false,
+        includeCrowd: false,
+      },
+    };
+  }
+
+  const historyShardCount = parsePositiveInt(env.APP_DATA_HISTORY_SHARDS) ?? DEFAULT_ATTRACTION_HISTORY_SHARDS;
   const historyShardIndex = scheduledHistoryShardIndex(
-    Number(controller?.scheduledTime) || Date.now(),
+    Number(controller?.scheduledTime) || now,
     cronShardIndex,
     cronShardCount,
     historyShardCount,
   );
   if (historyShardIndex == null) {
     return {
-      ok: true,
-      generatedAtMillis: Date.now(),
-      parks: 0,
-      totalParks: 0,
-      shardIndex: cronShardIndex,
-      shardCount: cronShardCount,
-      historyShardIndex: null,
-      historyShardCount,
       skipped: true,
-      reason: "No unique history shard assigned to this cron trigger.",
-      errors: [],
+      result: {
+        ok: true,
+        generatedAtMillis: now,
+        parks: 0,
+        totalParks: 0,
+        shardIndex: cronShardIndex,
+        shardCount: cronShardCount,
+        historyShardIndex: null,
+        historyShardCount,
+        skipped: true,
+        reason: "No unique history shard assigned to this cron trigger.",
+        errors: [],
+        skippedHistory: [],
+      },
     };
   }
-  return updateAppData(env, {
-    shardIndex: cronShardIndex,
-    shardCount: cronShardCount,
-    historyShardIndex,
-    historyShardCount,
-    writeLatest: false,
-    writeTrend: false,
-    includeCrowd: false,
-  });
+
+  return {
+    skipped: false,
+    options: {
+      shardIndex: cronShardIndex,
+      shardCount: cronShardCount,
+      historyShardIndex,
+      historyShardCount,
+      writeLatest: false,
+      writeTrend: false,
+      includeCrowd: false,
+    },
+  };
 }
 
 async function updateAppData(env, options = {}) {
@@ -173,6 +204,7 @@ async function updateAppData(env, options = {}) {
   const parks = [];
   const recommendations = [];
   const errors = [];
+  const skippedHistory = [];
   const attractionDayUpdates = [];
 
   for (const parkKey of parkKeys) {
@@ -182,7 +214,12 @@ async function updateAppData(env, options = {}) {
       });
       parks.push(toLatestParkSnapshot(snapshot));
 
-      if (snapshot.openedToday && snapshot.openAttractions > 0 && snapshot.displayCrowdLevel != null) {
+      if (
+        snapshot.historyEligible &&
+        snapshot.openedToday &&
+        snapshot.openAttractions > 0 &&
+        snapshot.displayCrowdLevel != null
+      ) {
         const score = recommendationScore(snapshot);
         recommendations.push({
           parkKey,
@@ -204,12 +241,18 @@ async function updateAppData(env, options = {}) {
         );
       }
 
-      if (snapshot.attractions.length > 0) {
+      if (snapshot.historyEligible && snapshot.attractions.length > 0) {
         if (hasD1(env)) {
           await writeAttractionSnapshotsD1(env, [toAttractionSnapshotRow(snapshot, now)]);
         } else {
           attractionDayUpdates.push(await buildUpdatedAttractionHistory(env, snapshot, now));
         }
+      } else if (snapshot.historySkipReason) {
+        skippedHistory.push({
+          parkKey,
+          reason: snapshot.historySkipReason,
+          capturedAtMillis: snapshot.capturedAtMillis,
+        });
       }
 
       if (snapshot.errors.length > 0) {
@@ -256,6 +299,7 @@ async function updateAppData(env, options = {}) {
     historyShardIndex,
     historyShardCount,
     errors,
+    skippedHistory,
   };
 }
 
@@ -298,6 +342,14 @@ async function collectParkSnapshot(parkKey, now, options = {}) {
   const opening = firstItem(openingTimes);
   const waitingItems = Array.isArray(waitingTimes) ? waitingTimes : [];
   const attractionItems = waitingItems.map((item) => toAttractionSnapshotItem(item));
+  let timing = deriveAttractionSnapshotTiming(opening, waitingItems, now);
+  if (waitingResult.status === "rejected") {
+    timing = {
+      ...timing,
+      historyEligible: false,
+      skipReason: "upstream_error",
+    };
+  }
   const openedToday = opening?.opened_today === true;
   const openAttractions = attractionItems.filter((item) => item.statusCode === 0).length;
   const totalAttractions = waitingItems.length;
@@ -322,7 +374,10 @@ async function collectParkSnapshot(parkKey, now, options = {}) {
 
   return {
     parkKey,
-    capturedAtMillis: now,
+    capturedAtMillis: timing.capturedAtMillis,
+    historyDate: timing.historyDate,
+    historyEligible: timing.historyEligible,
+    historySkipReason: timing.skipReason,
     apiCrowdLevel,
     calculatedCrowdLevel,
     displayCrowdLevel,
@@ -349,6 +404,75 @@ function settledError(label, result) {
   if (result.status === "fulfilled") return null;
   const message = result.reason instanceof Error ? result.reason.message : String(result.reason);
   return `${label}: ${message}`;
+}
+
+function deriveAttractionSnapshotTiming(opening, waitingItems, now) {
+  const openFrom = opening?.open_from ?? opening?.opening ?? null;
+  const closedFrom = opening?.closed_from ?? opening?.closing ?? null;
+  const openingDate = isoDateFromApiDateTime(openFrom);
+  const fallbackDate = openingDate ?? isoDate(now);
+
+  if (!Array.isArray(waitingItems) || waitingItems.length === 0) {
+    return {
+      capturedAtMillis: now,
+      historyDate: fallbackDate,
+      historyEligible: false,
+      skipReason: "empty_waitingtimes",
+    };
+  }
+
+  const timedItems = waitingItems
+    .map((item) => {
+      const datetime = item.datetime ?? item.timestamp ?? null;
+      const millis = parseDateMillis(datetime);
+      const date = cleanIsoDate(item.date) ?? isoDateFromApiDateTime(datetime);
+      return { millis, date };
+    })
+    .filter((item) => Number.isFinite(item.millis))
+    .sort((a, b) => a.millis - b.millis);
+
+  if (timedItems.length === 0) {
+    return {
+      capturedAtMillis: now,
+      historyDate: fallbackDate,
+      historyEligible: false,
+      skipReason: "missing_waitingtimes_timestamp",
+    };
+  }
+
+  const latest = timedItems[timedItems.length - 1];
+  const waitingDate = latest.date ?? isoDate(latest.millis);
+  const historyDate = openingDate ?? waitingDate;
+
+  if (openingDate && waitingDate && waitingDate !== openingDate) {
+    return {
+      capturedAtMillis: latest.millis,
+      historyDate,
+      historyEligible: false,
+      skipReason: "stale_waitingtimes",
+    };
+  }
+
+  const openAtMillis = parseDateMillis(openFrom);
+  const closeAtMillis = parseDateMillis(closedFrom);
+  if (
+    (openAtMillis != null && latest.millis < openAtMillis) ||
+    (closeAtMillis != null && latest.millis > closeAtMillis)
+  ) {
+    return {
+      capturedAtMillis: latest.millis,
+      historyDate,
+      historyEligible: false,
+      skipReason: "outside_opening_window",
+    };
+  }
+
+  return {
+    capturedAtMillis: latest.millis,
+    historyDate,
+    historyEligible: true,
+    skipReason: null,
+  };
 }
 
 async function apiJson(path, headers) {
@@ -1090,7 +1214,7 @@ function toAttractionSnapshotRow(snapshot, generatedAtMillis) {
   return {
     generatedAtMillis,
     parkKey: snapshot.parkKey,
-    date: isoDate(snapshot.capturedAtMillis),
+    date: snapshot.historyDate ?? isoDate(snapshot.capturedAtMillis),
     capturedAtMillis: snapshot.capturedAtMillis,
     openedToday: snapshot.openedToday === true,
     openFrom: snapshot.openFrom ?? null,
@@ -1157,7 +1281,7 @@ async function writeAttractionSnapshotsD1(env, snapshots) {
 }
 
 async function buildUpdatedAttractionHistory(env, snapshot, now) {
-  const date = isoDate(now);
+  const date = snapshot.historyDate ?? isoDate(snapshot.capturedAtMillis);
   const existing = await readAttractionDay(env, snapshot.parkKey, date);
   const snapshots = [
     ...(existing.snapshots ?? []).filter((item) => Number(item.capturedAtMillis) !== snapshot.capturedAtMillis),
@@ -1262,7 +1386,22 @@ async function readStatisticsIndexD1(env) {
       d.park_key AS parkKey,
       d.date AS date,
       d.generated_at_millis AS generatedAtMillis,
-      COUNT(s.captured_at_millis) AS sampleCount
+      COUNT(
+        CASE
+          WHEN s.captured_at_millis IS NOT NULL
+            AND s.attractions_json IS NOT NULL
+            AND s.attractions_json != '[]'
+            AND (
+              COALESCE(s.open_from, d.open_from) IS NULL
+              OR s.captured_at_millis >= unixepoch(COALESCE(s.open_from, d.open_from)) * 1000
+            )
+            AND (
+              COALESCE(s.closed_from, d.closed_from) IS NULL
+              OR s.captured_at_millis <= unixepoch(COALESCE(s.closed_from, d.closed_from)) * 1000
+            )
+          THEN 1
+        END
+      ) AS deliverableSampleCount
     FROM attraction_history_days d
     LEFT JOIN attraction_history_snapshots s
       ON s.park_key = d.park_key AND s.date = d.date
@@ -1270,12 +1409,24 @@ async function readStatisticsIndexD1(env) {
     ORDER BY d.park_key, d.date
   `).all();
 
+  return buildStatisticsIndexFromD1Rows(result.results ?? [], readAttractionDayD1.bind(null, env));
+}
+
+async function buildStatisticsIndexFromD1Rows(rows, readDay = null) {
+  const coveredDatesByPark = new Map();
   const byPark = new Map();
-  let generatedAtMillis = 0;
-  for (const row of result.results ?? []) {
+  for (const row of rows ?? []) {
     const parkKey = String(row.parkKey ?? "");
     const date = String(row.date ?? "");
     if (!parkKey || !date) continue;
+
+    const coveredDates = coveredDatesByPark.get(parkKey) ?? new Set();
+    coveredDates.add(date);
+    coveredDatesByPark.set(parkKey, coveredDates);
+
+    const deliverableSampleCount = Number(row.deliverableSampleCount ?? row.sampleCount ?? 0);
+    if (!Number.isFinite(deliverableSampleCount) || deliverableSampleCount <= 0) continue;
+
     const existing = byPark.get(parkKey) ?? {
       parkKey,
       dates: [],
@@ -1287,28 +1438,41 @@ async function readStatisticsIndexD1(env) {
     };
     existing.dates.push(date);
     const updatedAtMillis = Number(row.generatedAtMillis ?? 0);
-    generatedAtMillis = Math.max(generatedAtMillis, updatedAtMillis);
     if (existing.latestDate == null || date > existing.latestDate) {
       existing.latestDate = date;
-      existing.sampleCount = Number(row.sampleCount ?? 0);
+      existing.sampleCount = deliverableSampleCount;
       existing.updatedAtMillis = updatedAtMillis;
     }
     byPark.set(parkKey, existing);
   }
 
   const parks = [];
+  let generatedAtMillis = 0;
   for (const park of byPark.values()) {
-    const latestDay = park.latestDate
-      ? await readAttractionDayD1(env, park.parkKey, park.latestDate)
-      : null;
+    const dates = [...new Set(park.dates)].sort();
+    let latestDay = null;
+    if (readDay) {
+      for (const date of dates.slice().reverse()) {
+        const day = await readDay(park.parkKey, date);
+        if ((day.snapshots ?? []).length > 0 && (day.attractions ?? []).length > 0) {
+          latestDay = day;
+          break;
+        }
+      }
+    }
+    const latestDate = latestDay?.date ?? park.latestDate;
+    generatedAtMillis = Math.max(generatedAtMillis, Number(latestDay?.generatedAtMillis ?? park.updatedAtMillis ?? 0));
     parks.push({
       ...park,
-      dates: [...new Set(park.dates)].sort(),
-      attractionCount: latestDay?.attractions?.length ?? 0,
-      attractions: (latestDay?.attractions ?? []).map((attraction) => ({
+      dates,
+      latestDate,
+      sampleCount: latestDay?.snapshots?.length ?? park.sampleCount,
+      updatedAtMillis: latestDay?.generatedAtMillis ?? park.updatedAtMillis,
+      attractionCount: latestDay?.attractions?.length ?? park.attractionCount,
+      attractions: (latestDay?.attractions ?? park.attractions ?? []).map((attraction) => ({
         id: attraction.id,
         name: attraction.name,
-        latestDate: park.latestDate,
+        latestDate,
         sampleCount: attraction.sampleCount,
         averageWaitMinutes: attraction.averageWaitMinutes,
         lastValue: attraction.lastValue,
@@ -1318,37 +1482,59 @@ async function readStatisticsIndexD1(env) {
   }
 
   parks.sort((a, b) => a.parkKey.localeCompare(b.parkKey));
-  return { generatedAtMillis, parks };
+  const index = { generatedAtMillis, parks };
+  Object.defineProperty(index, "_coveredDatesByPark", {
+    value: coveredDatesByPark,
+    enumerable: false,
+  });
+  return index;
 }
 
 function mergeStatisticsIndexes(legacyIndex, d1Index) {
   const byPark = new Map();
-  for (const index of [legacyIndex, d1Index]) {
-    for (const park of index.parks ?? []) {
-      const existing = byPark.get(park.parkKey);
-      if (!existing) {
-        byPark.set(park.parkKey, {
-          ...park,
-          dates: [...new Set(park.dates ?? [])].sort(),
-          attractions: park.attractions ?? [],
-        });
-        continue;
-      }
-      const dates = [...new Set([...(existing.dates ?? []), ...(park.dates ?? [])])].sort();
-      const useParkForLatest = String(park.latestDate ?? "") >= String(existing.latestDate ?? "");
-      byPark.set(park.parkKey, {
-        ...existing,
-        dates,
-        latestDate: useParkForLatest ? park.latestDate : existing.latestDate,
-        attractionCount: useParkForLatest ? park.attractionCount : existing.attractionCount,
-        sampleCount: useParkForLatest ? park.sampleCount : existing.sampleCount,
-        updatedAtMillis: Math.max(Number(existing.updatedAtMillis ?? 0), Number(park.updatedAtMillis ?? 0)),
-        attractions: useParkForLatest && (park.attractions ?? []).length > 0
-          ? park.attractions
-          : (existing.attractions ?? []),
-      });
-    }
+  const d1CoveredDatesByPark = d1Index._coveredDatesByPark ?? new Map();
+  for (const park of d1Index.parks ?? []) {
+    byPark.set(park.parkKey, {
+      ...park,
+      dates: [...new Set(park.dates ?? [])].sort(),
+      attractions: park.attractions ?? [],
+    });
   }
+
+  for (const park of legacyIndex.parks ?? []) {
+    const coveredDates = d1CoveredDatesByPark.get(park.parkKey) ?? new Set();
+    const legacyDates = (park.dates ?? []).filter((date) => !coveredDates.has(date));
+    if (legacyDates.length === 0) continue;
+
+    const existing = byPark.get(park.parkKey);
+    if (!existing) {
+      const sortedLegacyDates = [...new Set(legacyDates)].sort();
+      const latestDate = sortedLegacyDates[sortedLegacyDates.length - 1] ?? park.latestDate;
+      byPark.set(park.parkKey, {
+        ...park,
+        dates: sortedLegacyDates,
+        latestDate,
+        attractions: park.attractions ?? [],
+      });
+      continue;
+    }
+
+    const dates = [...new Set([...(existing.dates ?? []), ...legacyDates])].sort();
+    const useLegacyForLatest = String(park.latestDate ?? "") > String(existing.latestDate ?? "") &&
+      legacyDates.includes(park.latestDate);
+    byPark.set(park.parkKey, {
+      ...existing,
+      dates,
+      latestDate: useLegacyForLatest ? park.latestDate : existing.latestDate,
+      attractionCount: useLegacyForLatest ? park.attractionCount : existing.attractionCount,
+      sampleCount: useLegacyForLatest ? park.sampleCount : existing.sampleCount,
+      updatedAtMillis: Math.max(Number(existing.updatedAtMillis ?? 0), Number(park.updatedAtMillis ?? 0)),
+      attractions: useLegacyForLatest && (park.attractions ?? []).length > 0
+        ? park.attractions
+        : (existing.attractions ?? []),
+    });
+  }
+
   return {
     generatedAtMillis: Math.max(
       Number(legacyIndex.generatedAtMillis ?? 0),
@@ -1447,6 +1633,16 @@ function parseDateMillis(value) {
   if (!value) return null;
   const millis = Date.parse(value);
   return Number.isFinite(millis) ? millis : null;
+}
+
+function isoDateFromApiDateTime(value) {
+  const match = String(value ?? "").match(/^(\d{4}-\d{2}-\d{2})/);
+  return match ? match[1] : null;
+}
+
+function cleanIsoDate(value) {
+  const match = String(value ?? "").match(/^(\d{4}-\d{2}-\d{2})$/);
+  return match ? match[1] : null;
 }
 
 function toAttractionSnapshotItem(item) {
@@ -1808,3 +2004,14 @@ function hashString(value) {
 function delay(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
+
+export {
+  buildScheduledAppDataOptions,
+  buildStatisticsIndexFromD1Rows,
+  cronParkShard,
+  deriveAttractionSnapshotTiming,
+  mergeStatisticsIndexes,
+  scheduledHistoryShardIndex,
+  scheduledShardIndex,
+  toAttractionSnapshotRow,
+};

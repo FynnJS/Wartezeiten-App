@@ -15,6 +15,7 @@ Die Website liest `website/release.json` und verlinkt auf den neuesten GitHub Re
 - Parkliste mit Länder-, Favoriten- und Öffnungsstatus-Filter
 - Gemeinsame Suche nach Parks und Attraktionen mit direktem Sprung zur passenden Attraktion
 - Parkdetails mit Wartezeiten, Öffnungszeiten, Wetter, Feiertagen, aktueller Auslastung und zentraler Parkstatistik
+- Attraktions-Detailkarten mit Verlauf, Prognose, persönlicher Notiz, Watchlist-Shortcut und Deep-Link-Share
 - Historisch gestützte "Jetzt oder später?"-Einordnung für geöffnete Attraktionen
 - Zentrale Cloudflare App-Daten für Ranking-, Trend- und Attraktionsstatistik-Snapshots
 - Statistikbereich mit Park-, Datum- und Attraktionsauswahl für zentrale Tagesverläufe
@@ -107,7 +108,7 @@ Der dauerhafte Schlüssel wird einmalig eingerichtet und anschließend lokal sow
 
 Der dabei ausgegebene Sicherungsordner muss zusätzlich außerhalb des Rechners gesichert werden. Der private Keystore lässt sich aus einer veröffentlichten APK nicht wiederherstellen.
 
-Cloudflare App-Daten für Ranking, Trends und zentrale Attraktionsstatistiken werden vom Worker-Cron erzeugt. Der Cron schreibt D1-Statistik-Snapshots parkweise, damit erfolgreiche Messpunkte auch bei späteren Shard-Problemen erhalten bleiben. Setup-Hinweise stehen in `website/CLOUDFLARE-APP-DATA.md`.
+Cloudflare App-Daten für Ranking, Trends und zentrale Attraktionsstatistiken werden vom Worker-Cron erzeugt. Der Cron schreibt D1-Statistik-Snapshots parkweise und nutzt bei aktivem D1 nur die drei realen 5-Minuten-Cron-Shards; `APP_DATA_HISTORY_SHARDS` ist nur noch für Legacy-KV-Fallbacks relevant. Setup-Hinweise stehen in `website/CLOUDFLARE-APP-DATA.md`.
 
 Vor jedem Release prüfen:
 

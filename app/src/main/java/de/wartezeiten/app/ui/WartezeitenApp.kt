@@ -130,6 +130,9 @@ fun WartezeitenApp(
             ) {
                 WaitingTimesRoute(
                     onBackClick = { navController.popBackStack() },
+                    onAttractionClick = { parkKey, attractionId ->
+                        navController.navigate("parks/${Uri.encode(parkKey)}?attractionId=${Uri.encode(attractionId)}")
+                    },
                     onParkStatisticsClick = { parkKey ->
                         navController.navigate("statistics/${Uri.encode(parkKey)}")
                     },

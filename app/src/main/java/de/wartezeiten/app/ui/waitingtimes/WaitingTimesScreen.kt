@@ -1,13 +1,15 @@
-package de.wartezeiten.app.ui.waitingtimes
+﻿package de.wartezeiten.app.ui.waitingtimes
 
 import android.content.Context
 import android.content.Intent
+import android.net.Uri
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.background
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -32,6 +34,7 @@ import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Clear
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.FavoriteBorder
 import androidx.compose.material.icons.filled.FilterList
@@ -71,7 +74,10 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.foundation.clickable
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
@@ -100,6 +106,7 @@ import java.util.Locale
 @Composable
 fun WaitingTimesRoute(
     onBackClick: () -> Unit,
+    onAttractionClick: (String, String) -> Unit,
     onParkStatisticsClick: (String) -> Unit,
     onAttractionStatisticsClick: (String, String) -> Unit,
     viewModel: WaitingTimesViewModel = hiltViewModel(),
@@ -115,6 +122,9 @@ fun WaitingTimesRoute(
         onAttractionQueryChange = viewModel::setAttractionQuery,
         onMaxWaitChange = viewModel::setMaxWait,
         onTogglePlannedAttraction = viewModel::togglePlannedAttraction,
+        onSaveAttractionNote = viewModel::saveAttractionNote,
+        onDeleteAttractionNote = viewModel::deleteAttractionNote,
+        onAttractionClick = onAttractionClick,
         onParkStatisticsClick = onParkStatisticsClick,
         onAttractionStatisticsClick = onAttractionStatisticsClick,
     )
@@ -132,6 +142,9 @@ fun WaitingTimesScreen(
     onAttractionQueryChange: (String) -> Unit,
     onMaxWaitChange: (Int?) -> Unit,
     onTogglePlannedAttraction: (String) -> Unit,
+    onSaveAttractionNote: (String) -> Unit,
+    onDeleteAttractionNote: () -> Unit,
+    onAttractionClick: (String, String) -> Unit,
     onParkStatisticsClick: (String) -> Unit,
     onAttractionStatisticsClick: (String, String) -> Unit,
 ) {
@@ -172,7 +185,7 @@ fun WaitingTimesScreen(
                 title = {
                     Column {
                         Text(
-                            state.park?.name ?: if (state.language == "en") "Loading…" else "Laden…",
+                            state.park?.name ?: if (state.language == "en") "Loadingâ€¦" else "Ladenâ€¦",
                             style = MaterialTheme.typography.titleMedium,
                             fontWeight = FontWeight.Bold,
                             maxLines = 1,
@@ -282,6 +295,8 @@ fun WaitingTimesScreen(
                 onAttractionQueryChange = onAttractionQueryChange,
                 onMaxWaitChange = onMaxWaitChange,
                 onTogglePlannedAttraction = onTogglePlannedAttraction,
+                onSaveAttractionNote = onSaveAttractionNote,
+                onDeleteAttractionNote = onDeleteAttractionNote,
                 onAddWatchlist = {
                     selectedAttractionId = null
                     showAddWatchlistDialog = true
@@ -292,6 +307,9 @@ fun WaitingTimesScreen(
                 },
                 onAttractionStatisticsClick = { attractionId ->
                     state.park?.let { park -> onAttractionStatisticsClick(park.id, attractionId) }
+                },
+                onAttractionClick = { attractionId ->
+                    state.park?.let { park -> onAttractionClick(park.id, attractionId) }
                 },
             )
         }
@@ -352,9 +370,12 @@ private fun WaitingTimesContent(
     onAttractionQueryChange: (String) -> Unit,
     onMaxWaitChange: (Int?) -> Unit,
     onTogglePlannedAttraction: (String) -> Unit,
+    onSaveAttractionNote: (String) -> Unit,
+    onDeleteAttractionNote: () -> Unit,
     onAddWatchlist: () -> Unit,
     onAddWatchlistForAttraction: (String) -> Unit,
     onAttractionStatisticsClick: (String) -> Unit,
+    onAttractionClick: (String) -> Unit,
 ) {
     if (state.isLoading && (state.lastRefreshed == 0L)) {
         LoadingDetailState()
@@ -366,6 +387,26 @@ private fun WaitingTimesContent(
         contentPadding = PaddingValues(16.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
+        state.highlightedAttractionId?.let { highlightedId ->
+            val highlighted = state.allWaitingTimes.firstOrNull { it.attractionId == highlightedId }
+            if (highlighted != null) {
+                item {
+                    AttractionDetailSection(
+                        park = state.park,
+                        item = highlighted,
+                        waitAdvice = state.waitAdviceByAttractionId[highlightedId],
+                        forecast = state.forecastByAttractionId[highlightedId],
+                        history = state.historyByAttractionId[highlightedId].orEmpty(),
+                        note = state.highlightedAttractionNote,
+                        language = state.language,
+                        onSaveNote = onSaveAttractionNote,
+                        onDeleteNote = onDeleteAttractionNote,
+                        onAddWatchlist = { onAddWatchlistForAttraction(highlightedId) },
+                    )
+                }
+            }
+        }
+
         item {
             if (state.isShowingOfflineData) {
                 OfflineDetailBanner(
@@ -398,19 +439,6 @@ private fun WaitingTimesContent(
                 currentCrowdLevel = state.crowdEstimate?.level,
                 language = state.language,
             )
-        }
-
-        state.highlightedAttractionId?.let { highlightedId ->
-            val highlighted = state.allWaitingTimes.firstOrNull { it.attractionId == highlightedId }
-            if (highlighted != null) {
-                item {
-                    HighlightedAttractionCard(
-                        item = highlighted,
-                        language = state.language,
-                        onAddWatchlist = { onAddWatchlistForAttraction(highlighted.attractionId) },
-                    )
-                }
-            }
         }
 
         // Filter & Sortierung
@@ -457,6 +485,7 @@ private fun WaitingTimesContent(
                     onTogglePlanned = onTogglePlannedAttraction,
                     onAddWatchlist = onAddWatchlistForAttraction,
                     onStatisticsClick = onAttractionStatisticsClick,
+                    onOpenDetail = onAttractionClick,
                     language = state.language,
                 )
             }
@@ -494,6 +523,222 @@ private fun HighlightedAttractionCard(
             }
             IconButton(onClick = onAddWatchlist) {
                 Icon(Icons.Default.Notifications, contentDescription = if (language == "en") "Add notification" else "Benachrichtigung hinzufügen")
+            }
+        }
+    }
+}
+
+@Composable
+private fun AttractionDetailSection(
+    park: Park?,
+    item: WaitingTime,
+    waitAdvice: AttractionWaitAdvice?,
+    forecast: AttractionWaitForecast?,
+    history: List<AttractionWaitForecastPoint>,
+    note: String,
+    language: String,
+    onSaveNote: (String) -> Unit,
+    onDeleteNote: () -> Unit,
+    onAddWatchlist: () -> Unit,
+) {
+    val context = LocalContext.current
+    var draftNote by remember(item.attractionId, note) { mutableStateOf(note) }
+    val noteHasChanges = draftNote.trim() != note.trim()
+    OutlinedCard(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(16.dp),
+        colors = CardDefaults.outlinedCardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
+    ) {
+        Column(
+            modifier = Modifier.padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(item.name, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                    Text(park?.name.orEmpty(), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+                StatusBadge(status = item.status, language = language)
+            }
+
+            Row(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    text = item.waitingTime?.let { "$it Min." } ?: item.status.label(language),
+                    style = MaterialTheme.typography.headlineSmall,
+                    fontWeight = FontWeight.Black,
+                    color = item.status.indicatorColor(),
+                )
+                waitAdvice?.let { WaitAdviceLabel(advice = it, language = language) }
+            }
+
+            WaitForecastChart(
+                title = if (language == "en") "Next hours" else "Nächste Stunden",
+                points = forecast?.points.orEmpty(),
+                emptyText = if (language == "en") {
+                    "Not enough comparable history for a forecast yet."
+                } else {
+                    "Noch zu wenig vergleichbare Historie für eine Prognose."
+                },
+            )
+            WaitForecastChart(
+                title = if (language == "en") "Today's history" else "Heutiger Verlauf",
+                points = history,
+                emptyText = if (language == "en") {
+                    "No central measurements for this attraction today yet."
+                } else {
+                    "Für diese Attraktion liegen heute noch keine zentralen Messpunkte vor."
+                },
+            )
+
+            OutlinedTextField(
+                value = draftNote,
+                onValueChange = { draftNote = it },
+                modifier = Modifier.fillMaxWidth(),
+                label = { Text(if (language == "en") "Personal note" else "Persönliche Notiz") },
+                placeholder = { Text(if (language == "en") "Minimum height, meeting point..." else "Mindestgröße, Treffpunkt...") },
+                minLines = 2,
+                shape = RoundedCornerShape(12.dp),
+            )
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                TextButton(
+                    onClick = { onSaveNote(draftNote) },
+                    enabled = noteHasChanges || draftNote.isNotBlank(),
+                ) {
+                    Icon(Icons.Default.Check, contentDescription = null, modifier = Modifier.size(18.dp))
+                    Spacer(Modifier.width(6.dp))
+                    Text(if (language == "en") "Save note" else "Notiz speichern")
+                }
+                TextButton(onClick = onAddWatchlist) {
+                    Text(if (language == "en") "Notification" else "Alarm")
+                }
+                TextButton(onClick = { park?.let { shareAttractionDetail(context, it, item, language) } }) {
+                    Text(if (language == "en") "Share link" else "Link teilen")
+                }
+                if (note.isNotBlank() || draftNote.isNotBlank()) {
+                    TextButton(
+                        onClick = {
+                            draftNote = ""
+                            onDeleteNote()
+                        },
+                    ) {
+                        Icon(Icons.Default.Delete, contentDescription = null, modifier = Modifier.size(18.dp))
+                        Spacer(Modifier.width(6.dp))
+                        Text(if (language == "en") "Delete" else "Löschen")
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun StatusBadge(status: AttractionStatus, language: String) {
+    Surface(
+        shape = RoundedCornerShape(8.dp),
+        color = status.indicatorColor().copy(alpha = 0.16f),
+        contentColor = status.indicatorColor(),
+    ) {
+        Text(
+            text = status.label(language),
+            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+            style = MaterialTheme.typography.labelMedium,
+            fontWeight = FontWeight.Bold,
+        )
+    }
+}
+
+@Composable
+private fun WaitForecastChart(
+    title: String,
+    points: List<AttractionWaitForecastPoint>,
+    emptyText: String,
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        Text(title, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
+        if (points.size < 2) {
+            Text(emptyText, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            return
+        }
+        val sorted = remember(points) { points.sortedBy { it.localTime } }
+        val maxWait = remember(sorted) {
+            ((sorted.maxOf { it.expectedWaitMinutes }.coerceAtLeast(10) + 9) / 10) * 10
+        }
+        val axisTimes = remember(sorted) {
+            if (sorted.size <= 2) {
+                listOf(sorted.first().localTime, sorted.last().localTime)
+            } else {
+                listOf(sorted.first().localTime, sorted[sorted.lastIndex / 2].localTime, sorted.last().localTime)
+            }.distinct()
+        }
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Column(
+                modifier = Modifier
+                    .width(34.dp)
+                    .height(120.dp),
+                verticalArrangement = Arrangement.SpaceBetween,
+                horizontalAlignment = Alignment.End,
+            ) {
+                Text("$maxWait", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text("${maxWait / 2}", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text("0", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+            Canvas(
+                modifier = Modifier
+                    .weight(1f)
+                    .height(120.dp)
+            ) {
+            val left = 8.dp.toPx()
+            val right = size.width - 8.dp.toPx()
+            val top = 10.dp.toPx()
+            val bottom = size.height - 18.dp.toPx()
+            repeat(3) { index ->
+                val y = top + (bottom - top) * index / 2f
+                drawLine(Color.Gray.copy(alpha = 0.2f), Offset(left, y), Offset(right, y), 1.dp.toPx())
+            }
+            val firstMinute = sorted.first().localTime.toSecondOfDay() / 60
+            val lastMinute = sorted.last().localTime.toSecondOfDay() / 60
+            val span = (lastMinute - firstMinute).coerceAtLeast(1)
+            fun xFor(point: AttractionWaitForecastPoint): Float {
+                val minute = point.localTime.toSecondOfDay() / 60
+                return left + ((minute - firstMinute).toFloat() / span.toFloat()) * (right - left)
+            }
+            fun yFor(wait: Int): Float = bottom - (wait.toFloat() / maxWait.toFloat()).coerceIn(0f, 1f) * (bottom - top)
+            val path = Path()
+            sorted.forEachIndexed { index, point ->
+                val x = xFor(point)
+                val y = yFor(point.expectedWaitMinutes)
+                if (index == 0) path.moveTo(x, y) else path.lineTo(x, y)
+            }
+            drawPath(path, Color(0xFF2E7D32), style = Stroke(width = 3.dp.toPx()))
+            sorted.forEach { point ->
+                drawCircle(Color(0xFF2E7D32), 3.5.dp.toPx(), Offset(xFor(point), yFor(point.expectedWaitMinutes)))
+            }
+        }
+        }
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(start = 42.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+        ) {
+            axisTimes.forEach { time ->
+                Text(
+                    time.format(DateTimeFormatter.ofPattern("HH:mm")),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
             }
         }
     }
@@ -643,7 +888,7 @@ private fun FilterSection(
                             if (minutes == null) {
                                 if (language == "en") "All" else "Alle"
                             } else {
-                                "≤ $minutes"
+                                "â‰¤ $minutes"
                             },
                             style = MaterialTheme.typography.labelSmall
                         )
@@ -750,7 +995,7 @@ private fun ParkHeaderSection(
 
     val dateTimeFormatter = remember(language) {
         DateTimeFormatter.ofPattern(
-            if (language == "en") "EEE, MMM d yyyy '•' HH:mm" else "EEE, dd.MM.yyyy '•' HH:mm 'Uhr'",
+            if (language == "en") "EEE, MMM d yyyy 'â€¢' HH:mm" else "EEE, dd.MM.yyyy 'â€¢' HH:mm 'Uhr'",
             if (language == "en") Locale.ENGLISH else Locale.GERMAN,
         )
     }
@@ -796,9 +1041,9 @@ private fun ParkHeaderSection(
                 Column(modifier = Modifier.padding(top = 8.dp)) {
                     Text(
                         text = if (language == "en") {
-                            "Weather: ${String.format(Locale.getDefault(), "%.0f", it.temperature)}°C • Rain: ${it.precipitationProbability}%"
+                            "Weather: ${String.format(Locale.getDefault(), "%.0f", it.temperature)}°C · Rain: ${it.precipitationProbability}%"
                         } else {
-                            "Wetter: ${String.format(Locale.getDefault(), "%.0f", it.temperature)}°C • Regen: ${it.precipitationProbability}%"
+                            "Wetter: ${String.format(Locale.getDefault(), "%.0f", it.temperature)}°C · Regen: ${it.precipitationProbability}%"
                         },
                         style = MaterialTheme.typography.labelSmall,
                         color = contentColor.copy(alpha = 0.8f)
@@ -833,6 +1078,7 @@ private fun WaitingTimeRow(
     onTogglePlanned: (String) -> Unit,
     onAddWatchlist: (String) -> Unit,
     onStatisticsClick: (String) -> Unit,
+    onOpenDetail: (String) -> Unit,
     language: String,
 ) {
     val waitTimeColor = when {
@@ -843,7 +1089,9 @@ private fun WaitingTimeRow(
     }
 
     OutlinedCard(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable { onOpenDetail(item.attractionId) },
         shape = RoundedCornerShape(12.dp),
         colors = CardDefaults.outlinedCardColors(
             containerColor = MaterialTheme.colorScheme.surface,
@@ -1143,6 +1391,9 @@ private fun shareParkDetail(context: Context, state: WaitingTimesUiState) {
             }
         }
         appendLine()
+        appendLine(liveParkLink(park.id))
+        appendLine("Web: https://wartezeiten-app.tutorialfynn.workers.dev/")
+        appendLine()
         append(if (state.language == "en") "Shared from Wartezeiten App" else "Geteilt aus der Wartezeiten App")
     }
     val intent = Intent(Intent.ACTION_SEND).apply {
@@ -1152,6 +1403,31 @@ private fun shareParkDetail(context: Context, state: WaitingTimesUiState) {
     }
     context.startActivity(Intent.createChooser(intent, if (state.language == "en") "Share park overview" else "Parkübersicht teilen"))
 }
+
+private fun shareAttractionDetail(context: Context, park: Park, item: WaitingTime, language: String) {
+    val text = buildString {
+        appendLine(item.name)
+        appendLine(park.name)
+        appendLine("Status: ${item.status.label(language)}")
+        item.waitingTime?.let { wait ->
+            appendLine(if (language == "en") "Current wait: $wait min" else "Aktuelle Wartezeit: $wait Min.")
+        }
+        appendLine()
+        appendLine(liveAttractionLink(park.id, item.attractionId))
+        appendLine("Web: https://wartezeiten-app.tutorialfynn.workers.dev/")
+    }
+    val intent = Intent(Intent.ACTION_SEND).apply {
+        type = "text/plain"
+        putExtra(Intent.EXTRA_SUBJECT, "${park.name} · ${item.name}")
+        putExtra(Intent.EXTRA_TEXT, text)
+    }
+    context.startActivity(Intent.createChooser(intent, if (language == "en") "Share attraction link" else "Attraktionslink teilen"))
+}
+
+private fun liveParkLink(parkKey: String): String = "wartezeiten://parks/${Uri.encode(parkKey)}"
+
+private fun liveAttractionLink(parkKey: String, attractionId: String): String =
+    "wartezeiten://parks/${Uri.encode(parkKey)}?attractionId=${Uri.encode(attractionId)}"
 
 private fun Long?.cacheAgeLabel(language: String): String {
     val minutes = this ?: return if (language == "en") "unknown" else "unbekannt"
@@ -1274,8 +1550,8 @@ private fun emptyAttractionMessage(state: WaitingTimesUiState): String {
 }
 
 private fun WaitingTimesSort.label(language: String) = when (this) {
-    WaitingTimesSort.WaitAscending -> if (language == "en") "Wait time ↑" else "Wartezeit ↑"
-    WaitingTimesSort.WaitDescending -> if (language == "en") "Wait time ↓" else "Wartezeit ↓"
+    WaitingTimesSort.WaitAscending -> if (language == "en") "Wait time â†‘" else "Wartezeit â†‘"
+    WaitingTimesSort.WaitDescending -> if (language == "en") "Wait time â†“" else "Wartezeit â†“"
     WaitingTimesSort.Name -> "Name A-Z"
 }
 

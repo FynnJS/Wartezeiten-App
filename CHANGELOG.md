@@ -1,5 +1,13 @@
 # Changelog
 
+## v1.1.6 - 2026-06-23
+
+- Added attraction detail cards with status badge, historical wait chart, 1-3 hour wait forecast, personal Room-backed notes, direct Watchlist setup, and deep-link sharing for parks and attractions.
+- Moved park aliases into a maintainable local asset file.
+- Fixed central worker statistics so D1 cron collection no longer uses legacy history shards, stale upstream wait-time dates are skipped, and the statistics index only advertises days with deliverable measurement points.
+- Added worker tests for D1 cron sharding, stale wait-time filtering, and statistics index consistency.
+- Bumped Android release metadata to `versionCode 10106` / `versionName 1.1.6`.
+
 ## v1.1.4 - 2026-06-17
 
 - Fixed park-detail statistics so outdated central days are no longer shown as today's live park statistics.
