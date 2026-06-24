@@ -13,6 +13,7 @@ const DEFAULT_ATTRACTION_HISTORY_SHARDS = 3;
 const DEFAULT_INDEX_UPDATE_INTERVAL_MILLIS = 60 * 60 * 1000;
 const DEFAULT_CRON_SHARDS = 3;
 const DEFAULT_PUSH_SCAN_LIMIT = 1000;
+const SUPPORTED_PUSH_LANGUAGES = new Set(["de", "en", "fr", "nl"]);
 const D1_SCHEMA_VERSION = 1;
 let cachedFcmAccessToken = null;
 
@@ -490,7 +491,8 @@ async function registerPushInstallation(env, payload) {
   ensurePushD1(env);
   const installationId = cleanString(payload?.installationId, 160);
   const token = cleanString(payload?.token, 512);
-  const language = cleanString(payload?.language, 8) === "en" ? "en" : "de";
+  const requestedLanguage = cleanString(payload?.language, 8);
+  const language = SUPPORTED_PUSH_LANGUAGES.has(requestedLanguage) ? requestedLanguage : "de";
   if (!installationId || !token) {
     return { ok: false, error: "installationId and token are required" };
   }
@@ -706,8 +708,16 @@ async function runPushWatchlistScan(env) {
   return { ok: true, scannedParks, alerts: rows.length, sent, errors };
 }
 
+function localizedPushText(language, variants) {
+  if (language === "en") return variants.en;
+  if (language === "fr") return variants.fr;
+  if (language === "nl") return variants.nl;
+  return variants.de;
+}
+
 function evaluatePushAlert(alert, snapshot) {
   const type = String(alert.type || "");
+  const language = String(alert.language || "de");
   const threshold = Number(alert.threshold_value ?? 0);
   const isParkOpen = isParkOpenNow(snapshot, Date.now());
   const openAttractions = snapshot.attractions.filter((item) => item.statusCode === 0);
@@ -716,23 +726,85 @@ function evaluatePushAlert(alert, snapshot) {
     : null;
 
   if (type === "NOW_OPENED") {
-    return booleanEvaluation(alert, isParkOpen, `Einlass bereit: ${snapshot.parkKey}`, "Der Park ist aktuell als geoeffnet gemeldet.", null);
+    return booleanEvaluation(
+      alert,
+      isParkOpen,
+      localizedPushText(language, {
+        de: `Einlass bereit: ${snapshot.parkKey}`,
+        en: `Ready to enter: ${snapshot.parkKey}`,
+        fr: `Entrée prête : ${snapshot.parkKey}`,
+        nl: `Klaar om naar binnen te gaan: ${snapshot.parkKey}`,
+      }),
+      localizedPushText(language, {
+        de: "Der Park ist aktuell als geoeffnet gemeldet.",
+        en: "The park is currently reported as open.",
+        fr: "Le parc est actuellement signalé comme ouvert.",
+        nl: "Het park wordt momenteel als geopend gemeld.",
+      }),
+      null,
+    );
   }
   if (type === "PARK_STATUS_CHANGED") {
     const state = isParkOpen ? "open" : "closed";
-    return valueEvaluation(alert, state, false, `${snapshot.parkKey} im Park-Ticker`, isParkOpen ? "Heute geoeffnet. Pruefe jetzt deine Route." : "Aktuell geschlossen. Plane lieber um.", null);
+    return valueEvaluation(
+      alert,
+      state,
+      false,
+      localizedPushText(language, {
+        de: `${snapshot.parkKey} im Park-Ticker`,
+        en: `${snapshot.parkKey} status ticker`,
+        fr: `${snapshot.parkKey} : ticker du parc`,
+        nl: `${snapshot.parkKey} parkticker`,
+      }),
+      isParkOpen
+        ? localizedPushText(language, {
+          de: "Heute geoeffnet. Pruefe jetzt deine Route.",
+          en: "Open today. Check your route now.",
+          fr: "Ouvert aujourd'hui. Vérifie ton itinéraire maintenant.",
+          nl: "Vandaag open. Bekijk nu je route.",
+        })
+        : localizedPushText(language, {
+          de: "Aktuell geschlossen. Plane lieber um.",
+          en: "Currently closed. Better plan around it.",
+          fr: "Actuellement fermé. Mieux vaut prévoir autre chose.",
+          nl: "Momenteel gesloten. Plan beter om.",
+        }),
+      null,
+    );
   }
   if (type === "CROWD_LEVEL_BELOW" || type === "CROWD_LEVEL_ABOVE") {
     const crowd = snapshot.displayCrowdLevel;
     const triggered = isParkOpen && crowd != null && (
       type === "CROWD_LEVEL_BELOW" ? crowd <= threshold : crowd >= threshold
     );
-    const direction = type === "CROWD_LEVEL_BELOW" ? "unter" : "ueber";
+    const crowdText = crowd == null
+      ? localizedPushText(language, { de: "unbekannt", en: "unknown", fr: "inconnue", nl: "onbekend" })
+      : `${Math.round(crowd)}%`;
+    const direction = type === "CROWD_LEVEL_BELOW"
+      ? localizedPushText(language, { de: "unter", en: "below", fr: "sous", nl: "onder" })
+      : localizedPushText(language, { de: "ueber", en: "above", fr: "au-dessus de", nl: "boven" });
     return booleanEvaluation(
       alert,
       triggered,
-      type === "CROWD_LEVEL_BELOW" ? `Entspannter Park: ${snapshot.parkKey}` : `Andrang-Warnung: ${snapshot.parkKey}`,
-      `Auslastung ${crowd == null ? "unbekannt" : `${Math.round(crowd)}%`} und damit ${direction} deinem Grenzwert.`,
+      type === "CROWD_LEVEL_BELOW"
+        ? localizedPushText(language, {
+          de: `Entspannter Park: ${snapshot.parkKey}`,
+          en: `Quiet park: ${snapshot.parkKey}`,
+          fr: `Parc tranquille : ${snapshot.parkKey}`,
+          nl: `Rustig park: ${snapshot.parkKey}`,
+        })
+        : localizedPushText(language, {
+          de: `Andrang-Warnung: ${snapshot.parkKey}`,
+          en: `Crowd warning: ${snapshot.parkKey}`,
+          fr: `Alerte affluence : ${snapshot.parkKey}`,
+          nl: `Drukte-waarschuwing: ${snapshot.parkKey}`,
+        }),
+      localizedPushText(language, {
+        de: `Auslastung ${crowdText} und damit ${direction} deinem Grenzwert.`,
+        en: `Crowd level ${crowdText}, which is ${direction} your threshold.`,
+        fr: `Niveau de fréquentation ${crowdText}, soit ${direction} ton seuil.`,
+        nl: `Drukte ${crowdText}, dat is ${direction} jouw drempel.`,
+      }),
       null,
     );
   }
@@ -743,12 +815,30 @@ function evaluatePushAlert(alert, snapshot) {
       `openAttractions=${openAttractions.length}`,
       `totalAttractions=${snapshot.attractions.length}`,
     ].join("|");
+    const crowdSuffix = snapshot.displayCrowdLevel == null
+      ? ""
+      : localizedPushText(language, {
+        de: `, Auslastung ${Math.round(snapshot.displayCrowdLevel)}%`,
+        en: `, crowd level ${Math.round(snapshot.displayCrowdLevel)}%`,
+        fr: `, fréquentation ${Math.round(snapshot.displayCrowdLevel)}%`,
+        nl: `, drukte ${Math.round(snapshot.displayCrowdLevel)}%`,
+      });
     return valueEvaluation(
       alert,
       state,
       false,
-      `Park-Aenderung: ${snapshot.parkKey}`,
-      `${openAttractions.length} von ${snapshot.attractions.length} Attraktionen offen${snapshot.displayCrowdLevel == null ? "" : `, Auslastung ${Math.round(snapshot.displayCrowdLevel)}%`}.`,
+      localizedPushText(language, {
+        de: `Park-Aenderung: ${snapshot.parkKey}`,
+        en: `Park change: ${snapshot.parkKey}`,
+        fr: `Changement au parc : ${snapshot.parkKey}`,
+        nl: `Parkwijziging: ${snapshot.parkKey}`,
+      }),
+      localizedPushText(language, {
+        de: `${openAttractions.length} von ${snapshot.attractions.length} Attraktionen offen${crowdSuffix}.`,
+        en: `${openAttractions.length} of ${snapshot.attractions.length} attractions open${crowdSuffix}.`,
+        fr: `${openAttractions.length} sur ${snapshot.attractions.length} attractions ouvertes${crowdSuffix}.`,
+        nl: `${openAttractions.length} van ${snapshot.attractions.length} attracties open${crowdSuffix}.`,
+      }),
       null,
     );
   }
@@ -756,12 +846,33 @@ function evaluatePushAlert(alert, snapshot) {
     const local = parkLocalDateParts(Date.now(), snapshot.openFrom);
     if (local.hour !== 18) return null;
     const state = `summary=${local.date}`;
+    const openText = isParkOpen
+      ? localizedPushText(language, { de: "Park geoeffnet", en: "Park open", fr: "Parc ouvert", nl: "Park open" })
+      : localizedPushText(language, { de: "Park geschlossen", en: "Park closed", fr: "Parc fermé", nl: "Park gesloten" });
+    const crowdSuffix = snapshot.displayCrowdLevel == null
+      ? ""
+      : localizedPushText(language, {
+        de: `, Auslastung ${Math.round(snapshot.displayCrowdLevel)}%`,
+        en: `, crowd level ${Math.round(snapshot.displayCrowdLevel)}%`,
+        fr: `, fréquentation ${Math.round(snapshot.displayCrowdLevel)}%`,
+        nl: `, drukte ${Math.round(snapshot.displayCrowdLevel)}%`,
+      });
     return valueEvaluation(
       alert,
       state,
       true,
-      `Tagesblick: ${snapshot.parkKey}`,
-      `${isParkOpen ? "Park geoeffnet" : "Park geschlossen"}, ${openAttractions.length} von ${snapshot.attractions.length} Attraktionen offen${snapshot.displayCrowdLevel == null ? "" : `, Auslastung ${Math.round(snapshot.displayCrowdLevel)}%`}.`,
+      localizedPushText(language, {
+        de: `Tagesblick: ${snapshot.parkKey}`,
+        en: `Daily summary: ${snapshot.parkKey}`,
+        fr: `Résumé du jour : ${snapshot.parkKey}`,
+        nl: `Dagoverzicht: ${snapshot.parkKey}`,
+      }),
+      localizedPushText(language, {
+        de: `${openText}, ${openAttractions.length} von ${snapshot.attractions.length} Attraktionen offen${crowdSuffix}.`,
+        en: `${openText}, ${openAttractions.length} of ${snapshot.attractions.length} attractions open${crowdSuffix}.`,
+        fr: `${openText}, ${openAttractions.length} sur ${snapshot.attractions.length} attractions ouvertes${crowdSuffix}.`,
+        nl: `${openText}, ${openAttractions.length} van ${snapshot.attractions.length} attracties open${crowdSuffix}.`,
+      }),
       null,
     );
   }
@@ -773,11 +884,35 @@ function evaluatePushAlert(alert, snapshot) {
     const triggered = Boolean(selected) && (
       type === "WAIT_TIME_BELOW" ? selected.value <= threshold : selected.value >= threshold
     );
+    const name = selected?.name ?? snapshot.parkKey;
+    const fallbackName = localizedPushText(language, {
+      de: "Eine Attraktion",
+      en: "An attraction",
+      fr: "Une attraction",
+      nl: "Een attractie",
+    });
     return booleanEvaluation(
       alert,
       triggered,
-      type === "WAIT_TIME_BELOW" ? `Ride-Fenster: ${selected?.name ?? snapshot.parkKey}` : `Zu voll: ${selected?.name ?? snapshot.parkKey}`,
-      `${selected?.name ?? "Eine Attraktion"} liegt bei ${selected?.value ?? "?"} Min.`,
+      type === "WAIT_TIME_BELOW"
+        ? localizedPushText(language, {
+          de: `Ride-Fenster: ${name}`,
+          en: `Ride window: ${name}`,
+          fr: `Créneau favorable : ${name}`,
+          nl: `Rijvenster: ${name}`,
+        })
+        : localizedPushText(language, {
+          de: `Zu voll: ${name}`,
+          en: `Too crowded: ${name}`,
+          fr: `Trop d'affluence : ${name}`,
+          nl: `Te druk: ${name}`,
+        }),
+      localizedPushText(language, {
+        de: `${selected?.name ?? fallbackName} liegt bei ${selected?.value ?? "?"} Min.`,
+        en: `${selected?.name ?? fallbackName} is at ${selected?.value ?? "?"} min.`,
+        fr: `${selected?.name ?? fallbackName} est à ${selected?.value ?? "?"} min.`,
+        nl: `${selected?.name ?? fallbackName} staat op ${selected?.value ?? "?"} min.`,
+      }),
       selected?.id ?? target?.id ?? null,
     );
   }
@@ -791,21 +926,96 @@ function evaluatePushAlert(alert, snapshot) {
     if (!target) return null;
     const status = normalizedAttractionStatus(target);
     if (type === "ATTRACTION_OPEN") {
-      return booleanEvaluation(alert, status === "opened", `Wieder offen: ${target.name}`, "Wenn sie auf deiner Liste steht: jetzt hin.", target.id);
+      return booleanEvaluation(
+        alert,
+        status === "opened",
+        localizedPushText(language, {
+          de: `Wieder offen: ${target.name}`,
+          en: `Open again: ${target.name}`,
+          fr: `De nouveau ouvert : ${target.name}`,
+          nl: `Weer open: ${target.name}`,
+        }),
+        localizedPushText(language, {
+          de: "Wenn sie auf deiner Liste steht: jetzt hin.",
+          en: "If it's on your list: go now.",
+          fr: "Si elle est sur ta liste : vas-y maintenant.",
+          nl: "Als hij op je lijst staat: ga er nu naartoe.",
+        }),
+        target.id,
+      );
     }
     if (type === "ATTRACTION_CLOSED") {
-      return booleanEvaluation(alert, status === "closed", `Gerade zu: ${target.name}`, "Spar dir den Weg und nimm eine Alternative.", target.id);
+      return booleanEvaluation(
+        alert,
+        status === "closed",
+        localizedPushText(language, {
+          de: `Gerade zu: ${target.name}`,
+          en: `Just closed: ${target.name}`,
+          fr: `Vient de fermer : ${target.name}`,
+          nl: `Net gesloten: ${target.name}`,
+        }),
+        localizedPushText(language, {
+          de: "Spar dir den Weg und nimm eine Alternative.",
+          en: "Save the trip and pick an alternative.",
+          fr: "Évite le détour et choisis une alternative.",
+          nl: "Bespaar je de moeite en kies een alternatief.",
+        }),
+        target.id,
+      );
     }
     if (type === "ATTRACTION_MAINTENANCE") {
-      return booleanEvaluation(alert, status === "maintenance", `Technikpause: ${target.name}`, "Plane die Attraktion spaeter nochmal ein.", target.id);
+      return booleanEvaluation(
+        alert,
+        status === "maintenance",
+        localizedPushText(language, {
+          de: `Technikpause: ${target.name}`,
+          en: `Maintenance break: ${target.name}`,
+          fr: `Pause technique : ${target.name}`,
+          nl: `Technische pauze: ${target.name}`,
+        }),
+        localizedPushText(language, {
+          de: "Plane die Attraktion spaeter nochmal ein.",
+          en: "Plan to come back to this attraction later.",
+          fr: "Prévois de revenir à cette attraction plus tard.",
+          nl: "Plan deze attractie later opnieuw in.",
+        }),
+        target.id,
+      );
     }
     const state = type === "ATTRACTION_ALL_CHANGES" ? `${status}|wait=${target.value}` : status;
+    const waitText = hasOpenWait(target)
+      ? localizedPushText(language, {
+        de: `${target.value} Min.`,
+        en: `${target.value} min`,
+        fr: `${target.value} min`,
+        nl: `${target.value} min`,
+      })
+      : localizedPushText(language, {
+        de: "keine Wartezeit",
+        en: "no wait time",
+        fr: "pas de temps d'attente",
+        nl: "geen wachttijd",
+      });
     return valueEvaluation(
       alert,
       state,
       type === "ATTRACTION_STATUS_CHANGE" && status === "opened",
-      type === "ATTRACTION_ALL_CHANGES" ? `Aenderung: ${target.name}` : `Status-Radar: ${target.name}`,
-      type === "ATTRACTION_ALL_CHANGES" ? `${target.name}: ${status}, ${hasOpenWait(target) ? `${target.value} Min.` : "keine Wartezeit"}` : readablePushStatus(status),
+      type === "ATTRACTION_ALL_CHANGES"
+        ? localizedPushText(language, {
+          de: `Aenderung: ${target.name}`,
+          en: `Change: ${target.name}`,
+          fr: `Changement : ${target.name}`,
+          nl: `Wijziging: ${target.name}`,
+        })
+        : localizedPushText(language, {
+          de: `Status-Radar: ${target.name}`,
+          en: `Status radar: ${target.name}`,
+          fr: `Radar de statut : ${target.name}`,
+          nl: `Statusradar: ${target.name}`,
+        }),
+      type === "ATTRACTION_ALL_CHANGES"
+        ? `${target.name}: ${status}, ${waitText}`
+        : readablePushStatus(status, language),
       type === "ATTRACTION_ALL_CHANGES" ? null : target.id,
     );
   }
@@ -1010,11 +1220,37 @@ function normalizedAttractionStatus(item) {
   return String(item.status || "unknown").toLowerCase();
 }
 
-function readablePushStatus(status) {
-  if (status === "opened") return "Wieder offen. Wenn sie auf deiner Liste steht: jetzt hin.";
-  if (status === "closed") return "Gerade geschlossen. Spar dir den Weg und nimm eine Alternative.";
-  if (status === "maintenance") return "Technikpause gemeldet. Plane die Attraktion spaeter nochmal ein.";
-  return `Status geaendert: ${status}`;
+function readablePushStatus(status, language) {
+  if (status === "opened") {
+    return localizedPushText(language, {
+      de: "Wieder offen. Wenn sie auf deiner Liste steht: jetzt hin.",
+      en: "Open again. If it's on your list: go now.",
+      fr: "De nouveau ouvert. Si elle est sur ta liste : vas-y maintenant.",
+      nl: "Weer open. Als hij op je lijst staat: ga er nu naartoe.",
+    });
+  }
+  if (status === "closed") {
+    return localizedPushText(language, {
+      de: "Gerade geschlossen. Spar dir den Weg und nimm eine Alternative.",
+      en: "Just closed. Save the trip and pick an alternative.",
+      fr: "Vient de fermer. Évite le détour et choisis une alternative.",
+      nl: "Net gesloten. Bespaar je de moeite en kies een alternatief.",
+    });
+  }
+  if (status === "maintenance") {
+    return localizedPushText(language, {
+      de: "Technikpause gemeldet. Plane die Attraktion spaeter nochmal ein.",
+      en: "Maintenance reported. Plan to come back to this attraction later.",
+      fr: "Pause technique signalée. Prévois de revenir à cette attraction plus tard.",
+      nl: "Technische pauze gemeld. Plan deze attractie later opnieuw in.",
+    });
+  }
+  return localizedPushText(language, {
+    de: `Status geaendert: ${status}`,
+    en: `Status changed: ${status}`,
+    fr: `Statut modifié : ${status}`,
+    nl: `Status gewijzigd: ${status}`,
+  });
 }
 
 function hasFcmConfig(env) {
@@ -2010,6 +2246,7 @@ export {
   buildStatisticsIndexFromD1Rows,
   cronParkShard,
   deriveAttractionSnapshotTiming,
+  evaluatePushAlert,
   mergeStatisticsIndexes,
   scheduledHistoryShardIndex,
   scheduledShardIndex,

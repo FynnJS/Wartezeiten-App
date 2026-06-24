@@ -25,6 +25,8 @@ import de.wartezeiten.app.data.local.PreferencesDataSource
 import de.wartezeiten.app.data.local.entity.AlertHistoryEntity
 import de.wartezeiten.app.data.local.entity.WatchlistEntity
 import de.wartezeiten.app.data.local.entity.WatchlistType
+import de.wartezeiten.app.core.i18n.localized
+import de.wartezeiten.app.core.network.toApiLanguage
 import de.wartezeiten.app.data.remote.WartezeitenApiService
 import de.wartezeiten.app.data.remote.dto.WaitingTimeDto
 import de.wartezeiten.app.MainActivity
@@ -89,7 +91,7 @@ class NotificationWorker @AssistedInject constructor(
             runCatching {
                 val parkName = parkNames[parkKey] ?: parkKey
                 val openingResult = watchlistApiCall("/v1/openingtimes") { api.getOpeningTimes(parkKey) }
-                val waitingResult = watchlistApiCall("/v1/waitingtimes") { api.getWaitingTimes(parkKey, language) }
+                val waitingResult = watchlistApiCall("/v1/waitingtimes") { api.getWaitingTimes(parkKey, language.toApiLanguage()) }
                 val crowdResult = watchlistApiCall("/v1/crowdlevel") { api.getCrowdLevel(parkKey) }
                 if (
                     openingResult is WatchlistApiResult.Failure &&
@@ -117,7 +119,7 @@ class NotificationWorker @AssistedInject constructor(
                 }
 
                 if (isParkOpen != null) {
-                    collectParkNotifications(parkKey, parkName, isParkOpen, eligibleAlerts, notifications)
+                    collectParkNotifications(parkKey, parkName, isParkOpen, eligibleAlerts, notifications, language)
                 }
 
                 val crowdValue = (crowdResult as? WatchlistApiResult.Success)
@@ -125,7 +127,7 @@ class NotificationWorker @AssistedInject constructor(
                     ?.crowdLevel
                     ?.replace(",", ".")
                     ?.toFloatOrNull()
-                collectCrowdNotifications(parkKey, parkName, isParkOpen == true, crowdValue, eligibleAlerts, notifications)
+                collectCrowdNotifications(parkKey, parkName, isParkOpen == true, crowdValue, eligibleAlerts, notifications, language)
                 collectParkAllChangeNotifications(
                     parkKey = parkKey,
                     parkName = parkName,
@@ -134,6 +136,7 @@ class NotificationWorker @AssistedInject constructor(
                     waitingTimes = liveWaitingTimes,
                     alerts = eligibleAlerts,
                     notifications = notifications,
+                    language = language,
                 )
                 collectDailySummaryNotifications(
                     parkKey = parkKey,
@@ -144,12 +147,13 @@ class NotificationWorker @AssistedInject constructor(
                     openingOffsetSource = opening?.opening,
                     alerts = eligibleAlerts,
                     notifications = notifications,
+                    language = language,
                 )
 
                 if (canUseLiveAttractionAlerts) {
-                    collectWaitBelowNotifications(parkKey, parkName, liveWaitingTimes, eligibleAlerts, notifications)
-                    collectWaitAboveNotifications(parkKey, parkName, liveWaitingTimes, eligibleAlerts, notifications)
-                    collectStatusNotifications(parkKey, parkName, liveWaitingTimes, eligibleAlerts, notifications)
+                    collectWaitBelowNotifications(parkKey, parkName, liveWaitingTimes, eligibleAlerts, notifications, language)
+                    collectWaitAboveNotifications(parkKey, parkName, liveWaitingTimes, eligibleAlerts, notifications, language)
+                    collectStatusNotifications(parkKey, parkName, liveWaitingTimes, eligibleAlerts, notifications, language)
                 }
             }.onFailure {
                 logger.log(Level.WARNING, "Watchlist notification scan failed for park $parkKey", it)
@@ -157,7 +161,7 @@ class NotificationWorker @AssistedInject constructor(
         }
 
         if (notifications.isNotEmpty()) {
-            if (sendNotifications(notifications)) {
+            if (sendNotifications(notifications, language)) {
                 val completedOneShotIds = notifications.filter { it.notifyOnce }.map { it.alertId }.distinct()
                 completedOneShotIds.forEach { alertId ->
                     watchlistDao.setEnabled(alertId, false)
@@ -177,6 +181,7 @@ class NotificationWorker @AssistedInject constructor(
         isParkOpen: Boolean,
         alerts: List<WatchlistEntity>,
         notifications: MutableList<WatchlistNotification>,
+        language: String,
     ) {
         alerts.filter { it.type == WatchlistType.NOW_OPENED }.forEach { alert ->
             if (shouldNotifyBoolean(alert, isParkOpen)) {
@@ -184,8 +189,20 @@ class NotificationWorker @AssistedInject constructor(
                     WatchlistNotification(
                         alertId = alert.id,
                         notifyOnce = alert.notifyOnce,
-                        title = "Einlass bereit: $parkName",
-                        content = "Der Park ist heute geöffnet. Prüfe jetzt Wartezeiten und starte mit den kurzen Wegen.",
+                        title = localized(
+                            language,
+                            de = "Einlass bereit: $parkName",
+                            en = "Ready to enter: $parkName",
+                            fr = "Entrée prête : $parkName",
+                            nl = "Klaar om naar binnen te gaan: $parkName",
+                        ),
+                        content = localized(
+                            language,
+                            de = "Der Park ist heute geöffnet. Prüfe jetzt Wartezeiten und starte mit den kurzen Wegen.",
+                            en = "The park is open today. Check wait times now and start with the shortest ones.",
+                            fr = "Le parc est ouvert aujourd'hui. Vérifie les temps d'attente et commence par les plus courts.",
+                            nl = "Het park is vandaag open. Bekijk nu de wachttijden en begin met de kortste.",
+                        ),
                         parkKey = parkKey,
                         parkName = parkName,
                     )
@@ -200,11 +217,29 @@ class NotificationWorker @AssistedInject constructor(
                     WatchlistNotification(
                         alertId = alert.id,
                         notifyOnce = alert.notifyOnce,
-                        title = "$parkName im Park-Ticker",
+                        title = localized(
+                            language,
+                            de = "$parkName im Park-Ticker",
+                            en = "$parkName status ticker",
+                            fr = "$parkName : ticker du parc",
+                            nl = "$parkName parkticker",
+                        ),
                         content = if (isParkOpen) {
-                            "Heute geöffnet. Ein guter Moment, deine Route zu checken."
+                            localized(
+                                language,
+                                de = "Heute geöffnet. Ein guter Moment, deine Route zu checken.",
+                                en = "Open today. A good moment to check your route.",
+                                fr = "Ouvert aujourd'hui. Un bon moment pour vérifier ton itinéraire.",
+                                nl = "Vandaag open. Een goed moment om je route te checken.",
+                            )
                         } else {
-                            "Heute geschlossen. Spar dir den Weg und plane um."
+                            localized(
+                                language,
+                                de = "Heute geschlossen. Spar dir den Weg und plane um.",
+                                en = "Closed today. Save the trip and plan around it.",
+                                fr = "Fermé aujourd'hui. Évite le déplacement et prévois autre chose.",
+                                nl = "Vandaag gesloten. Bespaar je de moeite en plan om.",
+                            )
                         },
                         parkKey = parkKey,
                         parkName = parkName,
@@ -221,6 +256,7 @@ class NotificationWorker @AssistedInject constructor(
         crowdValue: Float?,
         alerts: List<WatchlistEntity>,
         notifications: MutableList<WatchlistNotification>,
+        language: String,
     ) {
         alerts.filter { it.type == WatchlistType.CROWD_LEVEL_BELOW }.forEach { alert ->
             val triggered = isParkOpen && crowdValue != null && crowdValue <= alert.threshold
@@ -229,8 +265,20 @@ class NotificationWorker @AssistedInject constructor(
                     WatchlistNotification(
                         alertId = alert.id,
                         notifyOnce = alert.notifyOnce,
-                        title = "Entspannter Park: $parkName",
-                        content = "Auslastung bei ${crowdValue?.formatPercent() ?: "?"}%. Gute Zeit für Favoriten, Fotos oder die nächste Runde.",
+                        title = localized(
+                            language,
+                            de = "Entspannter Park: $parkName",
+                            en = "Quiet park: $parkName",
+                            fr = "Parc tranquille : $parkName",
+                            nl = "Rustig park: $parkName",
+                        ),
+                        content = localized(
+                            language,
+                            de = "Auslastung bei ${crowdValue?.formatPercent() ?: "?"}%. Gute Zeit für Favoriten, Fotos oder die nächste Runde.",
+                            en = "Crowd level at ${crowdValue?.formatPercent() ?: "?"}%. A good time for favorites, photos, or another round.",
+                            fr = "Fréquentation à ${crowdValue?.formatPercent() ?: "?"}%. Bon moment pour tes attractions favorites, des photos ou un nouveau tour.",
+                            nl = "Drukte op ${crowdValue?.formatPercent() ?: "?"}%. Goed moment voor favorieten, foto's of nog een rondje.",
+                        ),
                         parkKey = parkKey,
                         parkName = parkName,
                     )
@@ -245,8 +293,20 @@ class NotificationWorker @AssistedInject constructor(
                     WatchlistNotification(
                         alertId = alert.id,
                         notifyOnce = alert.notifyOnce,
-                        title = "Andrang-Warnung: $parkName",
-                        content = "Auslastung bei ${crowdValue?.formatPercent() ?: "?"}%. Plane Snackpause, Shows oder ruhigere Ecken ein.",
+                        title = localized(
+                            language,
+                            de = "Andrang-Warnung: $parkName",
+                            en = "Crowd warning: $parkName",
+                            fr = "Alerte affluence : $parkName",
+                            nl = "Drukte-waarschuwing: $parkName",
+                        ),
+                        content = localized(
+                            language,
+                            de = "Auslastung bei ${crowdValue?.formatPercent() ?: "?"}%. Plane Snackpause, Shows oder ruhigere Ecken ein.",
+                            en = "Crowd level at ${crowdValue?.formatPercent() ?: "?"}%. Plan a snack break, shows, or quieter corners.",
+                            fr = "Fréquentation à ${crowdValue?.formatPercent() ?: "?"}%. Prévois une pause snack, des spectacles ou des coins plus calmes.",
+                            nl = "Drukte op ${crowdValue?.formatPercent() ?: "?"}%. Plan een snackpauze, shows of rustigere hoekjes.",
+                        ),
                         parkKey = parkKey,
                         parkName = parkName,
                     )
@@ -263,6 +323,7 @@ class NotificationWorker @AssistedInject constructor(
         waitingTimes: List<WaitingTimeDto>,
         alerts: List<WatchlistEntity>,
         notifications: MutableList<WatchlistNotification>,
+        language: String,
     ) {
         alerts.filter { it.type == WatchlistType.PARK_ALL_CHANGES }.forEach { alert ->
             val openAttractions = waitingTimes.count { it.normalizedStatus() == "opened" }
@@ -278,12 +339,19 @@ class NotificationWorker @AssistedInject constructor(
                     WatchlistNotification(
                         alertId = alert.id,
                         notifyOnce = alert.notifyOnce,
-                        title = "Park-Änderung: $parkName",
+                        title = localized(
+                            language,
+                            de = "Park-Änderung: $parkName",
+                            en = "Park change: $parkName",
+                            fr = "Changement au parc : $parkName",
+                            nl = "Parkwijziging: $parkName",
+                        ),
                         content = buildParkChangeNotificationContent(
                             isParkOpen = isParkOpen,
                             crowdValue = crowdValue,
                             openAttractions = openAttractions,
                             totalAttractions = totalAttractions,
+                            language = language,
                         ),
                         parkKey = parkKey,
                         parkName = parkName,
@@ -299,6 +367,7 @@ class NotificationWorker @AssistedInject constructor(
         waitingTimes: List<WaitingTimeDto>,
         alerts: List<WatchlistEntity>,
         notifications: MutableList<WatchlistNotification>,
+        language: String,
     ) {
         alerts.filter { it.type == WatchlistType.WAIT_TIME_BELOW }.forEach { alert ->
             val target = alert.attractionId?.let { id ->
@@ -312,12 +381,41 @@ class NotificationWorker @AssistedInject constructor(
 
             if (shouldNotifyBoolean(alert, triggered)) {
                 val waitMinutes = best?.waitingTime ?: 0
+                val name = best?.safeName(language) ?: localized(
+                    language,
+                    de = "Eine Attraktion",
+                    en = "An attraction",
+                    fr = "Une attraction",
+                    nl = "Een attractie",
+                )
                 notifications.add(
                     WatchlistNotification(
                         alertId = alert.id,
                         notifyOnce = alert.notifyOnce,
-                        title = if (target != null) "Ride-Fenster: ${target.safeName()}" else "Ride-Fenster in $parkName",
-                        content = "${best?.safeName() ?: "Eine Attraktion"} liegt bei $waitMinutes Min. Jetzt lohnt sich der Weg.",
+                        title = if (target != null) {
+                            localized(
+                                language,
+                                de = "Ride-Fenster: ${target.safeName(language)}",
+                                en = "Ride window: ${target.safeName(language)}",
+                                fr = "Créneau favorable : ${target.safeName(language)}",
+                                nl = "Rijvenster: ${target.safeName(language)}",
+                            )
+                        } else {
+                            localized(
+                                language,
+                                de = "Ride-Fenster in $parkName",
+                                en = "Ride window in $parkName",
+                                fr = "Créneau favorable à $parkName",
+                                nl = "Rijvenster in $parkName",
+                            )
+                        },
+                        content = localized(
+                            language,
+                            de = "$name liegt bei $waitMinutes Min. Jetzt lohnt sich der Weg.",
+                            en = "$name is at $waitMinutes min. Worth heading there now.",
+                            fr = "$name est à $waitMinutes min. Ça vaut le détour maintenant.",
+                            nl = "$name staat op $waitMinutes min. Nu de moeite waard.",
+                        ),
                         parkKey = parkKey,
                         parkName = parkName,
                         attractionId = best?.let(::normalizeAttractionId),
@@ -333,6 +431,7 @@ class NotificationWorker @AssistedInject constructor(
         waitingTimes: List<WaitingTimeDto>,
         alerts: List<WatchlistEntity>,
         notifications: MutableList<WatchlistNotification>,
+        language: String,
     ) {
         alerts.filter { it.type == WatchlistType.WAIT_TIME_ABOVE }.forEach { alert ->
             val target = alert.attractionId?.let { id ->
@@ -346,12 +445,41 @@ class NotificationWorker @AssistedInject constructor(
 
             if (shouldNotifyBoolean(alert, triggered)) {
                 val waitMinutes = longest?.waitingTime ?: 0
+                val name = longest?.safeName(language) ?: localized(
+                    language,
+                    de = "Eine Attraktion",
+                    en = "An attraction",
+                    fr = "Une attraction",
+                    nl = "Een attractie",
+                )
                 notifications.add(
                     WatchlistNotification(
                         alertId = alert.id,
                         notifyOnce = alert.notifyOnce,
-                        title = if (target != null) "Zu voll: ${target.safeName()}" else "Zu voll in $parkName",
-                        content = "${longest?.safeName() ?: "Eine Attraktion"} steht bei $waitMinutes Min. Lieber Route ändern oder später wiederkommen.",
+                        title = if (target != null) {
+                            localized(
+                                language,
+                                de = "Zu voll: ${target.safeName(language)}",
+                                en = "Too crowded: ${target.safeName(language)}",
+                                fr = "Trop d'affluence : ${target.safeName(language)}",
+                                nl = "Te druk: ${target.safeName(language)}",
+                            )
+                        } else {
+                            localized(
+                                language,
+                                de = "Zu voll in $parkName",
+                                en = "Too crowded in $parkName",
+                                fr = "Trop d'affluence à $parkName",
+                                nl = "Te druk in $parkName",
+                            )
+                        },
+                        content = localized(
+                            language,
+                            de = "$name steht bei $waitMinutes Min. Lieber Route ändern oder später wiederkommen.",
+                            en = "$name is at $waitMinutes min. Better change route or come back later.",
+                            fr = "$name est à $waitMinutes min. Mieux vaut changer d'itinéraire ou revenir plus tard.",
+                            nl = "$name staat op $waitMinutes min. Beter van route veranderen of later terugkomen.",
+                        ),
                         parkKey = parkKey,
                         parkName = parkName,
                         attractionId = longest?.let(::normalizeAttractionId),
@@ -367,6 +495,7 @@ class NotificationWorker @AssistedInject constructor(
         waitingTimes: List<WaitingTimeDto>,
         alerts: List<WatchlistEntity>,
         notifications: MutableList<WatchlistNotification>,
+        language: String,
     ) {
         alerts
             .filter {
@@ -400,15 +529,15 @@ class NotificationWorker @AssistedInject constructor(
 
                 if (shouldSend) {
                     val content = if (alert.type == WatchlistType.ATTRACTION_ALL_CHANGES) {
-                        current.toAttractionChangeContent()
+                        current.toAttractionChangeContent(language)
                     } else {
-                        current.safeStatus().toReadableStatus()
+                        current.safeStatus().toReadableStatus(language)
                     }
                     notifications.add(
                         WatchlistNotification(
                             alertId = alert.id,
                             notifyOnce = alert.notifyOnce,
-                            title = current.safeName().toStatusNotificationTitle(current.safeStatus()),
+                            title = current.safeName(language).toStatusNotificationTitle(current.safeStatus(), language),
                             content = content,
                             parkKey = parkKey,
                             parkName = parkName,
@@ -459,7 +588,7 @@ class NotificationWorker @AssistedInject constructor(
     }
 
     @SuppressLint("MissingPermission")
-    private fun sendNotifications(notifications: List<WatchlistNotification>): Boolean {
+    private fun sendNotifications(notifications: List<WatchlistNotification>, language: String): Boolean {
         if (!canPostNotifications()) return false
 
         val notificationManager = NotificationManagerCompat.from(applicationContext)
@@ -470,7 +599,13 @@ class NotificationWorker @AssistedInject constructor(
             val title = if (parkNotifications.size == 1) {
                 first.title
             } else {
-                "${parkNotifications.size} Park-Alarme für ${first.parkName}"
+                localized(
+                    language,
+                    de = "${parkNotifications.size} Park-Alarme für ${first.parkName}",
+                    en = "${parkNotifications.size} park alerts for ${first.parkName}",
+                    fr = "${parkNotifications.size} alertes de parc pour ${first.parkName}",
+                    nl = "${parkNotifications.size} parkmeldingen voor ${first.parkName}",
+                )
             }
             val content = if (parkNotifications.size == 1) {
                 first.content
@@ -499,8 +634,16 @@ class NotificationWorker @AssistedInject constructor(
         }
         val summary = NotificationCompat.Builder(applicationContext, CHANNEL_ID)
             .setSmallIcon(de.wartezeiten.app.R.drawable.ic_stat_notification)
-            .setContentTitle("${notifications.size} neue Park-Alarme")
-            .setContentText(groupedByPark.size.toParkCountText())
+            .setContentTitle(
+                localized(
+                    language,
+                    de = "${notifications.size} neue Park-Alarme",
+                    en = "${notifications.size} new park alerts",
+                    fr = "${notifications.size} nouvelles alertes de parc",
+                    nl = "${notifications.size} nieuwe parkmeldingen",
+                )
+            )
+            .setContentText(groupedByPark.size.toParkCountText(language))
             .setContentIntent(notificationIntent(notifications.first().parkKey, notifications.first().attractionId))
             .setStyle(NotificationCompat.BigTextStyle().bigText(summaryText))
             .setPriority(NotificationCompat.PRIORITY_HIGH)
@@ -515,7 +658,7 @@ class NotificationWorker @AssistedInject constructor(
     }
 
     private fun normalizeAttractionId(dto: WaitingTimeDto): String {
-        return dto.id ?: dto.safeName().trim().lowercase().replace(Regex("[^a-z0-9]+"), "-")
+        return dto.id ?: dto.safeName("de").trim().lowercase().replace(Regex("[^a-z0-9]+"), "-")
     }
 
     private fun String.notificationId(): Int {
@@ -571,6 +714,7 @@ class NotificationWorker @AssistedInject constructor(
         openingOffsetSource: String?,
         alerts: List<WatchlistEntity>,
         notifications: MutableList<WatchlistNotification>,
+        language: String,
     ) {
         val dayKey = dailySummaryDayKey(System.currentTimeMillis(), openingOffsetSource) ?: return
         val openAttractions = waitingTimes.count { it.normalizedStatus() == "opened" }
@@ -580,12 +724,19 @@ class NotificationWorker @AssistedInject constructor(
                     WatchlistNotification(
                         alertId = alert.id,
                         notifyOnce = alert.notifyOnce,
-                        title = "Tagesblick: $parkName",
+                        title = localized(
+                            language,
+                            de = "Tagesblick: $parkName",
+                            en = "Daily summary: $parkName",
+                            fr = "Résumé du jour : $parkName",
+                            nl = "Dagoverzicht: $parkName",
+                        ),
                         content = buildParkChangeNotificationContent(
                             isParkOpen = isParkOpen,
                             crowdValue = crowdValue,
                             openAttractions = openAttractions,
                             totalAttractions = waitingTimes.size,
+                            language = language,
                         ),
                         parkKey = parkKey,
                         parkName = parkName,
@@ -621,8 +772,16 @@ class NotificationWorker @AssistedInject constructor(
         return normalizedStatus() == "opened" && waitingTime != null && waitingTime >= 0
     }
 
-    private fun WaitingTimeDto.safeName(): String {
-        return (name as String?).orEmpty().ifBlank { "Eine Attraktion" }
+    private fun WaitingTimeDto.safeName(language: String): String {
+        return (name as String?).orEmpty().ifBlank {
+            localized(
+                language,
+                de = "Eine Attraktion",
+                en = "An attraction",
+                fr = "Une attraction",
+                nl = "Een attractie",
+            )
+        }
     }
 
     private fun WaitingTimeDto.safeStatus(): String {
@@ -638,9 +797,23 @@ class NotificationWorker @AssistedInject constructor(
         return "${normalizedStatus()}|wait=$waitValue"
     }
 
-    private fun WaitingTimeDto.toAttractionChangeContent(): String {
-        val waitText = waitingTime?.takeIf { it >= 0 }?.let { "$it Min." } ?: "keine Wartezeit"
-        return "${safeName()}: ${safeStatus().toReadableShortStatus()}, $waitText"
+    private fun WaitingTimeDto.toAttractionChangeContent(language: String): String {
+        val waitText = waitingTime?.takeIf { it >= 0 }?.let {
+            localized(
+                language,
+                de = "$it Min.",
+                en = "$it min",
+                fr = "$it min",
+                nl = "$it min",
+            )
+        } ?: localized(
+            language,
+            de = "keine Wartezeit",
+            en = "no wait time",
+            fr = "pas de temps d'attente",
+            nl = "geen wachttijd",
+        )
+        return "${safeName(language)}: ${safeStatus().toReadableShortStatus(language)}, $waitText"
     }
 
     private fun canPostNotifications(): Boolean {
@@ -664,55 +837,162 @@ class NotificationWorker @AssistedInject constructor(
         crowdValue: Float?,
         openAttractions: Int,
         totalAttractions: Int,
+        language: String,
     ): String {
         val statusText = when (isParkOpen) {
-            true -> "Park geoeffnet"
-            false -> "Park geschlossen"
-            null -> "Oeffnungsstatus unbekannt"
+            true -> localized(
+                language,
+                de = "Park geoeffnet",
+                en = "Park open",
+                fr = "Parc ouvert",
+                nl = "Park open",
+            )
+            false -> localized(
+                language,
+                de = "Park geschlossen",
+                en = "Park closed",
+                fr = "Parc fermé",
+                nl = "Park gesloten",
+            )
+            null -> localized(
+                language,
+                de = "Oeffnungsstatus unbekannt",
+                en = "Opening status unknown",
+                fr = "Statut d'ouverture inconnu",
+                nl = "Openingsstatus onbekend",
+            )
         }
-        val crowdText = crowdValue?.let { ", Auslastung ${it.formatPercent()}%" }.orEmpty()
+        val crowdText = crowdValue?.let {
+            localized(
+                language,
+                de = ", Auslastung ${it.formatPercent()}%",
+                en = ", crowd level ${it.formatPercent()}%",
+                fr = ", fréquentation ${it.formatPercent()}%",
+                nl = ", drukte ${it.formatPercent()}%",
+            )
+        }.orEmpty()
         val attractionText = if (totalAttractions > 0) {
-            ", $openAttractions von $totalAttractions Attraktionen offen"
+            localized(
+                language,
+                de = ", $openAttractions von $totalAttractions Attraktionen offen",
+                en = ", $openAttractions of $totalAttractions attractions open",
+                fr = ", $openAttractions sur $totalAttractions attractions ouvertes",
+                nl = ", $openAttractions van $totalAttractions attracties open",
+            )
         } else {
             ""
         }
         return statusText + crowdText + attractionText
     }
 
-    private fun String.toReadableShortStatus(): String {
+    private fun String.toReadableShortStatus(language: String): String {
         return when (normalizedStatus()) {
-            "opened" -> "offen"
-            "closed" -> "geschlossen"
-            "maintenance" -> "Technikpause"
-            else -> ifBlank { "Status unbekannt" }
+            "opened" -> localized(language, de = "offen", en = "open", fr = "ouvert", nl = "open")
+            "closed" -> localized(language, de = "geschlossen", en = "closed", fr = "fermé", nl = "gesloten")
+            "maintenance" -> localized(
+                language,
+                de = "Technikpause",
+                en = "maintenance break",
+                fr = "pause technique",
+                nl = "technische pauze",
+            )
+            else -> ifBlank {
+                localized(
+                    language,
+                    de = "Status unbekannt",
+                    en = "status unknown",
+                    fr = "statut inconnu",
+                    nl = "status onbekend",
+                )
+            }
         }
     }
 
-    private fun String.toReadableStatus(): String {
+    private fun String.toReadableStatus(language: String): String {
         return when (normalizedStatus()) {
-            "opened" -> "Wieder offen. Wenn sie auf deiner Liste steht: jetzt hin."
-            "closed" -> "Gerade geschlossen. Spar dir den Weg und nimm eine Alternative."
-            "maintenance" -> "Technikpause gemeldet. Plane die Attraktion später nochmal ein."
-            else -> "Status geändert: $this"
+            "opened" -> localized(
+                language,
+                de = "Wieder offen. Wenn sie auf deiner Liste steht: jetzt hin.",
+                en = "Open again. If it's on your list: go now.",
+                fr = "De nouveau ouvert. Si elle est sur ta liste : vas-y maintenant.",
+                nl = "Weer open. Als hij op je lijst staat: ga er nu naartoe.",
+            )
+            "closed" -> localized(
+                language,
+                de = "Gerade geschlossen. Spar dir den Weg und nimm eine Alternative.",
+                en = "Just closed. Save the trip and pick an alternative.",
+                fr = "Vient de fermer. Évite le détour et choisis une alternative.",
+                nl = "Net gesloten. Bespaar je de moeite en kies een alternatief.",
+            )
+            "maintenance" -> localized(
+                language,
+                de = "Technikpause gemeldet. Plane die Attraktion später nochmal ein.",
+                en = "Maintenance reported. Plan to come back to this attraction later.",
+                fr = "Pause technique signalée. Prévois de revenir à cette attraction plus tard.",
+                nl = "Technische pauze gemeld. Plan deze attractie later opnieuw in.",
+            )
+            else -> localized(
+                language,
+                de = "Status geändert: $this",
+                en = "Status changed: $this",
+                fr = "Statut modifié : $this",
+                nl = "Status gewijzigd: $this",
+            )
         }
     }
 
-    private fun String.toStatusNotificationTitle(status: String): String {
+    private fun String.toStatusNotificationTitle(status: String, language: String): String {
         return when (status.normalizedStatus()) {
-            "opened" -> "Wieder offen: $this"
-            "closed" -> "Gerade zu: $this"
-            "maintenance" -> "Technikpause: $this"
-            else -> "Status-Radar: $this"
+            "opened" -> localized(
+                language,
+                de = "Wieder offen: $this",
+                en = "Open again: $this",
+                fr = "De nouveau ouvert : $this",
+                nl = "Weer open: $this",
+            )
+            "closed" -> localized(
+                language,
+                de = "Gerade zu: $this",
+                en = "Just closed: $this",
+                fr = "Vient de fermer : $this",
+                nl = "Net gesloten: $this",
+            )
+            "maintenance" -> localized(
+                language,
+                de = "Technikpause: $this",
+                en = "Maintenance: $this",
+                fr = "Pause technique : $this",
+                nl = "Technische pauze: $this",
+            )
+            else -> localized(
+                language,
+                de = "Status-Radar: $this",
+                en = "Status radar: $this",
+                fr = "Radar de statut : $this",
+                nl = "Statusradar: $this",
+            )
         }
     }
 
     private fun String.normalizedStatus(): String = trim().lowercase(Locale.ROOT)
 
-    private fun Int.toParkCountText(): String {
+    private fun Int.toParkCountText(language: String): String {
         return if (this == 1) {
-            "1 Park mit neuen Alarmen"
+            localized(
+                language,
+                de = "1 Park mit neuen Alarmen",
+                en = "1 park with new alerts",
+                fr = "1 parc avec de nouvelles alertes",
+                nl = "1 park met nieuwe meldingen",
+            )
         } else {
-            "$this Parks mit neuen Alarmen"
+            localized(
+                language,
+                de = "$this Parks mit neuen Alarmen",
+                en = "$this parks with new alerts",
+                fr = "$this parcs avec de nouvelles alertes",
+                nl = "$this parken met nieuwe meldingen",
+            )
         }
     }
 }

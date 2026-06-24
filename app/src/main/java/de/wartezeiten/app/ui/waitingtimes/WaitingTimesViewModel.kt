@@ -210,10 +210,11 @@ class WaitingTimesViewModel @Inject constructor(
             } else {
                 CrowdLevelEstimate(level = null, source = CrowdLevelSource.None)
             }
+            val today = LocalDate.now().toString()
             val openWaitingTimes = detail.waitingTimes.filter { it.status == AttractionStatus.Opened }
             val forecasts = buildAttractionWaitForecasts(
                 waitingTimes = openWaitingTimes,
-                historyDays = aux.historyDays.filter { it.date != LocalDate.now().toString() },
+                historyDays = aux.historyDays.filter { it.date != today },
                 currentTimeMillis = status.currentTime,
                 localTimeOffsetSeconds = detail.localTimeOffsetSeconds(),
             )
@@ -249,13 +250,13 @@ class WaitingTimesViewModel @Inject constructor(
                 parkStatistics = aux.parkStatistics,
                 waitAdviceByAttractionId = buildAttractionWaitAdvice(
                     waitingTimes = openWaitingTimes,
-                    historyDays = aux.historyDays.filter { it.date != LocalDate.now().toString() },
+                    historyDays = aux.historyDays.filter { it.date != today },
                     currentTimeMillis = status.currentTime,
                     localTimeOffsetSeconds = detail.localTimeOffsetSeconds(),
                 ),
                 forecastByAttractionId = forecasts,
                 historyByAttractionId = detail.waitingTimes.associate { waitingTime ->
-                    waitingTime.attractionId to buildAttractionHistorySeries(waitingTime.attractionId, aux.historyDays)
+                    waitingTime.attractionId to buildAttractionHistorySeries(waitingTime.attractionId, aux.historyDays, today)
                 },
                 language = status.language,
                 highlightedAttractionId = highlightedAttractionId,

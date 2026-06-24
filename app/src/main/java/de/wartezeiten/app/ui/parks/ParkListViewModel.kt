@@ -5,6 +5,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
+import de.wartezeiten.app.core.i18n.localized
 import de.wartezeiten.app.core.network.ApiResult
 import de.wartezeiten.app.core.network.NetworkError
 import de.wartezeiten.app.core.network.toUserMessage
@@ -443,21 +444,38 @@ class ParkListViewModel @Inject constructor(
     }
 
     private fun ParkRecommendationScanProgress.toStatusText(language: String): String {
-        return if (language == "en") {
-            "Scan running: $completedParks/$totalParks parks · ${estimatedRemainingMillis.toRemainingTimeText(language)} left"
-        } else {
-            "Scan läuft: $completedParks/$totalParks Parks · ${estimatedRemainingMillis.toRemainingTimeText(language)} verbleibend"
-        }
+        val remaining = estimatedRemainingMillis.toRemainingTimeText(language)
+        return localized(
+            language,
+            de = "Scan läuft: $completedParks/$totalParks Parks · $remaining verbleibend",
+            en = "Scan running: $completedParks/$totalParks parks · $remaining left",
+            fr = "Analyse en cours : $completedParks/$totalParks parcs · $remaining restant",
+            nl = "Scan loopt: $completedParks/$totalParks parken · $remaining resterend",
+        )
     }
 
     private fun Long.toRemainingTimeText(language: String): String {
-        if (this <= 0L) return if (language == "en") "almost done" else "gleich fertig"
+        if (this <= 0L) {
+            return localized(language, de = "gleich fertig", en = "almost done", fr = "presque terminé", nl = "bijna klaar")
+        }
         val seconds = ((this + 999L) / 1_000L).coerceAtLeast(1L)
         return if (seconds < 60L) {
-            if (language == "en") "about ${seconds}s" else "ca. ${seconds} Sek."
+            localized(
+                language,
+                de = "ca. ${seconds} Sek.",
+                en = "about ${seconds}s",
+                fr = "environ ${seconds} s",
+                nl = "ca. ${seconds} sec.",
+            )
         } else {
             val minutes = ((seconds + 59L) / 60L).coerceAtLeast(1L)
-            if (language == "en") "about ${minutes} min" else "ca. ${minutes} Min."
+            localized(
+                language,
+                de = "ca. ${minutes} Min.",
+                en = "about ${minutes} min",
+                fr = "environ ${minutes} min",
+                nl = "ca. ${minutes} min.",
+            )
         }
     }
 

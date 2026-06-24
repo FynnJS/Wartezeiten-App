@@ -34,6 +34,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import de.wartezeiten.app.core.i18n.localized
+import de.wartezeiten.app.data.local.PreferencesDataSource
 import de.wartezeiten.app.ui.components.AttributionBanner
 
 @Composable
@@ -67,12 +69,28 @@ fun SettingsScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text(if (state.language == "en") "Settings" else "Einstellungen") },
+                title = {
+                    Text(
+                        localized(
+                            state.language,
+                            de = "Einstellungen",
+                            en = "Settings",
+                            fr = "Paramètres",
+                            nl = "Instellingen",
+                        ),
+                    )
+                },
                 navigationIcon = {
                     IconButton(onClick = onBackClick) {
                         Icon(
                             Icons.AutoMirrored.Filled.ArrowBack,
-                            contentDescription = if (state.language == "en") "Back" else "Zurück",
+                            contentDescription = localized(
+                                state.language,
+                                de = "Zurück",
+                                en = "Back",
+                                fr = "Retour",
+                                nl = "Terug",
+                            ),
                         )
                     }
                 }
@@ -86,12 +104,20 @@ fun SettingsScreen(
         ) {
             ListItem(
                 headlineContent = { Text("Dark Mode") },
-                supportingContent = { 
-                    Text(when(state.darkMode) {
-                        true -> if (state.language == "en") "On" else "An"
-                        false -> if (state.language == "en") "Off" else "Aus"
-                        else -> if (state.language == "en") "Follow system" else "System folgen"
-                    })
+                supportingContent = {
+                    Text(
+                        when (state.darkMode) {
+                            true -> localized(state.language, de = "An", en = "On", fr = "Activé", nl = "Aan")
+                            false -> localized(state.language, de = "Aus", en = "Off", fr = "Désactivé", nl = "Uit")
+                            else -> localized(
+                                state.language,
+                                de = "System folgen",
+                                en = "Follow system",
+                                fr = "Suivre le système",
+                                nl = "Systeem volgen",
+                            )
+                        },
+                    )
                 },
                 leadingContent = { Icon(Icons.Default.Brightness4, contentDescription = null) },
             )
@@ -101,9 +127,9 @@ fun SettingsScreen(
                     .padding(horizontal = 16.dp)
             ) {
                 val options = listOf(
-                    null to if (state.language == "en") "System" else "System",
-                    false to if (state.language == "en") "Light" else "Hell",
-                    true to if (state.language == "en") "Dark" else "Dunkel",
+                    null to localized(state.language, de = "System", en = "System", fr = "Système", nl = "Systeem"),
+                    false to localized(state.language, de = "Hell", en = "Light", fr = "Clair", nl = "Licht"),
+                    true to localized(state.language, de = "Dunkel", en = "Dark", fr = "Sombre", nl = "Donker"),
                 )
                 options.forEachIndexed { index, option ->
                     SegmentedButton(
@@ -120,21 +146,29 @@ fun SettingsScreen(
             }
             HorizontalDivider()
             ListItem(
-                headlineContent = { Text(if (state.language == "en") "Language" else "Sprache") },
+                headlineContent = {
+                    Text(localized(state.language, de = "Sprache", en = "Language", fr = "Langue", nl = "Taal"))
+                },
                 supportingContent = { Text(state.language.languageLabel(state.language)) },
                 leadingContent = { Icon(Icons.Default.Language, contentDescription = null) },
                 trailingContent = {
                     IconButton(onClick = { languageExpanded = true }) {
                         Icon(
                             Icons.Default.KeyboardArrowDown,
-                            contentDescription = if (state.language == "en") "Select language" else "Sprache auswählen",
+                            contentDescription = localized(
+                                state.language,
+                                de = "Sprache auswählen",
+                                en = "Select language",
+                                fr = "Choisir la langue",
+                                nl = "Taal selecteren",
+                            ),
                         )
                     }
                     DropdownMenu(
                         expanded = languageExpanded,
                         onDismissRequest = { languageExpanded = false },
                     ) {
-                        listOf("de", "en").forEach { language ->
+                        PreferencesDataSource.SUPPORTED_LANGUAGES.sorted().forEach { language ->
                             DropdownMenuItem(
                                 text = { Text(language.languageLabel(state.language)) },
                                 onClick = {
@@ -148,18 +182,28 @@ fun SettingsScreen(
             )
             HorizontalDivider()
             ListItem(
-                headlineContent = { Text(if (state.language == "en") "Local cache" else "Lokaler Cache") },
+                headlineContent = {
+                    Text(localized(state.language, de = "Lokaler Cache", en = "Local cache", fr = "Cache local", nl = "Lokale cache"))
+                },
                 supportingContent = {
                     Text(
-                        when {
-                            state.cacheClearMessage != null -> if (state.language == "en") {
-                                "Cached API data was cleared. Favorites and notifications stay saved."
-                            } else {
-                                "Cache-Daten wurden gelöscht. Favoriten und Benachrichtigungen bleiben erhalten."
-                            }
-                            state.language == "en" -> "Clear cached park, attraction, weather, and statistics data."
-                            else -> "Park-, Attraktions-, Wetter- und Statistikdaten aus dem Cache löschen."
-                        }
+                        if (state.cacheClearMessage != null) {
+                            localized(
+                                state.language,
+                                de = "Cache-Daten wurden gelöscht. Favoriten und Benachrichtigungen bleiben erhalten.",
+                                en = "Cached API data was cleared. Favorites and notifications stay saved.",
+                                fr = "Les données en cache ont été supprimées. Favoris et notifications restent conservés.",
+                                nl = "Gecachte gegevens zijn gewist. Favorieten en meldingen blijven bewaard.",
+                            )
+                        } else {
+                            localized(
+                                state.language,
+                                de = "Park-, Attraktions-, Wetter- und Statistikdaten aus dem Cache löschen.",
+                                en = "Clear cached park, attraction, weather, and statistics data.",
+                                fr = "Supprimer les données en cache des parcs, attractions, météo et statistiques.",
+                                nl = "Wis gecachte park-, attractie-, weer- en statistiekgegevens.",
+                            )
+                        },
                     )
                 },
                 leadingContent = { Icon(Icons.Default.Delete, contentDescription = null) },
@@ -175,7 +219,7 @@ fun SettingsScreen(
                     ) {
                         Text(
                             if (state.cacheClearMessage == null) {
-                                if (state.language == "en") "Clear" else "Leeren"
+                                localized(state.language, de = "Leeren", en = "Clear", fr = "Vider", nl = "Wissen")
                             } else {
                                 "OK"
                             }
@@ -197,7 +241,9 @@ fun SettingsScreen(
 
 private fun String.languageLabel(currentLanguage: String): String {
     return when (this) {
-        "en" -> if (currentLanguage == "en") "English" else "Englisch"
-        else -> if (currentLanguage == "en") "German" else "Deutsch"
+        "en" -> localized(currentLanguage, de = "Englisch", en = "English", fr = "Anglais", nl = "Engels")
+        "fr" -> localized(currentLanguage, de = "Französisch", en = "French", fr = "Français", nl = "Frans")
+        "nl" -> localized(currentLanguage, de = "Niederländisch", en = "Dutch", fr = "Néerlandais", nl = "Nederlands")
+        else -> localized(currentLanguage, de = "Deutsch", en = "German", fr = "Allemand", nl = "Duits")
     }
 }

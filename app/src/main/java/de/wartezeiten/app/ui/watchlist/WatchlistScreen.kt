@@ -41,6 +41,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.core.content.ContextCompat
+import de.wartezeiten.app.core.i18n.localized
 import de.wartezeiten.app.data.local.entity.WatchlistEntity
 import de.wartezeiten.app.data.local.entity.WatchlistType
 import de.wartezeiten.app.push.NotificationDiagnostics
@@ -74,11 +75,13 @@ fun WatchlistRoute(
         } else {
             Toast.makeText(
                 context,
-                if (language == "en") {
-                    "Notification permission is required for the test."
-                } else {
-                    "Für die Testbenachrichtigung wird die Benachrichtigungsberechtigung benötigt."
-                },
+                localized(
+                    language,
+                    de = "Für die Testbenachrichtigung wird die Benachrichtigungsberechtigung benötigt.",
+                    en = "Notification permission is required for the test.",
+                    fr = "L'autorisation de notification est nécessaire pour la notification de test.",
+                    nl = "Voor de testmelding is meldingsmachtiging vereist.",
+                ),
                 Toast.LENGTH_LONG,
             ).show()
             context.startActivity(
@@ -97,7 +100,7 @@ fun WatchlistRoute(
                     IconButton(onClick = onBackClick) {
                         Icon(
                             Icons.AutoMirrored.Filled.ArrowBack,
-                            contentDescription = if (language == "en") "Back" else "Zur\u00fcck",
+                            contentDescription = localized(language, de = "Zur\u00fcck", en = "Back", fr = "Retour", nl = "Terug"),
                         )
                     }
                 }
@@ -136,11 +139,13 @@ fun WatchlistRoute(
             if (watchlistItems.isEmpty()) {
                 item {
                     Text(
-                        text = if (language == "en") {
-                            "Your active notifications appear here. Add them from a park or attraction view."
-                        } else {
-                            "Hier werden deine aktiven Benachrichtigungen angezeigt. F\u00fcge sie aus der Park- oder Attraktionsansicht hinzu."
-                        },
+                        text = localized(
+                            language,
+                            de = "Hier werden deine aktiven Benachrichtigungen angezeigt. F\u00fcge sie aus der Park- oder Attraktionsansicht hinzu.",
+                            en = "Your active notifications appear here. Add them from a park or attraction view.",
+                            fr = "Tes notifications actives s'affichent ici. Ajoute-les depuis la vue d'un parc ou d'une attraction.",
+                            nl = "Hier verschijnen je actieve meldingen. Voeg ze toe vanuit een park- of attractieweergave.",
+                        ),
                         style = MaterialTheme.typography.bodyMedium
                     )
                 }
@@ -185,15 +190,17 @@ private fun WatchlistSummaryCard(
     ) {
         Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
             Text(
-                if (language == "en") "Your notifications" else "Deine Benachrichtigungen",
+                localized(language, de = "Deine Benachrichtigungen", en = "Your notifications", fr = "Tes notifications", nl = "Jouw meldingen"),
                 style = MaterialTheme.typography.titleMedium,
             )
             Text(
-                text = if (language == "en") {
-                    "$totalAlerts active alerts across $parkCount parks. Background checks run about every 30 minutes and open the matching park."
-                } else {
-                    "$totalAlerts aktive Alarme in $parkCount Parks. Hintergrundchecks laufen etwa alle 30 Minuten und \u00f6ffnen den passenden Park."
-                },
+                text = localized(
+                    language,
+                    de = "$totalAlerts aktive Alarme in $parkCount Parks. Hintergrundchecks laufen etwa alle 30 Minuten und \u00f6ffnen den passenden Park.",
+                    en = "$totalAlerts active alerts across $parkCount parks. Background checks run about every 30 minutes and open the matching park.",
+                    fr = "$totalAlerts alertes actives dans $parkCount parcs. Les v\u00e9rifications en arri\u00e8re-plan tournent environ toutes les 30 minutes et ouvrent le parc correspondant.",
+                    nl = "$totalAlerts actieve meldingen in $parkCount parken. Achtergrondcontroles draaien ongeveer elke 30 minuten en openen het bijbehorende park.",
+                ),
                 style = MaterialTheme.typography.bodySmall,
             )
             Text(
@@ -208,11 +215,11 @@ private fun WatchlistSummaryCard(
             )
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 TextButton(onClick = onTestNotification) {
-                    Text(if (language == "en") "Test notification" else "Testbenachrichtigung")
+                    Text(localized(language, de = "Testbenachrichtigung", en = "Test notification", fr = "Notification de test", nl = "Testmelding"))
                 }
                 if (pushStatus == PushDeliveryStatus.Error) {
                     TextButton(onClick = onRetryPush) {
-                        Text(if (language == "en") "Retry push" else "Push erneut verbinden")
+                        Text(localized(language, de = "Push erneut verbinden", en = "Retry push", fr = "Relancer le push", nl = "Push opnieuw proberen"))
                     }
                 }
             }
@@ -222,22 +229,34 @@ private fun WatchlistSummaryCard(
 
 private fun PushDeliveryStatus.label(language: String): String {
     return when (this) {
-        PushDeliveryStatus.Active -> if (language == "en") {
-            "Standby push is active. Alerts are checked server-side every minute."
-        } else {
-            "Standby-Push ist aktiv. Alarme werden serverseitig jede Minute geprüft."
-        }
-        PushDeliveryStatus.Syncing -> if (language == "en") "Connecting standby push..." else "Standby-Push wird verbunden..."
-        PushDeliveryStatus.Error -> if (language == "en") {
-            "Standby push could not connect. The local fallback remains active."
-        } else {
-            "Standby-Push konnte nicht verbunden werden. Der lokale Fallback bleibt aktiv."
-        }
-        PushDeliveryStatus.Disabled -> if (language == "en") {
-            "Standby push is not configured in this APK. Only delayed local checks are available."
-        } else {
-            "Standby-Push ist in dieser APK nicht konfiguriert. Es bleiben nur verzögerte lokale Prüfungen."
-        }
+        PushDeliveryStatus.Active -> localized(
+            language,
+            de = "Standby-Push ist aktiv. Alarme werden serverseitig jede Minute geprüft.",
+            en = "Standby push is active. Alerts are checked server-side every minute.",
+            fr = "Le push en veille est actif. Les alertes sont vérifiées côté serveur chaque minute.",
+            nl = "Standby-push is actief. Meldingen worden server-side elke minuut gecontroleerd.",
+        )
+        PushDeliveryStatus.Syncing -> localized(
+            language,
+            de = "Standby-Push wird verbunden...",
+            en = "Connecting standby push...",
+            fr = "Connexion du push en veille...",
+            nl = "Standby-push wordt verbonden...",
+        )
+        PushDeliveryStatus.Error -> localized(
+            language,
+            de = "Standby-Push konnte nicht verbunden werden. Der lokale Fallback bleibt aktiv.",
+            en = "Standby push could not connect. The local fallback remains active.",
+            fr = "Le push en veille n'a pas pu se connecter. Le repli local reste actif.",
+            nl = "Standby-push kon geen verbinding maken. De lokale fallback blijft actief.",
+        )
+        PushDeliveryStatus.Disabled -> localized(
+            language,
+            de = "Standby-Push ist in dieser APK nicht konfiguriert. Es bleiben nur verzögerte lokale Prüfungen.",
+            en = "Standby push is not configured in this APK. Only delayed local checks are available.",
+            fr = "Le push en veille n'est pas configuré dans cet APK. Seules des vérifications locales différées sont disponibles.",
+            nl = "Standby-push is niet geconfigureerd in deze APK. Er zijn alleen vertraagde lokale controles beschikbaar.",
+        )
     }
 }
 
@@ -263,7 +282,13 @@ private fun WatchlistParkHeader(
             contentColor = MaterialTheme.colorScheme.onSecondaryContainer,
         ) {
             Text(
-                text = if (language == "en") "$alertCount alerts" else "$alertCount Alarme",
+                text = localized(
+                    language,
+                    de = "$alertCount Alarme",
+                    en = "$alertCount alerts",
+                    fr = "$alertCount alertes",
+                    nl = "$alertCount meldingen",
+                ),
                 modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
                 style = MaterialTheme.typography.labelSmall,
             )
@@ -310,11 +335,13 @@ private fun WatchlistAlertCard(
                 )
                 alert.history?.lastTriggeredAtMillis?.takeIf { it > 0L }?.let { triggeredAt ->
                     Text(
-                        text = if (language == "en") {
-                            "Last triggered: ${triggeredAt.formattedTimestamp()}"
-                        } else {
-                            "Zuletzt ausgelöst: ${triggeredAt.formattedTimestamp()}"
-                        },
+                        text = localized(
+                            language,
+                            de = "Zuletzt ausgelöst: ${triggeredAt.formattedTimestamp()}",
+                            en = "Last triggered: ${triggeredAt.formattedTimestamp()}",
+                            fr = "Dernière déclenchée : ${triggeredAt.formattedTimestamp()}",
+                            nl = "Laatst geactiveerd: ${triggeredAt.formattedTimestamp()}",
+                        ),
                         style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.tertiary,
                     )
@@ -324,16 +351,16 @@ private fun WatchlistAlertCard(
                 Icon(
                     imageVector = if (item.enabled) Icons.Default.Pause else Icons.Default.PlayArrow,
                     contentDescription = if (item.enabled) {
-                        if (language == "en") "Pause" else "Pausieren"
+                        localized(language, de = "Pausieren", en = "Pause", fr = "Mettre en pause", nl = "Pauzeren")
                     } else {
-                        if (language == "en") "Activate" else "Aktivieren"
+                        localized(language, de = "Aktivieren", en = "Activate", fr = "Activer", nl = "Activeren")
                     },
                 )
             }
             IconButton(onClick = { onDelete(item) }) {
                 Icon(
                     imageVector = Icons.Default.Delete,
-                    contentDescription = if (language == "en") "Delete" else "L\u00f6schen",
+                    contentDescription = localized(language, de = "L\u00f6schen", en = "Delete", fr = "Supprimer", nl = "Verwijderen"),
                 )
             }
         }
@@ -344,12 +371,24 @@ private fun Long.formattedTimestamp(): String = DateTimeFormatter.ofPattern("dd.
     .format(Instant.ofEpochMilli(this).atZone(ZoneId.systemDefault()))
 
 private fun WatchlistEntity.rulesLine(language: String): String {
-    if (!enabled) return if (language == "en") "Paused" else "Pausiert"
+    if (!enabled) return localized(language, de = "Pausiert", en = "Paused", fr = "En pause", nl = "Gepauzeerd")
     val rules = buildList {
-        if (notifyOnce) add(if (language == "en") "once" else "einmalig")
-        if (onlyWhenParkOpen) add(if (language == "en") "park open" else "nur Parköffnung")
-        if (quietHoursEnabled) add(if (language == "en") "quiet 22–08" else "Ruhe 22–08")
-        add(if (language == "en") "$cooldownMinutes min interval" else "$cooldownMinutes Min. Abstand")
+        if (notifyOnce) add(localized(language, de = "einmalig", en = "once", fr = "une fois", nl = "eenmalig"))
+        if (onlyWhenParkOpen) {
+            add(localized(language, de = "nur Parköffnung", en = "park open", fr = "parc ouvert", nl = "park open"))
+        }
+        if (quietHoursEnabled) {
+            add(localized(language, de = "Ruhe 22–08", en = "quiet 22–08", fr = "silence 22–08", nl = "stil 22–08"))
+        }
+        add(
+            localized(
+                language,
+                de = "$cooldownMinutes Min. Abstand",
+                en = "$cooldownMinutes min interval",
+                fr = "intervalle de $cooldownMinutes min",
+                nl = "interval van $cooldownMinutes min.",
+            ),
+        )
     }
     return rules.joinToString(" · ")
 }
@@ -362,14 +401,26 @@ private fun WatchlistEntity.statusLine(language: String): String {
         WatchlistType.CROWD_LEVEL_ABOVE,
     )
     if (type !in thresholdTypes) {
-        return if (language == "en") "Status-based alert" else "Statusbasierter Alarm"
+        return localized(
+            language,
+            de = "Statusbasierter Alarm",
+            en = "Status-based alert",
+            fr = "Alerte basée sur le statut",
+            nl = "Statusgebaseerde melding",
+        )
     }
     val unit = if (type == WatchlistType.CROWD_LEVEL_BELOW || type == WatchlistType.CROWD_LEVEL_ABOVE) {
         "%"
     } else {
-        if (language == "en") " min" else " Min."
+        localized(language, de = " Min.", en = " min", fr = " min", nl = " min.")
     }
-    return if (language == "en") "Threshold: $threshold$unit" else "Schwelle: $threshold$unit"
+    return localized(
+        language,
+        de = "Schwelle: $threshold$unit",
+        en = "Threshold: $threshold$unit",
+        fr = "Seuil : $threshold$unit",
+        nl = "Drempel: $threshold$unit",
+    )
 }
 
 private fun WatchlistEntity.scopeLine(
@@ -377,31 +428,43 @@ private fun WatchlistEntity.scopeLine(
     language: String,
 ): String {
     return if (attractionId == null) {
-        if (language == "en") "Scope: whole park" else "Bereich: ganzer Park"
+        localized(
+            language,
+            de = "Bereich: ganzer Park",
+            en = "Scope: whole park",
+            fr = "Portée : tout le parc",
+            nl = "Bereik: hele park",
+        )
     } else {
         val name = alert.attractionName ?: attractionId
-        if (language == "en") "Scope: $name" else "Bereich: $name"
+        localized(language, de = "Bereich: $name", en = "Scope: $name", fr = "Portée : $name", nl = "Bereik: $name")
     }
 }
 
 private fun WatchlistEntity.behaviorLine(language: String): String {
     return when (type) {
         WatchlistType.PARK_ALL_CHANGES,
-        WatchlistType.ATTRACTION_ALL_CHANGES -> if (language == "en") {
-            "Notifies only after a real change from the last seen state."
-        } else {
-            "Benachrichtigt erst bei echter \u00c4nderung zum zuletzt gesehenen Zustand."
-        }
+        WatchlistType.ATTRACTION_ALL_CHANGES -> localized(
+            language,
+            de = "Benachrichtigt erst bei echter \u00c4nderung zum zuletzt gesehenen Zustand.",
+            en = "Notifies only after a real change from the last seen state.",
+            fr = "Notifie uniquement en cas de changement r\u00e9el par rapport au dernier \u00e9tat observ\u00e9.",
+            nl = "Meldt alleen bij een echte verandering ten opzichte van de laatst gezien status.",
+        )
         WatchlistType.NOW_OPENED,
-        WatchlistType.ATTRACTION_OPEN -> if (language == "en") {
-            "Tapping the notification opens the matching park."
-        } else {
-            "Antippen der Benachrichtigung \u00f6ffnet den passenden Park."
-        }
-        else -> if (language == "en") {
-            "Checked locally on this device."
-        } else {
-            "Wird lokal auf diesem Ger\u00e4t gepr\u00fcft."
-        }
+        WatchlistType.ATTRACTION_OPEN -> localized(
+            language,
+            de = "Antippen der Benachrichtigung \u00f6ffnet den passenden Park.",
+            en = "Tapping the notification opens the matching park.",
+            fr = "Toucher la notification ouvre le parc correspondant.",
+            nl = "Tikken op de melding opent het bijbehorende park.",
+        )
+        else -> localized(
+            language,
+            de = "Wird lokal auf diesem Ger\u00e4t gepr\u00fcft.",
+            en = "Checked locally on this device.",
+            fr = "V\u00e9rifi\u00e9 localement sur cet appareil.",
+            nl = "Wordt lokaal op dit toestel gecontroleerd.",
+        )
     }
 }

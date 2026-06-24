@@ -1,12 +1,29 @@
 # Changelog
 
+## v1.1.7 - 2026-06-24
+
+- Added in-app update downloads: the mandatory update screen now downloads the new APK itself (with progress and SHA-256 verification) and opens the system install dialog directly, instead of requiring a manual download via GitHub/browser.
+- Added French and Dutch as fully supported app languages, alongside German and English. The Wartezeiten.app API itself still only returns "de"/"en" content, so French/Dutch app users transparently get English-language park/attraction data from the upstream API.
+- Added a "What's new" dialog shown once after an app update, summarizing the latest release's highlights in the user's selected language.
+- Redesigned the favorites dashboard: open parks now sort first (by lowest max wait), each card shows an explicit open/closed status badge, and the layout switched from a horizontally-scrolling row to a two-column grid with an "X of Y open" summary.
+- Fixed standby push notifications always being sent in German regardless of the installation's selected app language; push text (including the local WorkManager fallback) is now localized to German, English, French, or Dutch.
+- Fixed mojibake (`â€¦`, `â€¢`, `â‰¤`, `â†‘`, `â†“`) reintroduced into the attraction detail screen by the v1.1.6 encoding fix, which had broken the loading title, the date/time separator, the max-wait filter chip, and the sort labels.
+- Fixed the attraction detail "Today's history" chart silently showing a previous day's measurements (mislabeled as today) when the central statistics index does not yet contain a day for today.
+- Bumped Android release metadata to `versionCode 10107` / `versionName 1.1.7`.
+
 ## v1.1.6 - 2026-06-23
 
 - Added attraction detail cards with status badge, historical wait chart, 1-3 hour wait forecast, personal Room-backed notes, direct Watchlist setup, and deep-link sharing for parks and attractions.
 - Moved park aliases into a maintainable local asset file.
+- Improved attraction-detail charts with clearer wait-time and time axes.
+- Fixed broken umlauts and special characters in the attraction detail UI.
+- Bumped Android release metadata to `versionCode 10106` / `versionName 1.1.6`.
+
+## v1.1.5 - 2026-06-23
+
 - Fixed central worker statistics so D1 cron collection no longer uses legacy history shards, stale upstream wait-time dates are skipped, and the statistics index only advertises days with deliverable measurement points.
 - Added worker tests for D1 cron sharding, stale wait-time filtering, and statistics index consistency.
-- Bumped Android release metadata to `versionCode 10106` / `versionName 1.1.6`.
+- Bumped Android release metadata to `versionCode 10105` / `versionName 1.1.5`.
 
 ## v1.1.4 - 2026-06-17
 

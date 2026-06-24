@@ -1,6 +1,7 @@
 package de.wartezeiten.app.core.network
 
 import com.google.gson.JsonParseException
+import de.wartezeiten.app.core.i18n.localized
 import retrofit2.HttpException
 import retrofit2.Response
 import java.io.IOException
@@ -26,38 +27,49 @@ enum class NetworkError {
 }
 
 fun NetworkError.toUserMessage(language: String = "de"): String {
-    val useEnglish = language == "en"
     return when (this) {
-        NetworkError.RateLimited -> if (useEnglish) {
-            "Too many requests. Please wait a moment."
-        } else {
-            "Zu viele Anfragen. Bitte kurz warten."
-        }
-        NetworkError.NotFound -> if (useEnglish) {
-            "Data could not be found."
-        } else {
-            "Daten konnten nicht gefunden werden."
-        }
-        NetworkError.Network -> if (useEnglish) {
-            "No internet connection. Please check your network."
-        } else {
-            "Keine Internetverbindung. Bitte pr\u00fcfe dein Netzwerk."
-        }
-        NetworkError.Server -> if (useEnglish) {
-            "Server error. Please try again later."
-        } else {
-            "Serverfehler. Bitte versuche es sp\u00e4ter erneut."
-        }
-        NetworkError.EmptyBody -> if (useEnglish) {
-            "No data received from the server."
-        } else {
-            "Keine Daten vom Server erhalten."
-        }
-        NetworkError.Unknown -> if (useEnglish) {
-            "An unknown error occurred."
-        } else {
-            "Ein unbekannter Fehler ist aufgetreten."
-        }
+        NetworkError.RateLimited -> localized(
+            language,
+            de = "Zu viele Anfragen. Bitte kurz warten.",
+            en = "Too many requests. Please wait a moment.",
+            fr = "Trop de requ\u00eates. Merci d'attendre un instant.",
+            nl = "Te veel verzoeken. Wacht even.",
+        )
+        NetworkError.NotFound -> localized(
+            language,
+            de = "Daten konnten nicht gefunden werden.",
+            en = "Data could not be found.",
+            fr = "Les donn\u00e9es n'ont pas pu \u00eatre trouv\u00e9es.",
+            nl = "Gegevens konden niet worden gevonden.",
+        )
+        NetworkError.Network -> localized(
+            language,
+            de = "Keine Internetverbindung. Bitte pr\u00fcfe dein Netzwerk.",
+            en = "No internet connection. Please check your network.",
+            fr = "Aucune connexion internet. V\u00e9rifie ta connexion r\u00e9seau.",
+            nl = "Geen internetverbinding. Controleer je netwerk.",
+        )
+        NetworkError.Server -> localized(
+            language,
+            de = "Serverfehler. Bitte versuche es sp\u00e4ter erneut.",
+            en = "Server error. Please try again later.",
+            fr = "Erreur du serveur. Merci de r\u00e9essayer plus tard.",
+            nl = "Serverfout. Probeer het later opnieuw.",
+        )
+        NetworkError.EmptyBody -> localized(
+            language,
+            de = "Keine Daten vom Server erhalten.",
+            en = "No data received from the server.",
+            fr = "Aucune donn\u00e9e re\u00e7ue du serveur.",
+            nl = "Geen gegevens van de server ontvangen.",
+        )
+        NetworkError.Unknown -> localized(
+            language,
+            de = "Ein unbekannter Fehler ist aufgetreten.",
+            en = "An unknown error occurred.",
+            fr = "Une erreur inconnue s'est produite.",
+            nl = "Er is een onbekende fout opgetreden.",
+        )
     }
 }
 

@@ -4,6 +4,7 @@ import de.wartezeiten.app.core.dispatcher.IoDispatcher
 import de.wartezeiten.app.core.network.ApiResult
 import de.wartezeiten.app.core.network.NetworkError
 import de.wartezeiten.app.core.network.safeApiCall
+import de.wartezeiten.app.core.network.toApiLanguage
 import de.wartezeiten.app.data.local.dao.ParkDao
 import de.wartezeiten.app.data.local.dao.ParkDetailDao
 import de.wartezeiten.app.data.local.dao.ParkSnapshotDao
@@ -151,7 +152,7 @@ class DefaultWartezeitenRepository @Inject constructor(
     }
 
     override suspend fun refreshParks(language: String): ApiResult<Unit> = withContext(ioDispatcher) {
-        when (val result = safeApiCall { api.getParks(language) }) {
+        when (val result = safeApiCall { api.getParks(language.toApiLanguage()) }) {
             is ApiResult.Success -> {
                 val now = System.currentTimeMillis()
                 val currentParks = parkDao.observeParks(null).first()
@@ -293,7 +294,7 @@ class DefaultWartezeitenRepository @Inject constructor(
         }
 
         delay(RECOMMENDATION_REQUEST_DELAY_MILLIS)
-        val waitingResult = safeApiCall { api.getWaitingTimes(parkKey, language) }
+        val waitingResult = safeApiCall { api.getWaitingTimes(parkKey, language.toApiLanguage()) }
         if (waitingResult is ApiResult.Error && waitingResult.type == NetworkError.RateLimited) {
             return waitingResult
         }
@@ -368,7 +369,7 @@ class DefaultWartezeitenRepository @Inject constructor(
         supervisorScope {
             // FIX: openingTimes now returns List<OpeningTimesDto> - matches updated API service
             val openingTimes = async { safeApiCall { api.getOpeningTimes(parkKey) } }
-            val waitingTimes = async { safeApiCall { api.getWaitingTimes(parkKey, language) } }
+            val waitingTimes = async { safeApiCall { api.getWaitingTimes(parkKey, language.toApiLanguage()) } }
             val crowdLevel = async { safeApiCall { api.getCrowdLevel(parkKey) } }
             val park = parkDao.observePark(parkKey).first()
             val (latitude, longitude) = park?.let { countryToCoordinates(it.id, it.country) } ?: Pair(48.137, 11.575)

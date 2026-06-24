@@ -3,4 +3,7 @@
     <cache-path
         name="shared_statistics"
         path="shared_statistics/" />
+    <cache-path
+        name="updates"
+        path="updates/" />
 </paths>

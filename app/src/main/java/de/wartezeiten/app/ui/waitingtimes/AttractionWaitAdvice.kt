@@ -141,13 +141,14 @@ internal fun buildAttractionWaitForecasts(
 internal fun buildAttractionHistorySeries(
     attractionId: String,
     historyDays: List<AttractionHistoryDay>,
+    today: String,
 ): List<AttractionWaitForecastPoint> {
-    val today = historyDays.firstOrNull() ?: return emptyList()
-    return today.snapshots.mapNotNull { snapshot ->
+    val todayDay = historyDays.firstOrNull { it.date == today } ?: return emptyList()
+    return todayDay.snapshots.mapNotNull { snapshot ->
         val point = snapshot.attractions.firstOrNull {
             it.id == attractionId && it.isOpenMeasurement()
         } ?: return@mapNotNull null
-        val offset = today.openFrom?.let { runCatching { java.time.OffsetDateTime.parse(it).offset }.getOrNull() }
+        val offset = todayDay.openFrom?.let { runCatching { java.time.OffsetDateTime.parse(it).offset }.getOrNull() }
             ?: ZoneOffset.UTC
         AttractionWaitForecastPoint(
             localTime = Instant.ofEpochMilli(snapshot.capturedAtMillis).atOffset(offset).toLocalTime(),

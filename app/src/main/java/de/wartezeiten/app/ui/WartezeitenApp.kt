@@ -24,6 +24,7 @@ import de.wartezeiten.app.ui.statistics.StatisticsRoute
 import de.wartezeiten.app.ui.update.UpdateViewModel
 import de.wartezeiten.app.ui.watchlist.WatchlistRoute
 import de.wartezeiten.app.ui.waitingtimes.WaitingTimesRoute
+import de.wartezeiten.app.ui.whatsnew.WhatsNewRoute
 
 @Composable
 fun WartezeitenApp(
@@ -144,15 +145,13 @@ fun WartezeitenApp(
         }
 
         val releaseInfo = updateState.releaseInfo
-        if (updateState.updateAvailable && releaseInfo != null) {
+        val updateRequired = updateState.updateAvailable && releaseInfo != null
+        if (updateRequired && releaseInfo != null) {
             UpdateBanner(
                 releaseInfo = releaseInfo,
                 language = settingsState.language,
-                onInstallClick = {
-                    val intent = Intent(Intent.ACTION_VIEW, Uri.parse(releaseInfo.apkUrl))
-                    intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                    context.startActivity(intent)
-                },
+                downloadState = updateState.downloadState,
+                onDownloadClick = { updateViewModel.downloadUpdate(settingsState.language) },
                 onReleasePageClick = releaseInfo.releasePageUrl?.let { releasePageUrl ->
                     {
                         val intent = Intent(Intent.ACTION_VIEW, Uri.parse(releasePageUrl))
@@ -161,6 +160,8 @@ fun WartezeitenApp(
                     }
                 },
             )
+        } else {
+            WhatsNewRoute()
         }
     }
 }

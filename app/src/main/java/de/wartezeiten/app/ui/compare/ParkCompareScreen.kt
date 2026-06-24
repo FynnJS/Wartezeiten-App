@@ -54,6 +54,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import de.wartezeiten.app.core.i18n.localized
 import de.wartezeiten.app.domain.model.Park
 import de.wartezeiten.app.ui.components.AttributionBanner
 import java.time.Instant
@@ -96,12 +97,12 @@ fun ParkCompareScreen(
                 title = {
                     Column {
                         Text(
-                            if (state.language == "en") "Park comparison" else "Parkvergleich",
+                            localized(state.language, de = "Parkvergleich", en = "Park comparison", fr = "Comparaison des parcs", nl = "Parkvergelijking"),
                             style = MaterialTheme.typography.titleLarge,
                             fontWeight = FontWeight.Bold,
                         )
                         Text(
-                            if (state.language == "en") "Compare parks side by side" else "Parks direkt vergleichen",
+                            localized(state.language, de = "Parks direkt vergleichen", en = "Compare parks side by side", fr = "Comparez les parcs côte à côte", nl = "Vergelijk parken naast elkaar"),
                             style = MaterialTheme.typography.labelMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
@@ -109,7 +110,7 @@ fun ParkCompareScreen(
                 },
                 navigationIcon = {
                     IconButton(onClick = onBackClick) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = if (state.language == "en") "Back" else "Zurück")
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = localized(state.language, de = "Zurück", en = "Back", fr = "Retour", nl = "Terug"))
                     }
                 },
                 actions = {
@@ -122,7 +123,7 @@ fun ParkCompareScreen(
                         )
                     } else {
                         IconButton(onClick = onRefreshClick) {
-                            Icon(Icons.Default.Refresh, contentDescription = if (state.language == "en") "Refresh comparison" else "Vergleich aktualisieren")
+                            Icon(Icons.Default.Refresh, contentDescription = localized(state.language, de = "Vergleich aktualisieren", en = "Refresh comparison", fr = "Actualiser la comparaison", nl = "Vergelijking vernieuwen"))
                         }
                     }
                 },
@@ -200,11 +201,13 @@ private fun CompareIntro(language: String) {
         contentColor = MaterialTheme.colorScheme.onSecondaryContainer,
     ) {
         Text(
-            text = if (language == "en") {
-                "Choose two to four theme parks to compare the current wait-time data."
-            } else {
-                "Wähle zwei bis vier Parks und vergleiche die aktuelle Wartezeitdaten miteinander."
-            },
+            text = localized(
+                language,
+                de = "Wähle zwei bis vier Parks und vergleiche die aktuelle Wartezeitdaten miteinander.",
+                en = "Choose two to four theme parks to compare the current wait-time data.",
+                fr = "Choisissez deux à quatre parcs pour comparer les temps d'attente actuels.",
+                nl = "Kies twee tot vier pretparken om de actuele wachttijden te vergelijken.",
+            ),
             modifier = Modifier.padding(12.dp),
             style = MaterialTheme.typography.bodyMedium,
         )
@@ -229,16 +232,18 @@ private fun ParkPicker(
             horizontalArrangement = Arrangement.SpaceBetween,
         ) {
             Text(
-                if (language == "en") "Selected parks" else "Ausgewählte Parks",
+                localized(language, de = "Ausgewählte Parks", en = "Selected parks", fr = "Parcs sélectionnés", nl = "Geselecteerde parken"),
                 style = MaterialTheme.typography.titleSmall,
                 fontWeight = FontWeight.Bold,
             )
             Text(
-                if (language == "en") {
-                    "${selectedParkIds.size} selected · $totalParkCount available"
-                } else {
-                    "${selectedParkIds.size} ausgewählt · $totalParkCount verfügbar"
-                },
+                localized(
+                    language,
+                    de = "${selectedParkIds.size} ausgewählt · $totalParkCount verfügbar",
+                    en = "${selectedParkIds.size} selected · $totalParkCount available",
+                    fr = "${selectedParkIds.size} sélectionnés · $totalParkCount disponibles",
+                    nl = "${selectedParkIds.size} geselecteerd · $totalParkCount beschikbaar",
+                ),
                 style = MaterialTheme.typography.labelMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -276,14 +281,14 @@ private fun ParkPicker(
             trailingIcon = if (query.isNotBlank()) {
                 {
                     IconButton(onClick = { onQueryChange("") }) {
-                        Icon(Icons.Default.Clear, contentDescription = if (language == "en") "Clear search" else "Suche löschen")
+                        Icon(Icons.Default.Clear, contentDescription = localized(language, de = "Suche löschen", en = "Clear search", fr = "Effacer la recherche", nl = "Zoekopdracht wissen"))
                     }
                 }
             } else {
                 null
             },
             placeholder = {
-                Text(if (language == "en") "Search by park or country" else "Nach Park oder Land suchen")
+                Text(localized(language, de = "Nach Park oder Land suchen", en = "Search by park or country", fr = "Rechercher par parc ou pays", nl = "Zoeken op park of land"))
             },
             shape = RoundedCornerShape(12.dp),
             colors = OutlinedTextFieldDefaults.colors(
@@ -293,9 +298,27 @@ private fun ParkPicker(
 
         Text(
             text = when {
-                selectedParkIds.size >= 4 -> if (language == "en") "Up to four parks can be compared at once." else "Bis zu vier Parks können gleichzeitig verglichen werden."
-                selectedParkIds.size < 2 -> if (language == "en") "Select at least two parks for a comparison." else "Für einen Vergleich müssen mindestens zwei Parks ausgewählt sein."
-                else -> if (language == "en") "Add parks from the list or remove selected parks above." else "Parks aus der Liste hinzufügen oder oben aus der Auswahl entfernen."
+                selectedParkIds.size >= 4 -> localized(
+                    language,
+                    de = "Bis zu vier Parks können gleichzeitig verglichen werden.",
+                    en = "Up to four parks can be compared at once.",
+                    fr = "Vous pouvez comparer jusqu'à quatre parcs à la fois.",
+                    nl = "Je kunt maximaal vier parken tegelijk vergelijken.",
+                )
+                selectedParkIds.size < 2 -> localized(
+                    language,
+                    de = "Für einen Vergleich müssen mindestens zwei Parks ausgewählt sein.",
+                    en = "Select at least two parks for a comparison.",
+                    fr = "Sélectionnez au moins deux parcs pour une comparaison.",
+                    nl = "Selecteer minstens twee parken om te vergelijken.",
+                )
+                else -> localized(
+                    language,
+                    de = "Parks aus der Liste hinzufügen oder oben aus der Auswahl entfernen.",
+                    en = "Add parks from the list or remove selected parks above.",
+                    fr = "Ajoutez des parcs depuis la liste ou retirez-en ci-dessus.",
+                    nl = "Voeg parken toe vanuit de lijst of verwijder geselecteerde parken hierboven.",
+                )
             },
             style = MaterialTheme.typography.labelSmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -332,7 +355,7 @@ private fun ParkPicker(
             }
             if (addableParks.isEmpty()) {
                 Text(
-                    text = if (language == "en") "No matching parks found" else "Keine passenden Parks gefunden",
+                    text = localized(language, de = "Keine passenden Parks gefunden", en = "No matching parks found", fr = "Aucun parc correspondant trouvé", nl = "Geen overeenkomende parken gevonden"),
                     modifier = Modifier.padding(vertical = 10.dp),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -444,15 +467,15 @@ private fun CompareParkCard(
                 overflow = TextOverflow.Ellipsis,
             )
             MetricLine(
-                label = if (language == "en") "Avg wait" else "Ø Wartezeit",
+                label = localized(language, de = "Ø Wartezeit", en = "Avg wait", fr = "Attente moy.", nl = "Gem. wachttijd"),
                 value = item.averageWaitMinutes?.let { "${it.toInt()} Min." } ?: "-",
             )
             MetricLine(
-                label = if (language == "en") "Peak wait" else "Höchste Zeit",
+                label = localized(language, de = "Höchste Zeit", en = "Peak wait", fr = "Attente max.", nl = "Piekwachttijd"),
                 value = item.maxWaitMinutes?.let { "$it Min." } ?: "-",
             )
             MetricLine(
-                label = if (language == "en") "Open" else "Offen",
+                label = localized(language, de = "Offen", en = "Open", fr = "Ouvertes", nl = "Open"),
                 value = "${item.openAttractions}/${item.totalAttractions}",
             )
             LinearProgressIndicator(
@@ -520,7 +543,13 @@ private fun ErrorStrip(
         ) {
             Icon(Icons.Default.Warning, contentDescription = null)
             Text(
-                text = if (language == "en") "Some comparison data could not be refreshed: $message" else "Einige Vergleichsdaten konnten nicht aktualisiert werden: $message",
+                text = localized(
+                    language,
+                    de = "Einige Vergleichsdaten konnten nicht aktualisiert werden: $message",
+                    en = "Some comparison data could not be refreshed: $message",
+                    fr = "Certaines données de comparaison n'ont pas pu être actualisées : $message",
+                    nl = "Sommige vergelijkingsgegevens konden niet worden vernieuwd: $message",
+                ),
                 style = MaterialTheme.typography.bodySmall,
             )
         }
@@ -536,11 +565,13 @@ private fun EmptyComparison(language: String) {
         contentAlignment = Alignment.Center,
     ) {
         Text(
-            if (language == "en") {
-                "At least two parks must be selected for the comparison."
-            } else {
-                "Für den Vergleich müssen mindestens zwei Parks ausgewählt sein."
-            },
+            localized(
+                language,
+                de = "Für den Vergleich müssen mindestens zwei Parks ausgewählt sein.",
+                en = "At least two parks must be selected for the comparison.",
+                fr = "Au moins deux parcs doivent être sélectionnés pour la comparaison.",
+                nl = "Er moeten minstens twee parken geselecteerd zijn voor de vergelijking.",
+            ),
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
     }
@@ -548,27 +579,27 @@ private fun EmptyComparison(language: String) {
 
 private fun ParkCompareSort.label(language: String): String {
     return when (this) {
-        ParkCompareSort.BestNow -> if (language == "en") "Overall" else "Gesamt"
-        ParkCompareSort.LowestAverageWait -> if (language == "en") "Wait time" else "Wartezeit"
-        ParkCompareSort.MostOpenAttractions -> if (language == "en") "Open attractions" else "Offene Attraktionen"
+        ParkCompareSort.BestNow -> localized(language, de = "Gesamt", en = "Overall", fr = "Global", nl = "Algemeen")
+        ParkCompareSort.LowestAverageWait -> localized(language, de = "Wartezeit", en = "Wait time", fr = "Temps d'attente", nl = "Wachttijd")
+        ParkCompareSort.MostOpenAttractions -> localized(language, de = "Offene Attraktionen", en = "Open attractions", fr = "Attractions ouvertes", nl = "Open attracties")
         ParkCompareSort.Name -> "Name A-Z"
     }
 }
 
 private fun ParkCompareItem.headline(language: String): String {
     return when {
-        isBestChoice -> if (language == "en") "Best choice right now" else "Gerade die beste Wahl"
-        !isOpen -> if (language == "en") "Probably closed" else "Vermutlich geschlossen"
-        totalAttractions == 0 -> if (language == "en") "No current data" else "Keine aktuellen Daten"
-        averageWaitMinutes != null && averageWaitMinutes <= 20f -> if (language == "en") "Low waits" else "Niedrige Wartezeiten"
-        averageWaitMinutes != null && averageWaitMinutes >= 45f -> if (language == "en") "High waits" else "Hohe Wartezeiten"
-        else -> if (language == "en") "Balanced option" else "Solide Option"
+        isBestChoice -> localized(language, de = "Gerade die beste Wahl", en = "Best choice right now", fr = "Meilleur choix actuel", nl = "Nu de beste keuze")
+        !isOpen -> localized(language, de = "Vermutlich geschlossen", en = "Probably closed", fr = "Probablement fermé", nl = "Waarschijnlijk gesloten")
+        totalAttractions == 0 -> localized(language, de = "Keine aktuellen Daten", en = "No current data", fr = "Aucune donnée actuelle", nl = "Geen actuele gegevens")
+        averageWaitMinutes != null && averageWaitMinutes <= 20f -> localized(language, de = "Niedrige Wartezeiten", en = "Low waits", fr = "Faible attente", nl = "Korte wachttijden")
+        averageWaitMinutes != null && averageWaitMinutes >= 45f -> localized(language, de = "Hohe Wartezeiten", en = "High waits", fr = "Forte attente", nl = "Lange wachttijden")
+        else -> localized(language, de = "Solide Option", en = "Balanced option", fr = "Option équilibrée", nl = "Evenwichtige optie")
     }
 }
 
 private fun ParkCompareItem.lastUpdatedText(language: String): String {
-    val updated = lastUpdatedMillis ?: return if (language == "en") "No local data yet" else "Noch keine lokalen Daten"
+    val updated = lastUpdatedMillis ?: return localized(language, de = "Noch keine lokalen Daten", en = "No local data yet", fr = "Pas encore de données locales", nl = "Nog geen lokale gegevens")
     val formatter = DateTimeFormatter.ofPattern("HH:mm", Locale.GERMAN)
     val time = Instant.ofEpochMilli(updated).atZone(ZoneId.systemDefault()).format(formatter)
-    return if (language == "en") "Updated $time" else "Stand $time Uhr"
+    return localized(language, de = "Stand $time Uhr", en = "Updated $time", fr = "Mis à jour à $time", nl = "Bijgewerkt om $time")
 }

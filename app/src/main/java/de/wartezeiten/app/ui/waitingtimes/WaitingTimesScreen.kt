@@ -1,4 +1,4 @@
-﻿package de.wartezeiten.app.ui.waitingtimes
+package de.wartezeiten.app.ui.waitingtimes
 
 import android.content.Context
 import android.content.Intent
@@ -87,6 +87,7 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import de.wartezeiten.app.R
+import de.wartezeiten.app.core.i18n.localized
 import de.wartezeiten.app.domain.model.AttractionStatus
 import de.wartezeiten.app.domain.model.CrowdLevel
 import de.wartezeiten.app.domain.model.HolidayInfo
@@ -159,11 +160,13 @@ fun WaitingTimesScreen(
                 val updatedAt = LocalTime.now().format(DateTimeFormatter.ofPattern("HH:mm"))
                 val openCount = state.allWaitingTimes.count { it.status == AttractionStatus.Opened }
                 snackbarHostState.showSnackbar(
-                    message = if (state.language == "en") {
-                        "$openCount open attractions updated at $updatedAt"
-                    } else {
-                        "$openCount offene Attraktionen aktualisiert um $updatedAt"
-                    },
+                    message = localized(
+                        state.language,
+                        de = "$openCount offene Attraktionen aktualisiert um $updatedAt",
+                        en = "$openCount open attractions updated at $updatedAt",
+                        fr = "$openCount attractions ouvertes mises à jour à $updatedAt",
+                        nl = "$openCount open attracties bijgewerkt om $updatedAt",
+                    ),
                     actionLabel = "OK",
                     withDismissAction = true,
                 )
@@ -185,7 +188,7 @@ fun WaitingTimesScreen(
                 title = {
                     Column {
                         Text(
-                            state.park?.name ?: if (state.language == "en") "Loadingâ€¦" else "Ladenâ€¦",
+                            state.park?.name ?: localized(state.language, de = "Laden…", en = "Loading…", fr = "Chargement…", nl = "Laden…"),
                             style = MaterialTheme.typography.titleMedium,
                             fontWeight = FontWeight.Bold,
                             maxLines = 1,
@@ -200,7 +203,7 @@ fun WaitingTimesScreen(
                 },
                 navigationIcon = {
                     IconButton(onClick = onBackClick) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = if (state.language == "en") "Back" else "Zurück")
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = localized(state.language, de = "Zurück", en = "Back", fr = "Retour", nl = "Terug"))
                     }
                 },
                 actions = {
@@ -208,17 +211,25 @@ fun WaitingTimesScreen(
                         IconButton(onClick = { shareParkDetail(context, state) }) {
                             Icon(
                                 Icons.Default.Share,
-                                contentDescription = if (state.language == "en") "Share park overview" else "Parkübersicht teilen",
+                                contentDescription = localized(
+                                    state.language,
+                                    de = "Parkübersicht teilen",
+                                    en = "Share park overview",
+                                    fr = "Partager l'aperçu du parc",
+                                    nl = "Parkoverzicht delen",
+                                ),
                             )
                         }
                         IconButton(onClick = { onParkStatisticsClick(park.id) }) {
                             Icon(
                                 painter = painterResource(R.drawable.ic_stats_bar_chart_24),
-                                contentDescription = if (state.language == "en") {
-                                    "Show park statistics"
-                                } else {
-                                    "Parkstatistik anzeigen"
-                                },
+                                contentDescription = localized(
+                                    state.language,
+                                    de = "Parkstatistik anzeigen",
+                                    en = "Show park statistics",
+                                    fr = "Afficher les statistiques du parc",
+                                    nl = "Parkstatistieken weergeven",
+                                ),
                                 tint = MaterialTheme.colorScheme.primary,
                             )
                         }
@@ -227,10 +238,22 @@ fun WaitingTimesScreen(
                     IconButton(onClick = onToggleFavorite) {
                         Icon(
                             imageVector = if (isFavorite) Icons.Default.Favorite else Icons.Default.FavoriteBorder,
-                            contentDescription = if (state.language == "en") {
-                                if (isFavorite) "Remove from favorites" else "Add to favorites"
+                            contentDescription = if (isFavorite) {
+                                localized(
+                                    state.language,
+                                    de = "Von Favoriten entfernen",
+                                    en = "Remove from favorites",
+                                    fr = "Retirer des favoris",
+                                    nl = "Verwijderen uit favorieten",
+                                )
                             } else {
-                                if (isFavorite) "Von Favoriten entfernen" else "Zu Favoriten hinzufügen"
+                                localized(
+                                    state.language,
+                                    de = "Zu Favoriten hinzufügen",
+                                    en = "Add to favorites",
+                                    fr = "Ajouter aux favoris",
+                                    nl = "Toevoegen aan favorieten",
+                                )
                             },
                             tint = if (isFavorite) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface,
                         )
@@ -245,7 +268,7 @@ fun WaitingTimesScreen(
                         Spacer(Modifier.width(8.dp))
                     } else {
                         IconButton(onClick = onRefreshClick) {
-                            Icon(Icons.Default.Refresh, contentDescription = if (state.language == "en") "Refresh" else "Aktualisieren")
+                            Icon(Icons.Default.Refresh, contentDescription = localized(state.language, de = "Aktualisieren", en = "Refresh", fr = "Actualiser", nl = "Vernieuwen"))
                         }
                     }
                 },
@@ -356,7 +379,7 @@ private fun ErrorBanner(
                 modifier = Modifier.weight(1f)
             )
             TextButton(onClick = onRetry) {
-                Text(if (language == "en") "Reload" else "Neu laden")
+                Text(localized(language, de = "Neu laden", en = "Reload", fr = "Recharger", nl = "Opnieuw laden"))
             }
         }
     }
@@ -514,7 +537,13 @@ private fun HighlightedAttractionCard(
         ) {
             Column(modifier = Modifier.weight(1f)) {
                 Text(
-                    text = if (language == "en") "Opened from notification" else "Aus Benachrichtigung geöffnet",
+                    text = localized(
+                        language,
+                        de = "Aus Benachrichtigung geöffnet",
+                        en = "Opened from notification",
+                        fr = "Ouvert depuis la notification",
+                        nl = "Geopend via melding",
+                    ),
                     style = MaterialTheme.typography.labelSmall,
                     fontWeight = FontWeight.Bold,
                 )
@@ -522,7 +551,16 @@ private fun HighlightedAttractionCard(
                 Text(plannerLine(item, language), style = MaterialTheme.typography.bodySmall)
             }
             IconButton(onClick = onAddWatchlist) {
-                Icon(Icons.Default.Notifications, contentDescription = if (language == "en") "Add notification" else "Benachrichtigung hinzufügen")
+                Icon(
+                    Icons.Default.Notifications,
+                    contentDescription = localized(
+                        language,
+                        de = "Benachrichtigung hinzufügen",
+                        en = "Add notification",
+                        fr = "Ajouter une alerte",
+                        nl = "Melding toevoegen",
+                    ),
+                )
             }
         }
     }
@@ -576,30 +614,44 @@ private fun AttractionDetailSection(
             }
 
             WaitForecastChart(
-                title = if (language == "en") "Next hours" else "Nächste Stunden",
+                title = localized(language, de = "Nächste Stunden", en = "Next hours", fr = "Prochaines heures", nl = "Komende uren"),
                 points = forecast?.points.orEmpty(),
-                emptyText = if (language == "en") {
-                    "Not enough comparable history for a forecast yet."
-                } else {
-                    "Noch zu wenig vergleichbare Historie für eine Prognose."
-                },
+                emptyText = localized(
+                    language,
+                    de = "Noch zu wenig vergleichbare Historie für eine Prognose.",
+                    en = "Not enough comparable history for a forecast yet.",
+                    fr = "Pas encore assez d'historique comparable pour une prévision.",
+                    nl = "Nog niet genoeg vergelijkbare historie voor een voorspelling.",
+                ),
             )
             WaitForecastChart(
-                title = if (language == "en") "Today's history" else "Heutiger Verlauf",
+                title = localized(language, de = "Heutiger Verlauf", en = "Today's history", fr = "Historique du jour", nl = "Verloop van vandaag"),
                 points = history,
-                emptyText = if (language == "en") {
-                    "No central measurements for this attraction today yet."
-                } else {
-                    "Für diese Attraktion liegen heute noch keine zentralen Messpunkte vor."
-                },
+                emptyText = localized(
+                    language,
+                    de = "Für diese Attraktion liegen heute noch keine zentralen Messpunkte vor.",
+                    en = "No central measurements for this attraction today yet.",
+                    fr = "Aucune mesure centrale pour cette attraction aujourd'hui pour le moment.",
+                    nl = "Nog geen centrale metingen voor deze attractie vandaag.",
+                ),
             )
 
             OutlinedTextField(
                 value = draftNote,
                 onValueChange = { draftNote = it },
                 modifier = Modifier.fillMaxWidth(),
-                label = { Text(if (language == "en") "Personal note" else "Persönliche Notiz") },
-                placeholder = { Text(if (language == "en") "Minimum height, meeting point..." else "Mindestgröße, Treffpunkt...") },
+                label = { Text(localized(language, de = "Persönliche Notiz", en = "Personal note", fr = "Note personnelle", nl = "Persoonlijke notitie")) },
+                placeholder = {
+                    Text(
+                        localized(
+                            language,
+                            de = "Mindestgröße, Treffpunkt...",
+                            en = "Minimum height, meeting point...",
+                            fr = "Taille minimale, point de rendez-vous...",
+                            nl = "Minimale lengte, ontmoetingspunt...",
+                        )
+                    )
+                },
                 minLines = 2,
                 shape = RoundedCornerShape(12.dp),
             )
@@ -614,13 +666,13 @@ private fun AttractionDetailSection(
                 ) {
                     Icon(Icons.Default.Check, contentDescription = null, modifier = Modifier.size(18.dp))
                     Spacer(Modifier.width(6.dp))
-                    Text(if (language == "en") "Save note" else "Notiz speichern")
+                    Text(localized(language, de = "Notiz speichern", en = "Save note", fr = "Enregistrer la note", nl = "Notitie opslaan"))
                 }
                 TextButton(onClick = onAddWatchlist) {
-                    Text(if (language == "en") "Notification" else "Alarm")
+                    Text(localized(language, de = "Alarm", en = "Notification", fr = "Alerte", nl = "Melding"))
                 }
                 TextButton(onClick = { park?.let { shareAttractionDetail(context, it, item, language) } }) {
-                    Text(if (language == "en") "Share link" else "Link teilen")
+                    Text(localized(language, de = "Link teilen", en = "Share link", fr = "Partager le lien", nl = "Link delen"))
                 }
                 if (note.isNotBlank() || draftNote.isNotBlank()) {
                     TextButton(
@@ -631,7 +683,7 @@ private fun AttractionDetailSection(
                     ) {
                         Icon(Icons.Default.Delete, contentDescription = null, modifier = Modifier.size(18.dp))
                         Spacer(Modifier.width(6.dp))
-                        Text(if (language == "en") "Delete" else "Löschen")
+                        Text(localized(language, de = "Löschen", en = "Delete", fr = "Supprimer", nl = "Verwijderen"))
                     }
                 }
             }
@@ -772,7 +824,7 @@ private fun FilterSection(
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Text(
-            if (language == "en") "Filters & sorting" else "Filter & Sortierung",
+            localized(language, de = "Filter & Sortierung", en = "Filters & sorting", fr = "Filtres et tri", nl = "Filters & sortering"),
             style = MaterialTheme.typography.titleSmall,
             fontWeight = FontWeight.Bold
         )
@@ -787,11 +839,11 @@ private fun FilterSection(
             trailingIcon = if (attractionQuery.isNotEmpty()) {
                 {
                     IconButton(onClick = { onAttractionQueryChange("") }) {
-                        Icon(Icons.Default.Clear, contentDescription = if (language == "en") "Clear search" else "Suche leeren")
+                        Icon(Icons.Default.Clear, contentDescription = localized(language, de = "Suche leeren", en = "Clear search", fr = "Effacer la recherche", nl = "Zoekopdracht wissen"))
                     }
                 }
             } else null,
-            placeholder = { Text(if (language == "en") "Search attraction" else "Attraktion suchen") },
+            placeholder = { Text(localized(language, de = "Attraktion suchen", en = "Search attraction", fr = "Rechercher une attraction", nl = "Attractie zoeken")) },
             singleLine = true,
             shape = RoundedCornerShape(12.dp),
             colors = OutlinedTextFieldDefaults.colors(
@@ -877,7 +929,7 @@ private fun FilterSection(
             horizontalArrangement = Arrangement.spacedBy(8.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Text(if (language == "en") "Max wait:" else "Max. Warten:", style = MaterialTheme.typography.labelMedium)
+            Text(localized(language, de = "Max. Warten:", en = "Max wait:", fr = "Attente max :", nl = "Max. wachttijd:"), style = MaterialTheme.typography.labelMedium)
             val maxWaitOptions = listOf(null, 15, 30, 45, 60)
             maxWaitOptions.forEach { minutes ->
                 FilterChip(
@@ -886,9 +938,9 @@ private fun FilterSection(
                     label = {
                         Text(
                             if (minutes == null) {
-                                if (language == "en") "All" else "Alle"
+                                localized(language, de = "Alle", en = "All", fr = "Toutes", nl = "Alle")
                             } else {
-                                "â‰¤ $minutes"
+                                "≤ $minutes"
                             },
                             style = MaterialTheme.typography.labelSmall
                         )
@@ -898,7 +950,7 @@ private fun FilterSection(
             }
             
             TextButton(onClick = onAddWatchlist) {
-                Text(if (language == "en") "Notification" else "Benachrichtigung")
+                Text(localized(language, de = "Benachrichtigung", en = "Notification", fr = "Alerte", nl = "Melding"))
             }
         }
     }
@@ -923,7 +975,7 @@ private fun VisitPlannerSection(
             verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
             Text(
-                text = if (language == "en") "Day plan" else "Tagesplan",
+                text = localized(language, de = "Tagesplan", en = "Day plan", fr = "Planning du jour", nl = "Dagplanning"),
                 style = MaterialTheme.typography.titleSmall,
                 fontWeight = FontWeight.Bold,
             )
@@ -942,13 +994,28 @@ private fun VisitPlannerSection(
                         )
                     }
                     IconButton(onClick = { onRemove(item.attractionId) }, modifier = Modifier.size(36.dp)) {
-                        Icon(Icons.Default.Clear, contentDescription = if (language == "en") "Remove from day plan" else "Aus Tagesplan entfernen")
+                        Icon(
+                            Icons.Default.Clear,
+                            contentDescription = localized(
+                                language,
+                                de = "Aus Tagesplan entfernen",
+                                en = "Remove from day plan",
+                                fr = "Retirer du planning du jour",
+                                nl = "Verwijderen uit dagplanning",
+                            ),
+                        )
                     }
                 }
             }
             if (plannedWaitingTimes.size > 5) {
                 Text(
-                    text = if (language == "en") "+${plannedWaitingTimes.size - 5} more" else "+${plannedWaitingTimes.size - 5} weitere",
+                    text = localized(
+                        language,
+                        de = "+${plannedWaitingTimes.size - 5} weitere",
+                        en = "+${plannedWaitingTimes.size - 5} more",
+                        fr = "+${plannedWaitingTimes.size - 5} de plus",
+                        nl = "+${plannedWaitingTimes.size - 5} meer",
+                    ),
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.8f),
                 )
@@ -995,12 +1062,12 @@ private fun ParkHeaderSection(
 
     val dateTimeFormatter = remember(language) {
         DateTimeFormatter.ofPattern(
-            if (language == "en") "EEE, MMM d yyyy 'â€¢' HH:mm" else "EEE, dd.MM.yyyy 'â€¢' HH:mm 'Uhr'",
+            if (language == "en") "EEE, MMM d yyyy '•' HH:mm" else "EEE, dd.MM.yyyy '•' HH:mm 'Uhr'",
             if (language == "en") Locale.ENGLISH else Locale.GERMAN,
         )
     }
     val formattedDateTime = remember(currentTime, zoneId, language) {
-        dateTimeFormatter.format(currentZonedDateTime) + if (language == "en") " (local time)" else " (Ortszeit)"
+        dateTimeFormatter.format(currentZonedDateTime) + localized(language, de = " (Ortszeit)", en = " (local time)", fr = " (heure locale)", nl = " (lokale tijd)")
     }
 
     OutlinedCard(
@@ -1040,11 +1107,13 @@ private fun ParkHeaderSection(
             weather?.let {
                 Column(modifier = Modifier.padding(top = 8.dp)) {
                     Text(
-                        text = if (language == "en") {
-                            "Weather: ${String.format(Locale.getDefault(), "%.0f", it.temperature)}°C · Rain: ${it.precipitationProbability}%"
-                        } else {
-                            "Wetter: ${String.format(Locale.getDefault(), "%.0f", it.temperature)}°C · Regen: ${it.precipitationProbability}%"
-                        },
+                        text = localized(
+                            language,
+                            de = "Wetter: ${String.format(Locale.getDefault(), "%.0f", it.temperature)}°C · Regen: ${it.precipitationProbability}%",
+                            en = "Weather: ${String.format(Locale.getDefault(), "%.0f", it.temperature)}°C · Rain: ${it.precipitationProbability}%",
+                            fr = "Météo : ${String.format(Locale.getDefault(), "%.0f", it.temperature)}°C · Pluie : ${it.precipitationProbability}%",
+                            nl = "Weer: ${String.format(Locale.getDefault(), "%.0f", it.temperature)}°C · Regen: ${it.precipitationProbability}%",
+                        ),
                         style = MaterialTheme.typography.labelSmall,
                         color = contentColor.copy(alpha = 0.8f)
                     )
@@ -1061,7 +1130,13 @@ private fun ParkHeaderSection(
             val todayHoliday = holidays.firstOrNull { it.date == todayIso }
             todayHoliday?.let { h ->
                 Text(
-                    text = if (language == "en") "Holiday: ${h.name}" else "Feiertag: ${h.name}",
+                    text = localized(
+                        language,
+                        de = "Feiertag: ${h.name}",
+                        en = "Holiday: ${h.name}",
+                        fr = "Jour férié : ${h.name}",
+                        nl = "Feestdag: ${h.name}",
+                    ),
                     style = MaterialTheme.typography.labelSmall,
                     color = contentColor.copy(alpha = 0.8f)
                 )
@@ -1143,11 +1218,13 @@ private fun WaitingTimeRow(
             ) {
                 Icon(
                     painter = painterResource(R.drawable.ic_stats_bar_chart_24),
-                    contentDescription = if (language == "en") {
-                        "Show statistics for ${item.name}"
-                    } else {
-                        "Statistik für ${item.name} anzeigen"
-                    },
+                    contentDescription = localized(
+                        language,
+                        de = "Statistik für ${item.name} anzeigen",
+                        en = "Show statistics for ${item.name}",
+                        fr = "Afficher les statistiques de ${item.name}",
+                        nl = "Statistieken voor ${item.name} weergeven",
+                    ),
                     tint = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
@@ -1158,10 +1235,22 @@ private fun WaitingTimeRow(
             ) {
                 Icon(
                     imageVector = if (isPlanned) Icons.Default.Check else Icons.Default.Add,
-                    contentDescription = if (language == "en") {
-                        if (isPlanned) "Remove from day plan" else "Add to day plan"
+                    contentDescription = if (isPlanned) {
+                        localized(
+                            language,
+                            de = "Aus Tagesplan entfernen",
+                            en = "Remove from day plan",
+                            fr = "Retirer du planning du jour",
+                            nl = "Verwijderen uit dagplanning",
+                        )
                     } else {
-                        if (isPlanned) "Aus Tagesplan entfernen" else "Zum Tagesplan hinzufügen"
+                        localized(
+                            language,
+                            de = "Zum Tagesplan hinzufügen",
+                            en = "Add to day plan",
+                            fr = "Ajouter au planning du jour",
+                            nl = "Toevoegen aan dagplanning",
+                        )
                     },
                     tint = if (isPlanned) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -1173,11 +1262,13 @@ private fun WaitingTimeRow(
             ) {
                 Icon(
                     imageVector = Icons.Default.Notifications,
-                    contentDescription = if (language == "en") {
-                        "Add notification for ${item.name}"
-                    } else {
-                        "Benachrichtigung für ${item.name} hinzufügen"
-                    },
+                    contentDescription = localized(
+                        language,
+                        de = "Benachrichtigung für ${item.name} hinzufügen",
+                        en = "Add notification for ${item.name}",
+                        fr = "Ajouter une alerte pour ${item.name}",
+                        nl = "Melding toevoegen voor ${item.name}",
+                    ),
                     tint = MaterialTheme.colorScheme.primary
                 )
             }
@@ -1191,7 +1282,7 @@ private fun WaitingTimeRow(
                         color = waitTimeColor
                     )
                     Text(
-                        if (language == "en") "min" else "Min.",
+                        localized(language, de = "Min.", en = "min", fr = "min", nl = "min."),
                         style = MaterialTheme.typography.labelSmall,
                         color = waitTimeColor
                     )
@@ -1225,24 +1316,30 @@ private fun WaitAdviceLabel(
 
 private fun AttractionWaitAdvice.label(language: String): String {
     return when (type) {
-        AttractionWaitAdviceType.GoNow -> if (language == "en") {
-            "NOW: Good time · typically $typicalWaitMinutes min"
-        } else {
-            "JETZT: Günstig · üblich $typicalWaitMinutes Min."
-        }
+        AttractionWaitAdviceType.GoNow -> localized(
+            language,
+            de = "JETZT: Günstig · üblich $typicalWaitMinutes Min.",
+            en = "NOW: Good time · typically $typicalWaitMinutes min",
+            fr = "MAINTENANT : Bon moment · habituellement $typicalWaitMinutes min",
+            nl = "NU: Gunstig moment · gewoonlijk $typicalWaitMinutes min.",
+        )
         AttractionWaitAdviceType.WaitUntil -> {
             val time = suggestedLocalTime?.format(DateTimeFormatter.ofPattern("HH:mm")) ?: return ""
-            if (language == "en") {
-                "LATER: Around $time about ${expectedWaitMinutes ?: typicalWaitMinutes} min"
-            } else {
-                "SPÄTER: Gegen $time etwa ${expectedWaitMinutes ?: typicalWaitMinutes} Min."
-            }
+            localized(
+                language,
+                de = "SPÄTER: Gegen $time etwa ${expectedWaitMinutes ?: typicalWaitMinutes} Min.",
+                en = "LATER: Around $time about ${expectedWaitMinutes ?: typicalWaitMinutes} min",
+                fr = "PLUS TARD : Vers $time environ ${expectedWaitMinutes ?: typicalWaitMinutes} min",
+                nl = "LATER: Rond $time ongeveer ${expectedWaitMinutes ?: typicalWaitMinutes} min.",
+            )
         }
-        AttractionWaitAdviceType.Typical -> if (language == "en") {
-            "TYPICAL: Usually about $typicalWaitMinutes min"
-        } else {
-            "ÜBLICH: Meist etwa $typicalWaitMinutes Min."
-        }
+        AttractionWaitAdviceType.Typical -> localized(
+            language,
+            de = "ÜBLICH: Meist etwa $typicalWaitMinutes Min.",
+            en = "TYPICAL: Usually about $typicalWaitMinutes min",
+            fr = "HABITUEL : Généralement environ $typicalWaitMinutes min",
+            nl = "GEBRUIKELIJK: Meestal ongeveer $typicalWaitMinutes min.",
+        )
     }
 }
 
@@ -1273,11 +1370,13 @@ private fun AttractionWaitAdvice.colors(): WaitAdviceColors = when (type) {
 
 private fun plannerLine(item: WaitingTime, language: String): String {
     return when (item.status) {
-        AttractionStatus.Opened -> if (language == "en") {
-            "${item.waitingTime ?: 0} min wait"
-        } else {
-            "${item.waitingTime ?: 0} Min. Wartezeit"
-        }
+        AttractionStatus.Opened -> localized(
+            language,
+            de = "${item.waitingTime ?: 0} Min. Wartezeit",
+            en = "${item.waitingTime ?: 0} min wait",
+            fr = "${item.waitingTime ?: 0} min d'attente",
+            nl = "${item.waitingTime ?: 0} min. wachttijd",
+        )
         else -> item.status.label(language)
     }
 }
@@ -1301,16 +1400,24 @@ private fun OfflineDetailBanner(
             Icon(Icons.Default.Warning, contentDescription = null, modifier = Modifier.size(20.dp))
             Column(modifier = Modifier.weight(1f)) {
                 Text(
-                    text = if (language == "en") "Showing cached attraction data" else "Gecachte Attraktionsdaten",
+                    text = localized(
+                        language,
+                        de = "Gecachte Attraktionsdaten",
+                        en = "Showing cached attraction data",
+                        fr = "Données d'attraction en cache affichées",
+                        nl = "Gecachte attractiegegevens weergegeven",
+                    ),
                     style = MaterialTheme.typography.bodySmall,
                     fontWeight = FontWeight.SemiBold,
                 )
                 Text(
-                    text = if (language == "en") {
-                        "Last successful detail update: ${ageMinutes.cacheAgeLabel(language)}."
-                    } else {
-                        "Letzte erfolgreiche Detail-Aktualisierung: ${ageMinutes.cacheAgeLabel(language)}."
-                    },
+                    text = localized(
+                        language,
+                        de = "Letzte erfolgreiche Detail-Aktualisierung: ${ageMinutes.cacheAgeLabel(language)}.",
+                        en = "Last successful detail update: ${ageMinutes.cacheAgeLabel(language)}.",
+                        fr = "Dernière mise à jour détaillée réussie : ${ageMinutes.cacheAgeLabel(language)}.",
+                        nl = "Laatste succesvolle detailupdate: ${ageMinutes.cacheAgeLabel(language)}.",
+                    ),
                     style = MaterialTheme.typography.labelSmall,
                 )
             }
@@ -1341,19 +1448,31 @@ private fun DataQualityCard(state: WaitingTimesUiState) {
             Column(modifier = Modifier.weight(1f)) {
                 Text(
                     text = when {
-                        state.isShowingOfflineData -> if (language == "en") "Cached data" else "Cache-Daten"
-                        state.dataUpdatedAtMillis > 0L && (ageText ?: Long.MAX_VALUE) <= 5L -> if (language == "en") "Live-like data" else "Aktuelle Daten"
-                        state.dataUpdatedAtMillis > 0L -> if (language == "en") "Older local data" else "Ältere lokale Daten"
-                        else -> if (language == "en") "Data status unknown" else "Datenstatus unbekannt"
+                        state.isShowingOfflineData -> localized(language, de = "Cache-Daten", en = "Cached data", fr = "Données en cache", nl = "Cachegegevens")
+                        state.dataUpdatedAtMillis > 0L && (ageText ?: Long.MAX_VALUE) <= 5L -> localized(language, de = "Aktuelle Daten", en = "Live-like data", fr = "Données quasi en direct", nl = "Bijna live gegevens")
+                        state.dataUpdatedAtMillis > 0L -> localized(language, de = "Ältere lokale Daten", en = "Older local data", fr = "Données locales plus anciennes", nl = "Oudere lokale gegevens")
+                        else -> localized(language, de = "Datenstatus unbekannt", en = "Data status unknown", fr = "État des données inconnu", nl = "Status van gegevens onbekend")
                     },
                     style = MaterialTheme.typography.bodySmall,
                     fontWeight = FontWeight.SemiBold,
                 )
                 Text(
                     text = if (state.dataUpdatedAtMillis > 0L) {
-                        if (language == "en") "Data age: ${ageText.cacheAgeLabel(language)}" else "Datenalter: ${ageText.cacheAgeLabel(language)}"
+                        localized(
+                            language,
+                            de = "Datenalter: ${ageText.cacheAgeLabel(language)}",
+                            en = "Data age: ${ageText.cacheAgeLabel(language)}",
+                            fr = "Ancienneté des données : ${ageText.cacheAgeLabel(language)}",
+                            nl = "Leeftijd van gegevens: ${ageText.cacheAgeLabel(language)}",
+                        )
                     } else {
-                        if (language == "en") "No successful update stored yet" else "Noch keine erfolgreiche Aktualisierung gespeichert"
+                        localized(
+                            language,
+                            de = "Noch keine erfolgreiche Aktualisierung gespeichert",
+                            en = "No successful update stored yet",
+                            fr = "Aucune mise à jour réussie enregistrée pour le moment",
+                            nl = "Nog geen succesvolle update opgeslagen",
+                        )
                     },
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -1374,18 +1493,28 @@ private fun shareParkDetail(context: Context, state: WaitingTimesUiState) {
         appendLine(park.name)
         appendLine(park.country)
         appendLine(
-            if (state.language == "en") {
-                "$openAttractions of ${state.allWaitingTimes.size} attractions open"
-            } else {
-                "$openAttractions von ${state.allWaitingTimes.size} Attraktionen offen"
-            }
+            localized(
+                state.language,
+                de = "$openAttractions von ${state.allWaitingTimes.size} Attraktionen offen",
+                en = "$openAttractions of ${state.allWaitingTimes.size} attractions open",
+                fr = "$openAttractions attractions ouvertes sur ${state.allWaitingTimes.size}",
+                nl = "$openAttractions van ${state.allWaitingTimes.size} attracties open",
+            )
         )
         state.crowdEstimate?.level?.let { level ->
-            appendLine(if (state.language == "en") "Crowd estimate: ${level.toInt()}%" else "Auslastung geschätzt: ${level.toInt()}%")
+            appendLine(
+                localized(
+                    state.language,
+                    de = "Auslastung geschätzt: ${level.toInt()}%",
+                    en = "Crowd estimate: ${level.toInt()}%",
+                    fr = "Fréquentation estimée : ${level.toInt()}%",
+                    nl = "Geschatte drukte: ${level.toInt()}%",
+                )
+            )
         }
         if (topWaits.isNotEmpty()) {
             appendLine()
-            appendLine(if (state.language == "en") "Longest waits:" else "Längste Wartezeiten:")
+            appendLine(localized(state.language, de = "Längste Wartezeiten:", en = "Longest waits:", fr = "Temps d'attente les plus longs :", nl = "Langste wachttijden:"))
             topWaits.forEach { item ->
                 appendLine("- ${item.name}: ${item.waitingTime ?: 0} Min.")
             }
@@ -1394,14 +1523,27 @@ private fun shareParkDetail(context: Context, state: WaitingTimesUiState) {
         appendLine(liveParkLink(park.id))
         appendLine("Web: https://wartezeiten-app.tutorialfynn.workers.dev/")
         appendLine()
-        append(if (state.language == "en") "Shared from Wartezeiten App" else "Geteilt aus der Wartezeiten App")
+        append(
+            localized(
+                state.language,
+                de = "Geteilt aus der Wartezeiten App",
+                en = "Shared from Wartezeiten App",
+                fr = "Partagé depuis l'application Wartezeiten",
+                nl = "Gedeeld vanuit de Wartezeiten-app",
+            )
+        )
     }
     val intent = Intent(Intent.ACTION_SEND).apply {
         type = "text/plain"
         putExtra(Intent.EXTRA_SUBJECT, park.name)
         putExtra(Intent.EXTRA_TEXT, text)
     }
-    context.startActivity(Intent.createChooser(intent, if (state.language == "en") "Share park overview" else "Parkübersicht teilen"))
+    context.startActivity(
+        Intent.createChooser(
+            intent,
+            localized(state.language, de = "Parkübersicht teilen", en = "Share park overview", fr = "Partager l'aperçu du parc", nl = "Parkoverzicht delen"),
+        )
+    )
 }
 
 private fun shareAttractionDetail(context: Context, park: Park, item: WaitingTime, language: String) {
@@ -1410,7 +1552,15 @@ private fun shareAttractionDetail(context: Context, park: Park, item: WaitingTim
         appendLine(park.name)
         appendLine("Status: ${item.status.label(language)}")
         item.waitingTime?.let { wait ->
-            appendLine(if (language == "en") "Current wait: $wait min" else "Aktuelle Wartezeit: $wait Min.")
+            appendLine(
+                localized(
+                    language,
+                    de = "Aktuelle Wartezeit: $wait Min.",
+                    en = "Current wait: $wait min",
+                    fr = "Temps d'attente actuel : $wait min",
+                    nl = "Huidige wachttijd: $wait min.",
+                )
+            )
         }
         appendLine()
         appendLine(liveAttractionLink(park.id, item.attractionId))
@@ -1421,7 +1571,12 @@ private fun shareAttractionDetail(context: Context, park: Park, item: WaitingTim
         putExtra(Intent.EXTRA_SUBJECT, "${park.name} · ${item.name}")
         putExtra(Intent.EXTRA_TEXT, text)
     }
-    context.startActivity(Intent.createChooser(intent, if (language == "en") "Share attraction link" else "Attraktionslink teilen"))
+    context.startActivity(
+        Intent.createChooser(
+            intent,
+            localized(language, de = "Attraktionslink teilen", en = "Share attraction link", fr = "Partager le lien de l'attraction", nl = "Attractielink delen"),
+        )
+    )
 }
 
 private fun liveParkLink(parkKey: String): String = "wartezeiten://parks/${Uri.encode(parkKey)}"
@@ -1430,36 +1585,74 @@ private fun liveAttractionLink(parkKey: String, attractionId: String): String =
     "wartezeiten://parks/${Uri.encode(parkKey)}?attractionId=${Uri.encode(attractionId)}"
 
 private fun Long?.cacheAgeLabel(language: String): String {
-    val minutes = this ?: return if (language == "en") "unknown" else "unbekannt"
+    val minutes = this ?: return localized(language, de = "unbekannt", en = "unknown", fr = "inconnu", nl = "onbekend")
     return when {
-        minutes <= 1L -> if (language == "en") "just now" else "gerade eben"
-        minutes < 60L -> if (language == "en") "$minutes minutes ago" else "vor $minutes Minuten"
-        minutes < 120L -> if (language == "en") "1 hour ago" else "vor 1 Stunde"
+        minutes <= 1L -> localized(language, de = "gerade eben", en = "just now", fr = "à l'instant", nl = "zojuist")
+        minutes < 60L -> localized(
+            language,
+            de = "vor $minutes Minuten",
+            en = "$minutes minutes ago",
+            fr = "il y a $minutes minutes",
+            nl = "$minutes minuten geleden",
+        )
+        minutes < 120L -> localized(language, de = "vor 1 Stunde", en = "1 hour ago", fr = "il y a 1 heure", nl = "1 uur geleden")
         else -> {
             val hours = minutes / 60L
-            if (language == "en") "$hours hours ago" else "vor $hours Stunden"
+            localized(
+                language,
+                de = "vor $hours Stunden",
+                en = "$hours hours ago",
+                fr = "il y a $hours heures",
+                nl = "$hours uur geleden",
+            )
         }
     }
 }
 
 private fun weatherInsight(weather: WeatherInfo, language: String): String {
-    if (language == "en") {
-        return when {
-            weather.precipitationProbability >= 70 -> "High rain risk - weather closures possible"
-            weather.temperature >= 30 -> "Very warm - plan breaks"
-            weather.temperature <= 3 -> "Very cold - check outdoor attractions"
-            weather.weatherCode in 95..99 -> "Thunderstorm risk - watch status changes"
-            weather.precipitationProbability <= 20 && weather.temperature in 12.0..26.0 -> "Good weather for a visit"
-            else -> "Keep an eye on the weather"
-        }
-    }
     return when {
-        weather.precipitationProbability >= 70 -> "Regenrisiko hoch - wetterbedingte Schließungen möglich"
-        weather.temperature >= 30 -> "Sehr warm - Pausen einplanen"
-        weather.temperature <= 3 -> "Sehr kalt - Outdoor-Attraktionen prüfen"
-        weather.weatherCode in 95..99 -> "Gewitterrisiko - Statusänderungen beobachten"
-        weather.precipitationProbability <= 20 && weather.temperature in 12.0..26.0 -> "Gutes Besuchswetter"
-        else -> "Wetter im Blick behalten"
+        weather.precipitationProbability >= 70 -> localized(
+            language,
+            de = "Regenrisiko hoch - wetterbedingte Schließungen möglich",
+            en = "High rain risk - weather closures possible",
+            fr = "Risque de pluie élevé - fermetures possibles à cause du temps",
+            nl = "Hoog regenrisico - weergerelateerde sluitingen mogelijk",
+        )
+        weather.temperature >= 30 -> localized(
+            language,
+            de = "Sehr warm - Pausen einplanen",
+            en = "Very warm - plan breaks",
+            fr = "Très chaud - prévoyez des pauses",
+            nl = "Erg warm - plan pauzes in",
+        )
+        weather.temperature <= 3 -> localized(
+            language,
+            de = "Sehr kalt - Outdoor-Attraktionen prüfen",
+            en = "Very cold - check outdoor attractions",
+            fr = "Très froid - vérifiez les attractions en extérieur",
+            nl = "Erg koud - controleer attracties buiten",
+        )
+        weather.weatherCode in 95..99 -> localized(
+            language,
+            de = "Gewitterrisiko - Statusänderungen beobachten",
+            en = "Thunderstorm risk - watch status changes",
+            fr = "Risque d'orage - surveillez les changements de statut",
+            nl = "Risico op onweer - let op statuswijzigingen",
+        )
+        weather.precipitationProbability <= 20 && weather.temperature in 12.0..26.0 -> localized(
+            language,
+            de = "Gutes Besuchswetter",
+            en = "Good weather for a visit",
+            fr = "Bon temps pour une visite",
+            nl = "Goed weer voor een bezoek",
+        )
+        else -> localized(
+            language,
+            de = "Wetter im Blick behalten",
+            en = "Keep an eye on the weather",
+            fr = "Surveillez la météo",
+            nl = "Houd het weer in de gaten",
+        )
     }
 }
 
@@ -1510,11 +1703,13 @@ private fun EmptyState(state: WaitingTimesUiState) {
 private fun emptyAttractionMessage(state: WaitingTimesUiState): String {
     val language = state.language
     if (state.allWaitingTimes.isNotEmpty()) {
-        return if (language == "en") {
-            "No attractions match the current filters."
-        } else {
-            "Keine Attraktionen passen zu den aktuellen Filtern."
-        }
+        return localized(
+            language,
+            de = "Keine Attraktionen passen zu den aktuellen Filtern.",
+            en = "No attractions match the current filters.",
+            fr = "Aucune attraction ne correspond aux filtres actuels.",
+            nl = "Geen attracties komen overeen met de huidige filters.",
+        )
     }
 
     val displayState = parkOpeningDisplayState(
@@ -1526,40 +1721,48 @@ private fun emptyAttractionMessage(state: WaitingTimesUiState): String {
     )
 
     return when (displayState.tone) {
-        ParkOpeningTone.ClosedToday -> if (language == "en") {
-            "The park is closed today. No current attractions are shown."
-        } else {
-            "Der Park ist heute geschlossen. Es werden keine aktuellen Attraktionen angezeigt."
-        }
-        ParkOpeningTone.OpenOtherTimeToday -> if (language == "en") {
-            "The park is currently closed. Current attractions will appear during opening hours."
-        } else {
-            "Der Park ist aktuell geschlossen. Aktuelle Attraktionen erscheinen während der Öffnungszeiten."
-        }
-        ParkOpeningTone.Unknown -> if (language == "en") {
-            "No current attraction data is available yet."
-        } else {
-            "Noch keine aktuellen Attraktionsdaten verfügbar."
-        }
-        ParkOpeningTone.Open -> if (language == "en") {
-            "No current attraction data is available yet."
-        } else {
-            "Noch keine aktuellen Attraktionsdaten verfügbar."
-        }
+        ParkOpeningTone.ClosedToday -> localized(
+            language,
+            de = "Der Park ist heute geschlossen. Es werden keine aktuellen Attraktionen angezeigt.",
+            en = "The park is closed today. No current attractions are shown.",
+            fr = "Le parc est fermé aujourd'hui. Aucune attraction actuelle n'est affichée.",
+            nl = "Het park is vandaag gesloten. Er worden geen actuele attracties weergegeven.",
+        )
+        ParkOpeningTone.OpenOtherTimeToday -> localized(
+            language,
+            de = "Der Park ist aktuell geschlossen. Aktuelle Attraktionen erscheinen während der Öffnungszeiten.",
+            en = "The park is currently closed. Current attractions will appear during opening hours.",
+            fr = "Le parc est actuellement fermé. Les attractions actuelles apparaîtront pendant les heures d'ouverture.",
+            nl = "Het park is momenteel gesloten. Actuele attracties verschijnen tijdens openingstijden.",
+        )
+        ParkOpeningTone.Unknown -> localized(
+            language,
+            de = "Noch keine aktuellen Attraktionsdaten verfügbar.",
+            en = "No current attraction data is available yet.",
+            fr = "Aucune donnée d'attraction actuelle disponible pour le moment.",
+            nl = "Nog geen actuele attractiegegevens beschikbaar.",
+        )
+        ParkOpeningTone.Open -> localized(
+            language,
+            de = "Noch keine aktuellen Attraktionsdaten verfügbar.",
+            en = "No current attraction data is available yet.",
+            fr = "Aucune donnée d'attraction actuelle disponible pour le moment.",
+            nl = "Nog geen actuele attractiegegevens beschikbaar.",
+        )
     }
 }
 
 private fun WaitingTimesSort.label(language: String) = when (this) {
-    WaitingTimesSort.WaitAscending -> if (language == "en") "Wait time â†‘" else "Wartezeit â†‘"
-    WaitingTimesSort.WaitDescending -> if (language == "en") "Wait time â†“" else "Wartezeit â†“"
+    WaitingTimesSort.WaitAscending -> localized(language, de = "Wartezeit ↑", en = "Wait time ↑", fr = "Temps d'attente ↑", nl = "Wachttijd ↑")
+    WaitingTimesSort.WaitDescending -> localized(language, de = "Wartezeit ↓", en = "Wait time ↓", fr = "Temps d'attente ↓", nl = "Wachttijd ↓")
     WaitingTimesSort.Name -> "Name A-Z"
 }
 
 private fun AttractionFilter.label(language: String) = when (this) {
-    AttractionFilter.All -> if (language == "en") "All" else "Alle"
-    AttractionFilter.OpenOnly -> if (language == "en") "Open only" else "Nur offen"
-    AttractionFilter.Maintenance -> if (language == "en") "Maintenance" else "Wartung"
-    AttractionFilter.Closed -> if (language == "en") "Closed" else "Geschlossen"
+    AttractionFilter.All -> localized(language, de = "Alle", en = "All", fr = "Toutes", nl = "Alle")
+    AttractionFilter.OpenOnly -> localized(language, de = "Nur offen", en = "Open only", fr = "Ouvertes uniquement", nl = "Alleen open")
+    AttractionFilter.Maintenance -> localized(language, de = "Wartung", en = "Maintenance", fr = "Maintenance", nl = "Onderhoud")
+    AttractionFilter.Closed -> localized(language, de = "Geschlossen", en = "Closed", fr = "Fermé", nl = "Gesloten")
 }
 
 private fun formatForecastDate(isoDate: String): String {
@@ -1571,11 +1774,11 @@ private fun formatForecastDate(isoDate: String): String {
 }
 
 private fun AttractionStatus.label(language: String) = when (this) {
-    AttractionStatus.Opened -> if (language == "en") "Open" else "Geöffnet"
-    AttractionStatus.Closed -> if (language == "en") "Closed" else "Geschlossen"
-    AttractionStatus.Maintenance -> if (language == "en") "Maintenance" else "Wartung"
-    AttractionStatus.ClosedWeather -> if (language == "en") "Weather" else "Wetter"
-    AttractionStatus.Unknown -> if (language == "en") "Unknown" else "Unbekannt"
+    AttractionStatus.Opened -> localized(language, de = "Geöffnet", en = "Open", fr = "Ouvert", nl = "Open")
+    AttractionStatus.Closed -> localized(language, de = "Geschlossen", en = "Closed", fr = "Fermé", nl = "Gesloten")
+    AttractionStatus.Maintenance -> localized(language, de = "Wartung", en = "Maintenance", fr = "Maintenance", nl = "Onderhoud")
+    AttractionStatus.ClosedWeather -> localized(language, de = "Wetter", en = "Weather", fr = "Météo", nl = "Weer")
+    AttractionStatus.Unknown -> localized(language, de = "Unbekannt", en = "Unknown", fr = "Inconnu", nl = "Onbekend")
 }
 
 private fun AttractionStatus.indicatorColor() = when (this) {

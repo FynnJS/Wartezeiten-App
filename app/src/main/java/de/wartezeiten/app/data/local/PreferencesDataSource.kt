@@ -36,6 +36,7 @@ class PreferencesDataSource @Inject constructor(
         val RECENT_PARK_KEYS = stringPreferencesKey("recent_park_keys")
         val PUSH_INSTALLATION_ID = stringPreferencesKey("push_installation_id")
         val LANGUAGE = stringPreferencesKey("language")
+        val LAST_SEEN_VERSION_CODE = intPreferencesKey("last_seen_version_code")
     }
 
     val darkMode: Flow<Boolean?> = context.dataStore.data
@@ -260,9 +261,25 @@ class PreferencesDataSource @Inject constructor(
         }
     }
 
+    val lastSeenVersionCode: Flow<Int> = context.dataStore.data
+        .catch { exception ->
+            if (exception is IOException) {
+                emit(emptyPreferences())
+            } else {
+                throw exception
+            }
+        }
+        .map { preferences -> preferences[PreferencesKeys.LAST_SEEN_VERSION_CODE] ?: 0 }
+
+    suspend fun setLastSeenVersionCode(value: Int) {
+        context.dataStore.edit { preferences ->
+            preferences[PreferencesKeys.LAST_SEEN_VERSION_CODE] = value
+        }
+    }
+
     companion object {
         const val DEFAULT_LANGUAGE = "de"
-        val SUPPORTED_LANGUAGES = setOf("de", "en")
+        val SUPPORTED_LANGUAGES = setOf("de", "en", "fr", "nl")
         private const val SEARCH_HISTORY_SEPARATOR = "\u001F"
         private const val MAX_SEARCH_HISTORY_ITEMS = 5
         private const val MAX_RECENT_PARK_ITEMS = 5

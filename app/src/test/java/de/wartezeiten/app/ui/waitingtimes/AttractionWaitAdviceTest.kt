@@ -73,6 +73,25 @@ class AttractionWaitAdviceTest {
         assertTrue(result.isEmpty())
     }
 
+    @Test
+    fun buildsHistorySeriesFromTheDayMatchingToday() {
+        val days = historyDays(30, 20)
+        val today = days.first().date
+
+        val series = buildAttractionHistorySeries(ATTRACTION_ID, days, today)
+
+        assertTrue(series.isNotEmpty())
+    }
+
+    @Test
+    fun returnsEmptyHistorySeriesWhenTodayIsNotAmongTheLoadedDays() {
+        val days = historyDays(30, 20)
+
+        val series = buildAttractionHistorySeries(ATTRACTION_ID, days, today = "2099-01-01")
+
+        assertTrue(series.isEmpty())
+    }
+
     private fun advice(
         currentWait: Int,
         currentHistoricalWait: Int,

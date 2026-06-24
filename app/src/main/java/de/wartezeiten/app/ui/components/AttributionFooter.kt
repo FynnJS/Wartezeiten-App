@@ -20,6 +20,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.dp
+import de.wartezeiten.app.core.i18n.localized
 
 @Composable
 fun AttributionFooter(language: String = "de") {
@@ -50,7 +51,13 @@ fun AttributionBanner(
                 modifier = Modifier.padding(end = 8.dp),
             )
             Text(
-                text = if (language == "en") "Data provided by " else "Daten bereitgestellt von ",
+                text = localized(
+                    language,
+                    de = "Daten bereitgestellt von ",
+                    en = "Data provided by ",
+                    fr = "Données fournies par ",
+                    nl = "Gegevens geleverd door ",
+                ),
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )

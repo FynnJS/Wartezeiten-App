@@ -6,9 +6,23 @@ import {
   buildStatisticsIndexFromD1Rows,
   cronParkShard,
   deriveAttractionSnapshotTiming,
+  evaluatePushAlert,
   mergeStatisticsIndexes,
   toAttractionSnapshotRow,
 } from "./index.js";
+
+function openParkSnapshot() {
+  return {
+    parkKey: "europapark",
+    openedToday: true,
+    openFrom: "2026-06-22T09:00:00+02:00",
+    closedFrom: "2026-06-22T18:00:00+02:00",
+    displayCrowdLevel: 42,
+    attractions: [
+      { id: "ride-1", name: "Silver Star", value: 10, statusCode: 0, status: "opened" },
+    ],
+  };
+}
 
 test("D1 scheduled app-data uses cron shards and ignores history shards", () => {
   const options = buildScheduledAppDataOptions(
@@ -179,4 +193,44 @@ test("legacy index dates covered by D1 are not reintroduced after D1 filters the
   );
 
   assert.deepEqual(merged.parks, []);
+});
+
+test("push alert text is localized per installation language", () => {
+  const alert = {
+    type: "NOW_OPENED",
+    language: "fr",
+    last_seen_value: null,
+  };
+
+  const evaluation = evaluatePushAlert(alert, openParkSnapshot());
+
+  assert.equal(evaluation.title, "Entrée prête : europapark");
+  assert.equal(evaluation.body, "Le parc est actuellement signalé comme ouvert.");
+});
+
+test("push alert text falls back to German when no language is stored", () => {
+  const alert = {
+    type: "NOW_OPENED",
+    last_seen_value: null,
+  };
+
+  const evaluation = evaluatePushAlert(alert, openParkSnapshot());
+
+  assert.equal(evaluation.title, "Einlass bereit: europapark");
+  assert.equal(evaluation.body, "Der Park ist aktuell als geoeffnet gemeldet.");
+});
+
+test("push alert text is localized for Dutch wait-time alerts", () => {
+  const alert = {
+    type: "WAIT_TIME_BELOW",
+    language: "nl",
+    threshold_value: 20,
+    attraction_id: null,
+    last_seen_value: null,
+  };
+
+  const evaluation = evaluatePushAlert(alert, openParkSnapshot());
+
+  assert.equal(evaluation.title, "Rijvenster: Silver Star");
+  assert.equal(evaluation.body, "Silver Star staat op 10 min.");
 });

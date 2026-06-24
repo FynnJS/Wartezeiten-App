@@ -22,7 +22,8 @@ Die Website liest `website/release.json` und verlinkt auf den neuesten GitHub Re
 - Watchlist-Alarme mit Ruhezeiten, Einmal-Zustellung, Parköffnungsregel, Mindestabstand und täglicher Parkzusammenfassung
 - Datenbasierter Multi-Park-Vergleich mit Suche, Sortierung und direktem Sprung zur Parkübersicht
 - Startbildschirm-Widget fuer einen Lieblingspark mit Oeffnungsstatus, Wartezeit-Kennzahlen, drei Attraktionen, Datenalter sowie manuellem und periodischem Refresh
-- Pflicht-Update-Sperre und Benachrichtigung bei neuer APK-Version
+- Vier Sprachen (Deutsch, Englisch, Französisch, Niederländisch) mit zentraler Sprachauswahl in den Einstellungen
+- Pflicht-Update-Sperre mit In-App-APK-Download samt Fortschrittsanzeige, SHA-256-Prüfung und direktem Installationsdialog; "Was ist neu"-Dialog nach erfolgreichem Update
 - Offline-First-Datenhaltung über Room, Cache-Hinweis und automatische Aktualisierung für Live-Daten
 
 ## Watchlist-Benachrichtigungen
