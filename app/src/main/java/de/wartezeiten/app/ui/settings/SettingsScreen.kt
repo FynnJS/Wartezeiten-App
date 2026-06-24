@@ -37,6 +37,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import de.wartezeiten.app.core.i18n.localized
 import de.wartezeiten.app.data.local.PreferencesDataSource
 import de.wartezeiten.app.ui.components.AttributionBanner
+import de.wartezeiten.app.ui.parks.countryToFlag
 
 @Composable
 fun SettingsRoute(
@@ -149,7 +150,7 @@ fun SettingsScreen(
                 headlineContent = {
                     Text(localized(state.language, de = "Sprache", en = "Language", fr = "Langue", nl = "Taal"))
                 },
-                supportingContent = { Text(state.language.languageLabel(state.language)) },
+                supportingContent = { Text(state.language.languageLabel()) },
                 leadingContent = { Icon(Icons.Default.Language, contentDescription = null) },
                 trailingContent = {
                     IconButton(onClick = { languageExpanded = true }) {
@@ -170,7 +171,7 @@ fun SettingsScreen(
                     ) {
                         PreferencesDataSource.SUPPORTED_LANGUAGES.sorted().forEach { language ->
                             DropdownMenuItem(
-                                text = { Text(language.languageLabel(state.language)) },
+                                text = { Text(language.languageLabel()) },
                                 onClick = {
                                     onLanguageChange(language)
                                     languageExpanded = false
@@ -239,11 +240,18 @@ fun SettingsScreen(
     }
 }
 
-private fun String.languageLabel(currentLanguage: String): String {
-    return when (this) {
-        "en" -> localized(currentLanguage, de = "Englisch", en = "English", fr = "Anglais", nl = "Engels")
-        "fr" -> localized(currentLanguage, de = "Französisch", en = "French", fr = "Français", nl = "Frans")
-        "nl" -> localized(currentLanguage, de = "Niederländisch", en = "Dutch", fr = "Néerlandais", nl = "Nederlands")
-        else -> localized(currentLanguage, de = "Deutsch", en = "German", fr = "Allemand", nl = "Duits")
+private fun String.languageLabel(): String {
+    val flag = when (this) {
+        "en" -> countryToFlag("United Kingdom")
+        "fr" -> countryToFlag("France")
+        "nl" -> countryToFlag("Netherlands")
+        else -> countryToFlag("Germany")
     }
+    val nativeName = when (this) {
+        "en" -> "English"
+        "fr" -> "Français"
+        "nl" -> "Nederlands"
+        else -> "Deutsch"
+    }
+    return "$flag $nativeName"
 }

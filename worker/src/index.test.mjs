@@ -81,7 +81,8 @@ test("stale previous-day waiting times are not eligible for history writes", () 
   assert.equal(timing.historyDate, "2026-06-23");
 });
 
-test("valid waiting-time timestamp drives D1 snapshot date and capture time", () => {
+test("valid waiting-time timestamp drives D1 snapshot date while collection time drives capture time", () => {
+  const collectionTime = Date.parse("2026-06-22T10:31:15Z");
   const timing = deriveAttractionSnapshotTiming(
     {
       opened_today: true,
@@ -96,7 +97,7 @@ test("valid waiting-time timestamp drives D1 snapshot date and capture time", ()
         status: "opened",
       },
     ],
-    Date.parse("2026-06-22T10:31:15Z"),
+    collectionTime,
   );
   const row = toAttractionSnapshotRow(
     {
@@ -108,12 +109,41 @@ test("valid waiting-time timestamp drives D1 snapshot date and capture time", ()
       closedFrom: "2026-06-22T17:30:00+02:00",
       attractions: [{ id: "a", name: "A", value: 15, statusCode: 0, status: "opened" }],
     },
-    Date.parse("2026-06-22T10:31:15Z"),
+    collectionTime,
   );
 
   assert.equal(timing.historyEligible, true);
   assert.equal(row.date, "2026-06-22");
-  assert.equal(row.capturedAtMillis, Date.parse("2026-06-22T12:30:00+02:00"));
+  assert.equal(row.capturedAtMillis, collectionTime);
+});
+
+test("repeated cron collections keep distinct D1 capture times when upstream timestamp is unchanged", () => {
+  const opening = {
+    opened_today: true,
+    open_from: "2026-06-22T10:00:00+02:00",
+    closed_from: "2026-06-22T17:30:00+02:00",
+  };
+  const waitingItems = [
+    {
+      datetime: "2026-06-22T12:30:00+02:00",
+      date: "2026-06-22",
+      waitingtime: 15,
+      status: "opened",
+    },
+  ];
+  const firstCollection = Date.parse("2026-06-22T10:31:15Z");
+  const secondCollection = Date.parse("2026-06-22T10:36:15Z");
+
+  const first = deriveAttractionSnapshotTiming(opening, waitingItems, firstCollection);
+  const second = deriveAttractionSnapshotTiming(opening, waitingItems, secondCollection);
+
+  assert.equal(first.historyEligible, true);
+  assert.equal(second.historyEligible, true);
+  assert.equal(first.historyDate, "2026-06-22");
+  assert.equal(second.historyDate, "2026-06-22");
+  assert.notEqual(first.capturedAtMillis, second.capturedAtMillis);
+  assert.equal(first.capturedAtMillis, firstCollection);
+  assert.equal(second.capturedAtMillis, secondCollection);
 });
 
 test("empty waiting-time payloads are reported as skipped history", () => {

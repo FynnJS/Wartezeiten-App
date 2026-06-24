@@ -14,7 +14,7 @@ Die Website liest `website/release.json` und verlinkt auf den neuesten GitHub Re
 
 - Parkliste mit Länder-, Favoriten- und Öffnungsstatus-Filter
 - Gemeinsame Suche nach Parks und Attraktionen mit direktem Sprung zur passenden Attraktion
-- Parkdetails mit Wartezeiten, Öffnungszeiten, Wetter, Feiertagen, aktueller Auslastung und zentraler Parkstatistik
+- Parkdetails mit Wartezeiten, Öffnungszeiten, Wetter, Feiertagen, aktueller Auslastung, Datenqualitäts-Hinweisen und zentraler Parkstatistik
 - Attraktions-Detailkarten mit Verlauf, Prognose, persönlicher Notiz, Watchlist-Shortcut und Deep-Link-Share
 - Historisch gestützte "Jetzt oder später?"-Einordnung für geöffnete Attraktionen
 - Zentrale Cloudflare App-Daten für Ranking-, Trend- und Attraktionsstatistik-Snapshots
@@ -106,6 +106,8 @@ Der dauerhafte Schlüssel wird einmalig eingerichtet und anschließend lokal sow
 ```powershell
 .\scripts\configure-release-signing.ps1
 ```
+
+Lokale `assembleRelease`-Builds brechen ohne diese `keystore.properties` ebenfalls ab. Das ist bewusst so, damit keine APK mit Debug- oder Wegwerf-Signatur entsteht, die Android nicht über eine bereits installierte Release-Version installieren kann.
 
 Der dabei ausgegebene Sicherungsordner muss zusätzlich außerhalb des Rechners gesichert werden. Der private Keystore lässt sich aus einer veröffentlichten APK nicht wiederherstellen.
 

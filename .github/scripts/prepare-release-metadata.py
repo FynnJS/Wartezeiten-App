@@ -33,6 +33,37 @@ def find_release_apk():
     return apk_candidates[0]
 
 
+def release_notes_from_text(text):
+    notes = []
+    for line in text.splitlines():
+        stripped = line.strip()
+        if not stripped or stripped.startswith("#"):
+            continue
+        stripped = re.sub(r"^[-*]\s+", "", stripped)
+        if stripped:
+            notes.append(stripped)
+    return notes
+
+
+def localized_release_notes_for_tag(tag, fallback_body):
+    docs_dir = pathlib.Path("docs/releases")
+    localized = {}
+    base_doc = docs_dir / f"{tag}.md"
+    for language in ("de", "en", "fr", "nl"):
+        language_doc = docs_dir / f"{tag}.{language}.md"
+        if language_doc.exists():
+            localized[language] = release_notes_from_text(language_doc.read_text(encoding="utf-8"))
+        elif language == "de" and base_doc.exists():
+            localized[language] = release_notes_from_text(base_doc.read_text(encoding="utf-8"))
+
+    fallback_notes = release_notes_from_text(fallback_body)
+    if fallback_notes:
+        for language in ("de", "en", "fr", "nl"):
+            localized.setdefault(language, fallback_notes)
+
+    return {language: notes for language, notes in localized.items() if notes}
+
+
 github_event = os.environ.get("GITHUB_EVENT_NAME", "")
 github_repo = os.environ.get("GITHUB_REPOSITORY", "")
 github_ref = os.environ.get("GITHUB_REF", "")
@@ -73,7 +104,8 @@ size_bytes = apk_source.stat().st_size
 size_label = f"{size_bytes / (1024 * 1024):.2f}"
 release_date = datetime.now(timezone.utc).strftime("%Y-%m-%d")
 
-release_notes = [line for line in release_body.splitlines() if line.strip()]
+release_notes_localized = localized_release_notes_for_tag(release_tag, release_body)
+release_notes = release_notes_localized.get("de") or release_notes_from_text(release_body)
 if not release_notes:
     release_notes = [f"Automatisch generierter Release fuer {version_name}."]
 
@@ -85,6 +117,7 @@ release_json = {
     "apkUrl": apk_url,
     "apkSize": size_label,
     "releaseNotes": release_notes,
+    "releaseNotesLocalized": release_notes_localized,
     "showBanner": True,
 }
 

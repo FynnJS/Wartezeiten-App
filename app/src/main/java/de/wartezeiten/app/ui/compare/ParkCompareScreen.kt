@@ -56,7 +56,7 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import de.wartezeiten.app.core.i18n.localized
 import de.wartezeiten.app.domain.model.Park
-import de.wartezeiten.app.ui.components.AttributionBanner
+import de.wartezeiten.app.ui.components.AttributionFooter
 import java.time.Instant
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
@@ -133,7 +133,7 @@ fun ParkCompareScreen(
             )
         },
         bottomBar = {
-            AttributionBanner(language = state.language)
+            AttributionFooter(language = state.language)
         },
     ) { padding ->
         Column(

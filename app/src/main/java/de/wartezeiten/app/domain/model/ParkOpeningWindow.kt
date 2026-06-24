@@ -45,6 +45,28 @@ fun isParkCurrentlyOpen(
     return true
 }
 
+/**
+ * Erkennt einen wahrscheinlichen Datenausfall der Wartezeiten-Quelle: Der Park gilt laut
+ * Öffnungszeiten als heute geöffnet und die Öffnung liegt mindestens [graceMinutes] zurück
+ * (und der Park hat noch nicht geschlossen), aber keine Attraktion meldet aktuell "geöffnet".
+ */
+fun isParkOpenWithoutWaitingTimeData(
+    openedToday: Boolean?,
+    openFrom: String?,
+    closedFrom: String?,
+    hasOpenAttraction: Boolean,
+    now: Instant = Instant.now(),
+    graceMinutes: Long = 15,
+): Boolean {
+    if (openedToday != true || hasOpenAttraction) return false
+    val window = parkOpeningWindow(openFrom, closedFrom, ZoneId.systemDefault())
+    val opensAt = window.opensAt?.toInstant() ?: return false
+    if (now.isBefore(opensAt.plusSeconds(graceMinutes * 60))) return false
+    val closesAt = window.closesAt?.toInstant()
+    if (closesAt != null && !now.isBefore(closesAt)) return false
+    return true
+}
+
 private fun normalizeClosingDate(
     opensAt: ZonedDateTime?,
     closesAt: ZonedDateTime?,

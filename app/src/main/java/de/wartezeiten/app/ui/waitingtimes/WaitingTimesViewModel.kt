@@ -21,6 +21,7 @@ import de.wartezeiten.app.domain.model.OpeningTimes
 import de.wartezeiten.app.domain.model.Park
 import de.wartezeiten.app.domain.model.WaitingTime
 import de.wartezeiten.app.domain.model.estimateCrowdLevel
+import de.wartezeiten.app.domain.model.isParkOpenWithoutWaitingTimeData
 import de.wartezeiten.app.domain.model.WeatherInfo
 import de.wartezeiten.app.domain.repository.WartezeitenRepository
 import de.wartezeiten.app.domain.usecase.RefreshParkDetailUseCase
@@ -38,6 +39,7 @@ import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.take
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import java.time.Instant
 import java.time.OffsetDateTime
 import java.time.LocalDate
 import javax.inject.Inject
@@ -87,6 +89,7 @@ data class WaitingTimesUiState(
     val language: String = PreferencesDataSource.DEFAULT_LANGUAGE,
     val highlightedAttractionId: String? = null,
     val highlightedAttractionNote: String = "",
+    val isWaitingTimeDataLikelyMissing: Boolean = false,
 )
 
 private data class DetailAuxState(
@@ -210,6 +213,13 @@ class WaitingTimesViewModel @Inject constructor(
             } else {
                 CrowdLevelEstimate(level = null, source = CrowdLevelSource.None)
             }
+            val isWaitingTimeDataLikelyMissing = isParkOpenWithoutWaitingTimeData(
+                openedToday = detail.openingTimes?.opened,
+                openFrom = detail.openingTimes?.from,
+                closedFrom = detail.openingTimes?.to,
+                hasOpenAttraction = hasOpenAttraction,
+                now = Instant.ofEpochMilli(status.currentTime),
+            )
             val today = LocalDate.now().toString()
             val openWaitingTimes = detail.waitingTimes.filter { it.status == AttractionStatus.Opened }
             val forecasts = buildAttractionWaitForecasts(
@@ -261,6 +271,7 @@ class WaitingTimesViewModel @Inject constructor(
                 language = status.language,
                 highlightedAttractionId = highlightedAttractionId,
                 highlightedAttractionNote = aux.note?.note.orEmpty(),
+                isWaitingTimeDataLikelyMissing = isWaitingTimeDataLikelyMissing,
             )
         }
     }.stateIn(

@@ -29,7 +29,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import de.wartezeiten.app.core.i18n.localized
 import de.wartezeiten.app.data.remote.dto.AppUpdateInfo
@@ -46,10 +45,9 @@ fun UpdateBanner(
     onReleasePageClick: (() -> Unit)? = null,
 ) {
     val context = LocalContext.current
-    val notes = releaseInfo.releaseNotes
+    val notes = releaseInfo.releaseNotesFor(language)
         .map { it.trim() }
         .filter { it.isNotBlank() }
-        .take(3)
     val fallbackNote = localized(
         language,
         de = "Installiere die aktuelle APK, um die App weiter zu nutzen.",
@@ -90,7 +88,7 @@ fun UpdateBanner(
                             language,
                             de = "Update erforderlich",
                             en = "Update required",
-                            fr = "Mise \u00e0 jour requise",
+                            fr = "Mise à jour requise",
                             nl = "Update vereist",
                         ),
                         style = MaterialTheme.typography.headlineSmall.copy(fontWeight = FontWeight.Bold),
@@ -99,10 +97,10 @@ fun UpdateBanner(
                     Text(
                         text = localized(
                             language,
-                            de = "Version ${releaseInfo.versionName} ist verf\u00fcgbar. Diese installierte Version wird nicht mehr unterst\u00fctzt.",
+                            de = "Version ${releaseInfo.versionName} ist verfügbar. Diese installierte Version wird nicht mehr unterstützt.",
                             en = "Version ${releaseInfo.versionName} is available. This installed version is no longer supported.",
-                            fr = "La version ${releaseInfo.versionName} est disponible. Cette version install\u00e9e n'est plus prise en charge.",
-                            nl = "Versie ${releaseInfo.versionName} is beschikbaar. Deze ge\u00efnstalleerde versie wordt niet meer ondersteund.",
+                            fr = "La version ${releaseInfo.versionName} est disponible. Cette version installée n'est plus prise en charge.",
+                            nl = "Versie ${releaseInfo.versionName} is beschikbaar. Deze geïnstalleerde versie wordt niet meer ondersteund.",
                         ),
                         style = MaterialTheme.typography.bodyLarge,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -110,10 +108,10 @@ fun UpdateBanner(
                     Text(
                         text = localized(
                             language,
-                            de = "Installiere die APK aus diesem Update-Hinweis \u00fcber die bestehende App. Paket-ID und Release-Signatur bleiben gleich, damit Android die App ohne App-Konflikt ersetzen kann.",
-                            en = "Install the APK from this update prompt over the existing app. The package id and release signing stay the same, so Android can replace the app without an app conflict.",
-                            fr = "Installe l'APK depuis cette invite de mise \u00e0 jour par-dessus l'application existante. L'ID du package et la signature restent identiques, Android peut donc remplacer l'application sans conflit.",
-                            nl = "Installeer de APK uit deze updatemelding over de bestaande app heen. Package-ID en releasehandtekening blijven gelijk, zodat Android de app zonder conflict kan vervangen.",
+                            de = "Installiere die APK aus diesem Hinweis über die bestehende App. Falls Android trotzdem einen Paketkonflikt meldet, wurde die installierte App mit einem anderen Schlüssel signiert und muss einmalig neu installiert werden.",
+                            en = "Install the APK from this prompt over the existing app. If Android still reports a package conflict, the installed app was signed with another key and needs one clean reinstall.",
+                            fr = "Installe l'APK depuis cette invite par-dessus l'application existante. Si Android signale malgré tout un conflit de package, l'application installée a été signée avec une autre clé et doit être réinstallée une seule fois.",
+                            nl = "Installeer de APK uit deze melding over de bestaande app heen. Als Android toch een pakketconflict meldt, is de geïnstalleerde app met een andere sleutel ondertekend en is een eenmalige herinstallatie nodig.",
                         ),
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -124,8 +122,6 @@ fun UpdateBanner(
                                 text = "- $note",
                                 style = MaterialTheme.typography.bodyMedium,
                                 color = MaterialTheme.colorScheme.onSurface,
-                                maxLines = 4,
-                                overflow = TextOverflow.Ellipsis,
                             )
                         }
                     }

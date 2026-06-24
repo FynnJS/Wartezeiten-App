@@ -457,11 +457,11 @@ function deriveAttractionSnapshotTiming(opening, waitingItems, now) {
   const openAtMillis = parseDateMillis(openFrom);
   const closeAtMillis = parseDateMillis(closedFrom);
   if (
-    (openAtMillis != null && latest.millis < openAtMillis) ||
-    (closeAtMillis != null && latest.millis > closeAtMillis)
+    (openAtMillis != null && now < openAtMillis) ||
+    (closeAtMillis != null && now > closeAtMillis)
   ) {
     return {
-      capturedAtMillis: latest.millis,
+      capturedAtMillis: now,
       historyDate,
       historyEligible: false,
       skipReason: "outside_opening_window",
@@ -469,7 +469,7 @@ function deriveAttractionSnapshotTiming(opening, waitingItems, now) {
   }
 
   return {
-    capturedAtMillis: latest.millis,
+    capturedAtMillis: now,
     historyDate,
     historyEligible: true,
     skipReason: null,

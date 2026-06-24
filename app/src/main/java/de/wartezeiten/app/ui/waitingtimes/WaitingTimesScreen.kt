@@ -95,7 +95,7 @@ import de.wartezeiten.app.domain.model.OpeningTimes
 import de.wartezeiten.app.domain.model.Park
 import de.wartezeiten.app.domain.model.WaitingTime
 import de.wartezeiten.app.domain.model.WeatherInfo
-import de.wartezeiten.app.ui.components.AttributionBanner
+import de.wartezeiten.app.ui.components.AttributionFooter
 import java.time.Instant
 import java.time.LocalDate
 import java.time.LocalTime
@@ -181,7 +181,7 @@ fun WaitingTimesScreen(
             }
         },
         bottomBar = {
-            AttributionBanner(language = state.language)
+            AttributionFooter(language = state.language)
         },
         topBar = {
             TopAppBar(
@@ -436,6 +436,12 @@ private fun WaitingTimesContent(
                     language = state.language,
                     ageMinutes = state.offlineDataAgeMinutes,
                 )
+            }
+        }
+
+        item {
+            if (state.isWaitingTimeDataLikelyMissing) {
+                WaitingTimeDataGapBanner(language = state.language)
             }
         }
 
@@ -1419,6 +1425,48 @@ private fun OfflineDetailBanner(
                         nl = "Laatste succesvolle detailupdate: ${ageMinutes.cacheAgeLabel(language)}.",
                     ),
                     style = MaterialTheme.typography.labelSmall,
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun WaitingTimeDataGapBanner(language: String) {
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(12.dp),
+        color = MaterialTheme.colorScheme.tertiaryContainer,
+        contentColor = MaterialTheme.colorScheme.onTertiaryContainer,
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            Icon(Icons.Default.Warning, contentDescription = null, modifier = Modifier.size(20.dp))
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = localized(
+                        language,
+                        de = "Wartezeiten momentan nicht verfügbar",
+                        en = "Wait times currently unavailable",
+                        fr = "Temps d'attente actuellement indisponibles",
+                        nl = "Wachttijden momenteel niet beschikbaar",
+                    ),
+                    style = MaterialTheme.typography.bodySmall,
+                    fontWeight = FontWeight.SemiBold,
+                )
+                Text(
+                    text = localized(
+                        language,
+                        de = "Der Park ist laut Öffnungszeiten geöffnet, liefert aber seit der Öffnung keine Wartezeiten. Das liegt vermutlich an einer technischen Störung bei der Datenquelle, nicht an der App.",
+                        en = "The park is reported as open, but no wait times have come in since opening. This is likely a temporary issue with the data source, not the app.",
+                        fr = "Le parc est annoncé comme ouvert, mais aucun temps d'attente n'a été reçu depuis l'ouverture. Il s'agit probablement d'un problème temporaire de la source de données, pas de l'application.",
+                        nl = "Het park wordt als open gemeld, maar er zijn sinds de opening geen wachttijden binnengekomen. Dit is waarschijnlijk een tijdelijk probleem bij de databron, niet bij de app.",
+                    ),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onTertiaryContainer.copy(alpha = 0.86f),
                 )
             }
         }

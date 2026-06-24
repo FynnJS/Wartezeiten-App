@@ -31,6 +31,18 @@ function formatApkSize(value) {
   return numericValue.toFixed(2);
 }
 
+function releaseNotesFor(data, language = 'de') {
+  if (data.releaseNotesLocalized && Array.isArray(data.releaseNotesLocalized[language])) {
+    return data.releaseNotesLocalized[language];
+  }
+
+  if (data.releaseNotesLocalized && Array.isArray(data.releaseNotesLocalized.de)) {
+    return data.releaseNotesLocalized.de;
+  }
+
+  return Array.isArray(data.releaseNotes) ? data.releaseNotes : [];
+}
+
 async function loadRelease() {
   try {
     setDownloadLinks();
@@ -52,9 +64,10 @@ async function loadRelease() {
 
     setDownloadLinks(data.releasePageUrl || defaultReleasePageUrl);
 
-    if (data.releaseNotes && Array.isArray(data.releaseNotes)) {
+    const notes = releaseNotesFor(data, 'de');
+    if (notes.length > 0) {
       releaseNotesEl.innerHTML = '';
-      data.releaseNotes.forEach(note => {
+      notes.forEach(note => {
         const item = document.createElement('li');
         item.textContent = note;
         releaseNotesEl.appendChild(item);

@@ -39,7 +39,6 @@ android {
     compileSdk = 35
 
     val keystorePropertiesFile = rootProject.file("keystore.properties")
-    val defaultDebugKeystore = File(System.getProperty("user.home"), ".android/debug.keystore")
     var hasValidKeystore = false
     signingConfigs {
         create("release") {
@@ -50,12 +49,6 @@ android {
                 storePassword = keystoreProperties["storePassword"].toString()
                 keyAlias = keystoreProperties["keyAlias"].toString()
                 keyPassword = keystoreProperties["keyPassword"].toString()
-                hasValidKeystore = true
-            } else if (defaultDebugKeystore.exists()) {
-                storeFile = defaultDebugKeystore
-                storePassword = "android"
-                keyAlias = "androiddebugkey"
-                keyPassword = "android"
                 hasValidKeystore = true
             }
         }
@@ -75,8 +68,8 @@ android {
         applicationId = "de.wartezeiten.app"
         minSdk = 26
         targetSdk = 35
-        versionCode = 10107
-        versionName = "1.1.7"
+        versionCode = 10108
+        versionName = "1.1.8"
         buildConfigField("String", "UPDATE_BASE_URL", "\"https://wartezeiten-app.tutorialfynn.workers.dev/\"")
         buildConfigField("String", "PUSH_API_BASE_URL", "\"https://wartezeiten-app.tutorialfynn.workers.dev/\"")
         buildConfigField("String", "FIREBASE_APPLICATION_ID", optionalStringBuildConfig("FIREBASE_APPLICATION_ID"))
@@ -177,6 +170,19 @@ val verifyReleaseFirebaseConfiguration by tasks.registering {
     }
 }
 
+val verifyReleaseSigningConfiguration by tasks.registering {
+    group = "verification"
+    description = "Fails release builds when the stable release signing configuration is missing."
+
+    doLast {
+        check(rootProject.file("keystore.properties").isFile) {
+            "Release builds require keystore.properties from scripts/configure-release-signing.ps1. " +
+                    "Do not publish APKs signed with a debug or throwaway key, because Android cannot install them over existing releases."
+        }
+    }
+}
+
 tasks.matching { it.name == "preReleaseBuild" }.configureEach {
     dependsOn(verifyReleaseFirebaseConfiguration)
+    dependsOn(verifyReleaseSigningConfiguration)
 }

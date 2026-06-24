@@ -1,5 +1,17 @@
 # Changelog
 
+## v1.1.8 - 2026-06-24
+
+- Fixed local Watchlist wait-time notifications for attraction-specific alerts so a closed target attraction no longer falls back to another attraction while keeping the original attraction name in the title.
+- Fixed local push crowd-level percentages to use whole-number rounding, matching the rest of the app and the Cloudflare Worker.
+- Improved the settings language selector with country flags and native language names, making each language recognizable regardless of the currently selected UI language.
+- Added a park-detail warning when a park is open according to opening times for at least 15 minutes but no attraction reports live wait-time data, clarifying likely upstream data-source outages.
+- Fixed attribution footers in bottom bars so they respect the Android system navigation bar on gesture and 3-button navigation.
+- Fixed the mandatory update screen so release notes are fully scrollable and shown in the selected app language.
+- Hardened release signing so local release builds fail without the stable release keystore instead of producing update-incompatible APKs.
+- Fixed global statistics collection after v1.1.6: central D1 snapshots now use the actual Worker collection time as the measurement timestamp again, while upstream wait-time timestamps are only used to reject stale days.
+- Bumped Android release metadata to `versionCode 10108` / `versionName 1.1.8`.
+
 ## v1.1.7 - 2026-06-24
 
 - Added in-app update downloads: the mandatory update screen now downloads the new APK itself (with progress and SHA-256 verification) and opens the system install dialog directly, instead of requiring a manual download via GitHub/browser.

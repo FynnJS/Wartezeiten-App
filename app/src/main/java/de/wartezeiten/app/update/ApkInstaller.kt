@@ -11,8 +11,9 @@ object ApkInstaller {
     }
 
     fun installIntent(apkUri: Uri): Intent {
-        return Intent(Intent.ACTION_VIEW).apply {
-            setDataAndType(apkUri, "application/vnd.android.package-archive")
+        return Intent(Intent.ACTION_INSTALL_PACKAGE).apply {
+            data = apkUri
+            putExtra(Intent.EXTRA_NOT_UNKNOWN_SOURCE, true)
             addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_GRANT_READ_URI_PERMISSION)
         }
     }

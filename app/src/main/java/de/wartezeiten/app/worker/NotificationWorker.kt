@@ -373,10 +373,10 @@ class NotificationWorker @AssistedInject constructor(
             val target = alert.attractionId?.let { id ->
                 waitingTimes.firstOrNull { normalizeAttractionId(it) == id }
             }
-            val best = target?.takeIf { it.isOpenWithWaitTime() }
-                ?: waitingTimes
-                    .filter { it.isOpenWithWaitTime() }
-                    .minByOrNull { it.waitingTime ?: Int.MAX_VALUE }
+            val candidates = if (target != null) listOf(target) else waitingTimes
+            val best = candidates
+                .filter { it.isOpenWithWaitTime() }
+                .minByOrNull { it.waitingTime ?: Int.MAX_VALUE }
             val triggered = best?.waitingTime != null && best.waitingTime <= alert.threshold
 
             if (shouldNotifyBoolean(alert, triggered)) {
@@ -437,10 +437,10 @@ class NotificationWorker @AssistedInject constructor(
             val target = alert.attractionId?.let { id ->
                 waitingTimes.firstOrNull { normalizeAttractionId(it) == id }
             }
-            val longest = target?.takeIf { it.isOpenWithWaitTime() }
-                ?: waitingTimes
-                    .filter { it.isOpenWithWaitTime() }
-                    .maxByOrNull { it.waitingTime ?: Int.MIN_VALUE }
+            val candidates = if (target != null) listOf(target) else waitingTimes
+            val longest = candidates
+                .filter { it.isOpenWithWaitTime() }
+                .maxByOrNull { it.waitingTime ?: Int.MIN_VALUE }
             val triggered = longest?.waitingTime != null && longest.waitingTime >= alert.threshold
 
             if (shouldNotifyBoolean(alert, triggered)) {
@@ -825,11 +825,7 @@ class NotificationWorker @AssistedInject constructor(
     }
 
     private fun Float.formatPercent(): String {
-        return if (this % 1f == 0f) {
-            toInt().toString()
-        } else {
-            String.format(Locale.GERMAN, "%.1f", this)
-        }
+        return kotlin.math.round(this).toInt().toString()
     }
 
     private fun buildParkChangeNotificationContent(
