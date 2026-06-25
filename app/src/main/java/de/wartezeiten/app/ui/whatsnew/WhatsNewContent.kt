@@ -25,6 +25,34 @@ data class WhatsNewRelease(
 
 val WHATS_NEW_RELEASES = listOf(
     WhatsNewRelease(
+        versionCode = 10109,
+        versionName = "1.1.9",
+        highlightsDe = listOf(
+            "Ladehinweise sind jetzt in der ganzen App klarer, damit leere Listen nicht mehr wie endgültige Ergebnisse wirken.",
+            "Der Filter für offene Parks zeigt jetzt ausdrücklich, wenn aktuelle Parkdaten noch geprüft werden.",
+            "Parkdetails, Statistik, Watchlist, Wetter und Parkvergleich haben freundlichere Lade- und Leerzustände.",
+            "Der Parkvergleich aktualisiert ausgewählte Parks jetzt parallel und fühlt sich dadurch schneller an.",
+        ),
+        highlightsEn = listOf(
+            "Loading feedback is clearer across the app, so empty lists no longer look like final results.",
+            "The open-parks filter now clearly shows when current park data is still being checked.",
+            "Park details, statistics, Watchlist, weather, and comparison screens now have friendlier loading and empty states.",
+            "Park comparison now refreshes selected parks in parallel, making it feel faster.",
+        ),
+        highlightsFr = listOf(
+            "Les indications de chargement sont plus claires dans toute l'app, afin que les listes vides ne ressemblent plus à des résultats définitifs.",
+            "Le filtre des parcs ouverts indique maintenant clairement quand les données actuelles sont encore en cours de vérification.",
+            "Les détails du parc, les statistiques, la Watchlist, la météo et la comparaison ont des états de chargement et vides plus agréables.",
+            "La comparaison des parcs actualise maintenant les parcs sélectionnés en parallèle, ce qui la rend plus rapide.",
+        ),
+        highlightsNl = listOf(
+            "Laadmeldingen zijn in de hele app duidelijker, zodat lege lijsten niet meer als definitieve resultaten aanvoelen.",
+            "Het filter voor open parken toont nu duidelijk wanneer actuele parkgegevens nog worden gecontroleerd.",
+            "Parkdetails, statistieken, Watchlist, weer en parkvergelijking hebben vriendelijkere laad- en lege toestanden.",
+            "De parkvergelijking vernieuwt geselecteerde parken nu parallel en voelt daardoor sneller aan.",
+        ),
+    ),
+    WhatsNewRelease(
         versionCode = 10108,
         versionName = "1.1.8",
         highlightsDe = listOf(

@@ -1,5 +1,15 @@
 # Changelog
 
+## v1.1.9 - 2026-06-25
+
+- Added clearer loading information across the app so empty lists no longer look like final results while parks, attractions, statistics, or comparison data are still loading.
+- Improved the "open parks only" flow with a dedicated loading card while current opening and wait-time snapshots are being checked.
+- Improved park detail loading feedback with localized messages for initial park-data loading and attraction refreshes.
+- Improved the park comparison screen with initial loading states and parallel refreshes for selected parks, making comparison updates faster.
+- Improved statistics, Watchlist, and weather screens with friendlier loading and empty states plus more localized labels.
+- Hardened Cloudflare Worker statistics after updates by lazily ensuring the D1 attraction-history schema exists before central statistic reads and writes.
+- Bumped Android release metadata to `versionCode 10109` / `versionName 1.1.9`.
+
 ## v1.1.8 - 2026-06-24
 
 - Fixed local Watchlist wait-time notifications for attraction-specific alerts so a closed target attraction no longer falls back to another attraction while keeping the original attraction name in the title.
