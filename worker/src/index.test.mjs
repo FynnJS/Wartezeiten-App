@@ -6,6 +6,7 @@ import {
   buildStatisticsIndexFromD1Rows,
   cronParkShard,
   deriveAttractionSnapshotTiming,
+  ensureAttractionHistoryD1,
   evaluatePushAlert,
   mergeStatisticsIndexes,
   toAttractionSnapshotRow,
@@ -41,6 +42,32 @@ test("D1 scheduled app-data uses cron shards and ignores history shards", () => 
   assert.equal(options.options.shardCount, 3);
   assert.equal(options.options.historyShardIndex, null);
   assert.equal(options.options.historyShardCount, null);
+});
+
+test("D1 attraction history schema is created lazily for worker updates", async () => {
+  const preparedSql = [];
+  const batches = [];
+  const db = {
+    prepare(sql) {
+      preparedSql.push(sql);
+      return {
+        sql,
+        run: async () => ({ success: true }),
+      };
+    },
+    batch: async (statements) => {
+      batches.push(statements.map((statement) => statement.sql));
+      return statements.map(() => ({ success: true }));
+    },
+  };
+
+  await ensureAttractionHistoryD1({ APP_DATA_DB: db });
+  await ensureAttractionHistoryD1({ APP_DATA_DB: db });
+
+  assert.equal(batches.length, 1);
+  assert.equal(preparedSql.filter((sql) => sql.includes("CREATE TABLE IF NOT EXISTS attraction_history_days")).length, 1);
+  assert.equal(preparedSql.filter((sql) => sql.includes("CREATE TABLE IF NOT EXISTS attraction_history_snapshots")).length, 1);
+  assert.equal(preparedSql.filter((sql) => sql.includes("idx_attraction_history_snapshots_date_park_captured")).length, 1);
 });
 
 test("cron sharding keeps representative parks assigned to the three real cron shards", () => {

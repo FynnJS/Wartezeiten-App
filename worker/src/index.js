@@ -16,6 +16,7 @@ const DEFAULT_PUSH_SCAN_LIMIT = 1000;
 const SUPPORTED_PUSH_LANGUAGES = new Set(["de", "en", "fr", "nl"]);
 const D1_SCHEMA_VERSION = 1;
 let cachedFcmAccessToken = null;
+const ensuredAttractionHistoryD1Bindings = new WeakSet();
 
 const DEFAULT_PARK_KEYS = [
   "europapark",
@@ -1346,6 +1347,7 @@ async function readTrendHistory(env, parkKey = null) {
 }
 
 async function readTrendHistoryD1(env, now, parkKey = null) {
+  await ensureAttractionHistoryD1(env);
   const minCapturedAt = now - MAX_HISTORY_AGE_MILLIS;
   const parkFilter = parkKey ? " AND park_key = ?" : "";
   const statement = env.APP_DATA_DB.prepare(`
@@ -1462,6 +1464,7 @@ function toAttractionSnapshotRow(snapshot, generatedAtMillis) {
 async function writeAttractionSnapshotsD1(env, snapshots) {
   const db = env.APP_DATA_DB;
   if (!db || snapshots.length === 0) return;
+  await ensureAttractionHistoryD1(env);
 
   const statements = [];
   for (const snapshot of snapshots) {
@@ -1617,6 +1620,7 @@ async function readStatisticsIndex(env) {
 }
 
 async function readStatisticsIndexD1(env) {
+  await ensureAttractionHistoryD1(env);
   const result = await env.APP_DATA_DB.prepare(`
     SELECT
       d.park_key AS parkKey,
@@ -1978,6 +1982,7 @@ async function readAttractionDay(env, parkKey, date) {
 }
 
 async function readAttractionDayD1(env, parkKey, date) {
+  await ensureAttractionHistoryD1(env);
   const [dayResult, snapshotResult] = await Promise.all([
     env.APP_DATA_DB.prepare(`
       SELECT generated_at_millis, open_from, closed_from
@@ -2081,6 +2086,7 @@ async function readGlobalMarkersKv(env, date) {
 }
 
 async function readGlobalMarkersD1(env, date) {
+  await ensureAttractionHistoryD1(env);
   const result = await env.APP_DATA_DB.prepare(`
     SELECT s.*
     FROM attraction_history_snapshots s
@@ -2202,6 +2208,58 @@ function hasD1(env) {
   return Boolean(env.APP_DATA_DB);
 }
 
+async function ensureAttractionHistoryD1(env) {
+  const db = env.APP_DATA_DB;
+  if (!db || ensuredAttractionHistoryD1Bindings.has(db)) return;
+
+  const statements = [
+    db.prepare(`
+      CREATE TABLE IF NOT EXISTS attraction_history_days (
+        park_key TEXT NOT NULL,
+        date TEXT NOT NULL,
+        generated_at_millis INTEGER NOT NULL,
+        open_from TEXT,
+        closed_from TEXT,
+        schema_version INTEGER NOT NULL DEFAULT 1,
+        PRIMARY KEY (park_key, date)
+      )
+    `),
+    db.prepare(`
+      CREATE TABLE IF NOT EXISTS attraction_history_snapshots (
+        park_key TEXT NOT NULL,
+        date TEXT NOT NULL,
+        captured_at_millis INTEGER NOT NULL,
+        generated_at_millis INTEGER NOT NULL,
+        opened_today INTEGER NOT NULL,
+        open_from TEXT,
+        closed_from TEXT,
+        attractions_json TEXT NOT NULL,
+        PRIMARY KEY (park_key, date, captured_at_millis),
+        FOREIGN KEY (park_key, date)
+          REFERENCES attraction_history_days (park_key, date)
+          ON DELETE CASCADE
+      )
+    `),
+    db.prepare(`
+      CREATE INDEX IF NOT EXISTS idx_attraction_history_snapshots_date_park_captured
+        ON attraction_history_snapshots (date, park_key, captured_at_millis)
+    `),
+    db.prepare(`
+      CREATE INDEX IF NOT EXISTS idx_attraction_history_days_park_date
+        ON attraction_history_days (park_key, date)
+    `),
+  ];
+
+  if (typeof db.batch === "function") {
+    await db.batch(statements);
+  } else {
+    for (const statement of statements) {
+      await statement.run();
+    }
+  }
+  ensuredAttractionHistoryD1Bindings.add(db);
+}
+
 function attractionHistoryShard(env, parkKey, explicitShardCount = null) {
   const shardCount = explicitShardCount
     ?? parsePositiveInt(env.APP_DATA_HISTORY_SHARDS)
@@ -2247,6 +2305,7 @@ export {
   cronParkShard,
   deriveAttractionSnapshotTiming,
   evaluatePushAlert,
+  ensureAttractionHistoryD1,
   mergeStatisticsIndexes,
   scheduledHistoryShardIndex,
   scheduledShardIndex,
