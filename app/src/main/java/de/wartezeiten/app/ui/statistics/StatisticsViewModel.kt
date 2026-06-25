@@ -37,6 +37,7 @@ data class StatisticsUiState(
     val selectedDate: String = LocalDate.now().toString(),
     val selectedAttractionId: String? = null,
     val day: AttractionHistoryDay? = null,
+    val language: String = PreferencesDataSource.DEFAULT_LANGUAGE,
     val isLoading: Boolean = false,
     val errorMessage: String? = null,
 ) {
@@ -180,8 +181,12 @@ class StatisticsViewModel @Inject constructor(
         )
     private val mutableState = MutableStateFlow(StatisticsUiState(isLoading = true))
 
-    val uiState = combine(parks, currentAttractions, mutableState) { parkList, attractionList, state ->
-        state.copy(parks = parkList, currentAttractions = attractionList)
+    val uiState = combine(parks, currentAttractions, preferences.language, mutableState) { parkList, attractionList, language, state ->
+        state.copy(
+            parks = parkList,
+            currentAttractions = attractionList,
+            language = language,
+        )
     }.stateIn(
         scope = viewModelScope,
         started = SharingStarted.WhileSubscribed(5_000),

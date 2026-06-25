@@ -138,16 +138,7 @@ fun WatchlistRoute(
 
             if (watchlistItems.isEmpty()) {
                 item {
-                    Text(
-                        text = localized(
-                            language,
-                            de = "Hier werden deine aktiven Benachrichtigungen angezeigt. F\u00fcge sie aus der Park- oder Attraktionsansicht hinzu.",
-                            en = "Your active notifications appear here. Add them from a park or attraction view.",
-                            fr = "Tes notifications actives s'affichent ici. Ajoute-les depuis la vue d'un parc ou d'une attraction.",
-                            nl = "Hier verschijnen je actieve meldingen. Voeg ze toe vanuit een park- of attractieweergave.",
-                        ),
-                        style = MaterialTheme.typography.bodyMedium
-                    )
+                    EmptyWatchlistCard(language = language)
                 }
             } else {
                 groupedWatchlist.forEach { (parkName, alerts) ->
@@ -169,6 +160,37 @@ fun WatchlistRoute(
                     }
                 }
             }
+        }
+    }
+}
+
+@Composable
+private fun EmptyWatchlistCard(language: String) {
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        shape = MaterialTheme.shapes.medium,
+        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.75f),
+        contentColor = MaterialTheme.colorScheme.onSurfaceVariant,
+    ) {
+        Column(
+            modifier = Modifier.padding(14.dp),
+            verticalArrangement = Arrangement.spacedBy(6.dp),
+        ) {
+            Text(
+                text = localized(language, de = "Noch keine Alarme", en = "No alerts yet", fr = "Aucune alerte pour l'instant", nl = "Nog geen meldingen"),
+                style = MaterialTheme.typography.titleSmall,
+                color = MaterialTheme.colorScheme.onSurface,
+            )
+            Text(
+                text = localized(
+                    language,
+                    de = "Füge Benachrichtigungen aus einer Park- oder Attraktionsansicht hinzu. Danach erscheinen sie hier mit Status, Regeln und Testoption.",
+                    en = "Add notifications from a park or attraction view. They will appear here with status, rules, and test options.",
+                    fr = "Ajoute des notifications depuis la vue d'un parc ou d'une attraction. Elles apparaîtront ici avec statut, règles et option de test.",
+                    nl = "Voeg meldingen toe vanuit een park- of attractieweergave. Ze verschijnen hier met status, regels en testoptie.",
+                ),
+                style = MaterialTheme.typography.bodyMedium,
+            )
         }
     }
 }

@@ -162,6 +162,7 @@ fun ParkCompareScreen(
                         selectedParkIds = state.selectedParkIds,
                         query = state.parkSearchQuery,
                         totalParkCount = state.totalParkCount,
+                        isLoading = state.isInitialLoading,
                         language = state.language,
                         onQueryChange = onParkSearchChange,
                         onTogglePark = onTogglePark,
@@ -174,7 +175,11 @@ fun ParkCompareScreen(
                         onSortChange = onSortChange,
                     )
                 }
-                if (state.comparisonParks.size < 2) {
+                if (state.isInitialLoading) {
+                    item {
+                        CompareLoadingState(language = state.language)
+                    }
+                } else if (state.comparisonParks.size < 2) {
                     item {
                         EmptyComparison(language = state.language)
                     }
@@ -221,6 +226,7 @@ private fun ParkPicker(
     selectedParkIds: List<String>,
     query: String,
     totalParkCount: Int,
+    isLoading: Boolean,
     language: String,
     onQueryChange: (String) -> Unit,
     onTogglePark: (Park) -> Unit,
@@ -353,7 +359,26 @@ private fun ParkPicker(
                     shape = RoundedCornerShape(10.dp),
                 )
             }
-            if (addableParks.isEmpty()) {
+            if (addableParks.isEmpty() && isLoading) {
+                Row(
+                    modifier = Modifier.padding(vertical = 10.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
+                    Text(
+                        text = localized(
+                            language,
+                            de = "Parks werden geladen",
+                            en = "Loading parks",
+                            fr = "Chargement des parcs",
+                            nl = "Parken worden geladen",
+                        ),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            } else if (addableParks.isEmpty()) {
                 Text(
                     text = localized(language, de = "Keine passenden Parks gefunden", en = "No matching parks found", fr = "Aucun parc correspondant trouvé", nl = "Geen overeenkomende parken gevonden"),
                     modifier = Modifier.padding(vertical = 10.dp),
@@ -552,6 +577,47 @@ private fun ErrorStrip(
                 ),
                 style = MaterialTheme.typography.bodySmall,
             )
+        }
+    }
+}
+
+@Composable
+private fun CompareLoadingState(language: String) {
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(12.dp),
+        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.7f),
+        contentColor = MaterialTheme.colorScheme.onSurfaceVariant,
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            CircularProgressIndicator(modifier = Modifier.size(22.dp), strokeWidth = 2.5.dp)
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = localized(
+                        language,
+                        de = "Vergleich wird vorbereitet",
+                        en = "Preparing comparison",
+                        fr = "Préparation de la comparaison",
+                        nl = "Vergelijking wordt voorbereid",
+                    ),
+                    style = MaterialTheme.typography.labelLarge,
+                    fontWeight = FontWeight.Bold,
+                )
+                Text(
+                    text = localized(
+                        language,
+                        de = "Parks und aktuelle Wartezeitdaten werden geladen.",
+                        en = "Parks and current wait-time data are loading.",
+                        fr = "Les parcs et les temps d'attente actuels sont en cours de chargement.",
+                        nl = "Parken en actuele wachttijden worden geladen.",
+                    ),
+                    style = MaterialTheme.typography.bodySmall,
+                )
+            }
         }
     }
 }

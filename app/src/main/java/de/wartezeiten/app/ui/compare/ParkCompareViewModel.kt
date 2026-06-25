@@ -10,6 +10,8 @@ import de.wartezeiten.app.domain.model.AttractionStatus
 import de.wartezeiten.app.domain.model.CurrentAttractionSearchEntry
 import de.wartezeiten.app.domain.model.Park
 import de.wartezeiten.app.domain.repository.WartezeitenRepository
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -40,6 +42,7 @@ data class ParkCompareUiState(
     val sort: ParkCompareSort = ParkCompareSort.BestNow,
     val language: String = PreferencesDataSource.DEFAULT_LANGUAGE,
     val isRefreshing: Boolean = false,
+    val isInitialLoading: Boolean = false,
     val errorMessage: String? = null,
 )
 
@@ -143,6 +146,7 @@ class ParkCompareViewModel @Inject constructor(
             sort = controls.sort,
             language = controls.language,
             isRefreshing = load.isRefreshing,
+            isInitialLoading = load.isRefreshing && parks.isEmpty(),
             errorMessage = load.errorMessage,
         )
     }.stateIn(
@@ -179,15 +183,14 @@ class ParkCompareViewModel @Inject constructor(
         viewModelScope.launch {
             isRefreshing.value = true
             errorMessage.value = null
-            selectedParkIds.value.forEach { parkKey ->
-                when (val result = repository.refreshParkDetail(parkKey, currentLanguage.value)) {
-                    is ApiResult.Success -> Unit
-                    is ApiResult.Error -> {
-                        if (errorMessage.value == null) {
-                            errorMessage.value = result.type.toUserMessage(currentLanguage.value)
-                        }
-                    }
-                }
+            val language = currentLanguage.value
+            val firstError = selectedParkIds.value
+                .map { parkKey -> async { repository.refreshParkDetail(parkKey, language) } }
+                .awaitAll()
+                .filterIsInstance<ApiResult.Error>()
+                .firstOrNull()
+            if (firstError != null) {
+                errorMessage.value = firstError.type.toUserMessage(language)
             }
             isRefreshing.value = false
         }

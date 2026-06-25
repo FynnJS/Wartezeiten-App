@@ -68,6 +68,7 @@ import androidx.compose.ui.unit.dp
 import androidx.core.content.FileProvider
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import de.wartezeiten.app.core.i18n.localized
 import de.wartezeiten.app.domain.model.AttractionHistorySummary
 import de.wartezeiten.app.domain.model.Park
 import kotlinx.coroutines.launch
@@ -119,9 +120,13 @@ fun StatisticsScreen(
             TopAppBar(
                 title = {
                     Column {
-                        Text("Statistik", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
                         Text(
-                            state.selectedPark?.name ?: "Zentrale Wartezeiten",
+                            localized(state.language, de = "Statistik", en = "Statistics", fr = "Statistiques", nl = "Statistieken"),
+                            style = MaterialTheme.typography.titleLarge,
+                            fontWeight = FontWeight.Bold,
+                        )
+                        Text(
+                            state.selectedPark?.name ?: localized(state.language, de = "Zentrale Wartezeiten", en = "Central wait times", fr = "Temps d'attente centraux", nl = "Centrale wachttijden"),
                             style = MaterialTheme.typography.labelMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                             maxLines = 1,
@@ -145,15 +150,16 @@ fun StatisticsScreen(
                                     shareStatisticsScreenshot(
                                         context = context,
                                         view = rootView,
-                                        title = state.selectedPark?.name ?: "Wartezeiten Statistik",
+                                        title = state.selectedPark?.name ?: localized(state.language, de = "Wartezeiten Statistik", en = "Wait-time statistics", fr = "Statistiques d'attente", nl = "Wachttijdstatistieken"),
+                                        language = state.language,
                                     )
                                 }
                             },
                         ) {
-                            Icon(Icons.Default.Share, contentDescription = "Statistik teilen")
+                            Icon(Icons.Default.Share, contentDescription = localized(state.language, de = "Statistik teilen", en = "Share statistics", fr = "Partager les statistiques", nl = "Statistieken delen"))
                         }
                         IconButton(onClick = onRefreshClick) {
-                            Icon(Icons.Default.Refresh, contentDescription = "Aktualisieren")
+                            Icon(Icons.Default.Refresh, contentDescription = localized(state.language, de = "Aktualisieren", en = "Refresh", fr = "Actualiser", nl = "Vernieuwen"))
                         }
                     }
                 },
@@ -186,6 +192,12 @@ fun StatisticsScreen(
 
                 state.errorMessage?.let { message ->
                     item { ErrorCard(message = message, onRetry = onRefreshClick) }
+                }
+
+                if (state.isLoading && state.index.parks.isEmpty() && state.day == null) {
+                    item {
+                        StatisticsLoadingCard(language = state.language)
+                    }
                 }
 
                 if (state.selectedAttractionId == null) {
@@ -254,7 +266,7 @@ fun StatisticsScreen(
                     if (attractions.isNotEmpty()) {
                         item {
                             Text(
-                                "Attraktionen an diesem Tag",
+                                localized(state.language, de = "Attraktionen an diesem Tag", en = "Attractions on this day", fr = "Attractions ce jour-là", nl = "Attracties op deze dag"),
                                 style = MaterialTheme.typography.titleSmall,
                                 fontWeight = FontWeight.Bold,
                             )
@@ -277,9 +289,14 @@ private fun shareStatisticsScreenshot(
     context: Context,
     view: android.view.View,
     title: String,
+    language: String,
 ) {
     if (view.width <= 0 || view.height <= 0) {
-        Toast.makeText(context, "Screenshot konnte nicht erstellt werden.", Toast.LENGTH_SHORT).show()
+        Toast.makeText(
+            context,
+            localized(language, de = "Screenshot konnte nicht erstellt werden.", en = "Screenshot could not be created.", fr = "La capture d'écran n'a pas pu être créée.", nl = "Screenshot kon niet worden gemaakt."),
+            Toast.LENGTH_SHORT,
+        ).show()
         return
     }
 
@@ -305,7 +322,48 @@ private fun shareStatisticsScreenshot(
         putExtra(Intent.EXTRA_TEXT, title)
         addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
     }
-    context.startActivity(Intent.createChooser(intent, "Statistik teilen"))
+    context.startActivity(Intent.createChooser(intent, localized(language, de = "Statistik teilen", en = "Share statistics", fr = "Partager les statistiques", nl = "Statistieken delen")))
+}
+
+@Composable
+private fun StatisticsLoadingCard(language: String) {
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(14.dp),
+        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.75f),
+        contentColor = MaterialTheme.colorScheme.onSurfaceVariant,
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            CircularProgressIndicator(modifier = Modifier.size(22.dp), strokeWidth = 2.5.dp)
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = localized(
+                        language,
+                        de = "Statistik wird geladen",
+                        en = "Loading statistics",
+                        fr = "Chargement des statistiques",
+                        nl = "Statistieken worden geladen",
+                    ),
+                    style = MaterialTheme.typography.labelLarge,
+                    fontWeight = FontWeight.Bold,
+                )
+                Text(
+                    text = localized(
+                        language,
+                        de = "Zentrale Messpunkte und Tagesdaten werden abgeglichen.",
+                        en = "Central measurements and daily data are being checked.",
+                        fr = "Les mesures centrales et les données du jour sont vérifiées.",
+                        nl = "Centrale meetpunten en daggegevens worden gecontroleerd.",
+                    ),
+                    style = MaterialTheme.typography.bodySmall,
+                )
+            }
+        }
+    }
 }
 
 @Composable
