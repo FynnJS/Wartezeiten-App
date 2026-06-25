@@ -37,9 +37,15 @@ jobs:
           RELEASE_KEY_PASSWORD: ${{ secrets.RELEASE_KEY_PASSWORD }}
           RELEASE_CERT_SHA256: ${{ secrets.RELEASE_CERT_SHA256 }}
         run: |
+          CANONICAL_RELEASE_CERT=$(sed -n 's/^[[:space:]]*releaseCertSha256[[:space:]]*=[[:space:]]*//p' config/release-signing.properties | head -n 1 | tr -d ':[:space:]' | tr '[:upper:]' '[:lower:]')
+          SECRET_RELEASE_CERT=$(printf '%s' "$RELEASE_CERT_SHA256" | tr -d ':[:space:]' | tr '[:upper:]' '[:lower:]')
           if [ "${{ github.event_name }}" = "release" ] || [ -n "${{ inputs.release_tag }}" ]; then
             if [ -z "$RELEASE_KEYSTORE_BASE64" ] || [ -z "$RELEASE_STORE_PASSWORD" ] || [ -z "$RELEASE_KEY_ALIAS" ] || [ -z "$RELEASE_KEY_PASSWORD" ] || [ -z "$RELEASE_CERT_SHA256" ]; then
               echo "::error::Release signing secrets are required for APK releases to remain update-compatible."
+              exit 1
+            fi
+            if [ -z "$CANONICAL_RELEASE_CERT" ] || [ "$SECRET_RELEASE_CERT" != "$CANONICAL_RELEASE_CERT" ]; then
+              echo "::error::RELEASE_CERT_SHA256 must match config/release-signing.properties. Expected $CANONICAL_RELEASE_CERT but got $SECRET_RELEASE_CERT."
               exit 1
             fi
           fi
@@ -67,20 +73,13 @@ jobs:
         env:
           RELEASE_CERT_SHA256: ${{ secrets.RELEASE_CERT_SHA256 }}
         run: |
-          APK_FILE=$(find app/build/outputs/apk/release -maxdepth 1 -type f -name '*.apk' | head -n 1)
-          APKSIGNER=$(find "$ANDROID_HOME/build-tools" -type f -name apksigner | sort -V | tail -n 1)
-          if [ -z "$APK_FILE" ] || [ -z "$APKSIGNER" ]; then
-            echo "::error::Release APK or apksigner was not found."
+          $apkFile = Get-ChildItem app/build/outputs/apk/release -Filter *.apk | Select-Object -First 1
+          if (-not $apkFile) {
+            Write-Error "::error::Release APK was not found."
             exit 1
-          fi
-          ACTUAL_CERT=$($APKSIGNER verify --print-certs "$APK_FILE" | sed -n 's/.*certificate SHA-256 digest: //p' | head -n 1 | tr -d ':[:space:]' | tr '[:upper:]' '[:lower:]')
-          EXPECTED_CERT=$(printf '%s' "$RELEASE_CERT_SHA256" | tr -d ':[:space:]' | tr '[:upper:]' '[:lower:]')
-          if [ "$ACTUAL_CERT" != "$EXPECTED_CERT" ]; then
-            echo "::error::Release certificate mismatch. Expected $EXPECTED_CERT but built $ACTUAL_CERT."
-            exit 1
-          fi
-          echo "Release certificate verified: $ACTUAL_CERT"
-        shell: bash
+          }
+          & ./.github/scripts/verify-release-certificate.ps1 -ApkPath $apkFile.FullName
+        shell: pwsh
 
       - name: Prepare release metadata and update website/release.json
         id: metadata

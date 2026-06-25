@@ -2,7 +2,8 @@ param(
     [string]$Repository = "FynnJS/Wartezeiten-App",
     [string]$BackupDirectory = (Join-Path $env:USERPROFILE "Documents\Wartezeiten-App-signing"),
     [string]$KeyAlias = "wartezeiten-release",
-    [string]$GitHubCliPath = ""
+    [string]$GitHubCliPath = "",
+    [switch]$AllowNewCertificate
 )
 
 $ErrorActionPreference = "Stop"
@@ -78,6 +79,20 @@ if (-not $certificateLine) {
     throw "Could not read the release certificate fingerprint."
 }
 $certificateSha256 = ($certificateLine.ToString() -replace '.*SHA256:\s*', '' -replace ':', '').Trim().ToLowerInvariant()
+$canonicalCertificatePath = Join-Path $PSScriptRoot "..\config\release-signing.properties"
+if (Test-Path -LiteralPath $canonicalCertificatePath) {
+    $canonicalCertificateLine = Get-Content -LiteralPath $canonicalCertificatePath |
+        Where-Object { $_ -match '^\s*releaseCertSha256\s*=' } |
+        Select-Object -First 1
+    $canonicalCertificateSha256 = if ($canonicalCertificateLine) {
+        ($canonicalCertificateLine -replace '^\s*releaseCertSha256\s*=\s*', '' -replace ':', '').Trim().ToLowerInvariant()
+    } else {
+        ""
+    }
+    if ($canonicalCertificateSha256 -and $certificateSha256 -ne $canonicalCertificateSha256 -and -not $AllowNewCertificate) {
+        throw "The configured keystore certificate ($certificateSha256) does not match the canonical release certificate ($canonicalCertificateSha256). Restore the original release keystore instead of publishing an update-incompatible APK. Use -AllowNewCertificate only for an intentional package/signing lineage reset."
+    }
+}
 $keystoreBase64 = [Convert]::ToBase64String([IO.File]::ReadAllBytes($keystorePath))
 
 $secrets = [ordered]@{

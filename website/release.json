@@ -1,71 +1,19 @@
 {
-  "versionName": "1.1.9",
-  "versionCode": 10109,
-  "releaseDate": "2026-06-25",
-  "releasePageUrl": "https://github.com/FynnJS/Wartezeiten-App/releases/tag/v1.1.9",
-  "apkUrl": "https://github.com/FynnJS/Wartezeiten-App/releases/download/v1.1.9/wartezeiten-app-1.1.9.apk",
+  "versionName": "1.1.8",
+  "versionCode": 10108,
+  "releaseDate": "2026-06-24",
+  "releasePageUrl": "https://github.com/FynnJS/Wartezeiten-App/releases/tag/v1.1.8",
+  "apkUrl": "https://github.com/FynnJS/Wartezeiten-App/releases/download/v1.1.8/wartezeiten-app-1.1.8.apk",
   "apkSize": "4.16",
   "releaseNotes": [
-    "Version 1.1.9 macht Ladephasen und leere Zustände in der App deutlich verständlicher und härtet die zentrale Statistik-Erfassung nach Worker-Updates.",
-    "Die Parkliste zeigt beim Filter \"Nur offen\" jetzt klar an, wenn aktuelle Öffnungs- und Wartezeitdaten noch geladen werden.",
-    "Parkdetails zeigen beim ersten Laden und beim Nachladen leerer Attraktionslisten verständliche Hinweise statt stiller leerer Flächen.",
-    "Der Parkvergleich zeigt beim Start einen eigenen Ladezustand und aktualisiert ausgewählte Parks parallel.",
-    "Statistik, Watchlist und Wetteransicht haben freundlichere Lade- bzw. Leerzustände und besser lokalisierte Bedienelemente.",
-    "Leere Listen wirken während laufender Hintergrundabfragen nicht mehr wie endgültige \"keine Daten\"-Ergebnisse.",
-    "Zentrale Statistik-Messpunkte bleiben nach Worker-Updates robuster, weil die benötigten D1-Statistiktabellen vor Reads/Writes idempotent sichergestellt werden.",
-    "Android-Version auf `versionCode 10109` / `versionName 1.1.9` angehoben.",
-    "Worker-Statistikpfade sichern `attraction_history_days`, `attraction_history_snapshots` und ihre Indizes über `ensureAttractionHistoryD1`.",
-    "`testDebugUnitTest` und Worker-Tests decken die Änderungen ab."
+    "## v1.1.8 - 2026-06-24",
+    "- Fixed local Watchlist wait-time notifications for attraction-specific alerts so a closed target attraction no longer falls back to another attraction while keeping the original attraction name in the title.",
+    "- Fixed local push crowd-level percentages to use whole-number rounding, matching the rest of the app and the Cloudflare Worker.",
+    "- Improved the settings language selector with country flags and native language names, making each language recognizable regardless of the currently selected UI language.",
+    "- Added a park-detail warning when a park is open according to opening times for at least 15 minutes but no attraction reports live wait-time data, clarifying likely upstream data-source outages.",
+    "- Fixed attribution footers in bottom bars so they respect the Android system navigation bar on gesture and 3-button navigation.",
+    "- Fixed global statistics collection after v1.1.6: central D1 snapshots now use the actual Worker collection time as the measurement timestamp again, while upstream wait-time timestamps are only used to reject stale days.",
+    "- Bumped Android release metadata to `versionCode 10108` / `versionName 1.1.8`."
   ],
-  "releaseNotesLocalized": {
-    "de": [
-      "Version 1.1.9 macht Ladephasen und leere Zustände in der App deutlich verständlicher und härtet die zentrale Statistik-Erfassung nach Worker-Updates.",
-      "Die Parkliste zeigt beim Filter \"Nur offen\" jetzt klar an, wenn aktuelle Öffnungs- und Wartezeitdaten noch geladen werden.",
-      "Parkdetails zeigen beim ersten Laden und beim Nachladen leerer Attraktionslisten verständliche Hinweise statt stiller leerer Flächen.",
-      "Der Parkvergleich zeigt beim Start einen eigenen Ladezustand und aktualisiert ausgewählte Parks parallel.",
-      "Statistik, Watchlist und Wetteransicht haben freundlichere Lade- bzw. Leerzustände und besser lokalisierte Bedienelemente.",
-      "Leere Listen wirken während laufender Hintergrundabfragen nicht mehr wie endgültige \"keine Daten\"-Ergebnisse.",
-      "Zentrale Statistik-Messpunkte bleiben nach Worker-Updates robuster, weil die benötigten D1-Statistiktabellen vor Reads/Writes idempotent sichergestellt werden.",
-      "Android-Version auf `versionCode 10109` / `versionName 1.1.9` angehoben.",
-      "Worker-Statistikpfade sichern `attraction_history_days`, `attraction_history_snapshots` und ihre Indizes über `ensureAttractionHistoryD1`.",
-      "`testDebugUnitTest` und Worker-Tests decken die Änderungen ab."
-    ],
-    "en": [
-      "Version 1.1.9 makes loading phases and empty states much easier to understand and hardens central statistics collection after Worker updates.",
-      "The park list now clearly explains when the \"open only\" filter is still checking current opening and wait-time data.",
-      "Park details now show helpful messages during initial loading and when attraction lists are still empty during refresh.",
-      "Park comparison now has its own startup loading state and refreshes selected parks in parallel.",
-      "Statistics, Watchlist, and weather screens now have friendlier loading or empty states and more localized controls.",
-      "Empty lists no longer look like final \"no data\" results while background loading is still running.",
-      "Central statistic measurement points are more robust after Worker updates because the required D1 statistic tables are ensured before reads and writes.",
-      "Android metadata bumped to `versionCode 10109` / `versionName 1.1.9`.",
-      "Worker statistic paths ensure `attraction_history_days`, `attraction_history_snapshots`, and their indexes through `ensureAttractionHistoryD1`.",
-      "`testDebugUnitTest` and Worker tests cover the changes."
-    ],
-    "fr": [
-      "La version 1.1.9 rend les phases de chargement et les états vides beaucoup plus compréhensibles, et renforce la collecte centrale des statistiques après les mises à jour du Worker.",
-      "La liste des parcs indique maintenant clairement quand le filtre \"ouverts uniquement\" vérifie encore les horaires et temps d'attente actuels.",
-      "Les détails d'un parc affichent des messages utiles lors du premier chargement et lorsque les listes d'attractions sont encore vides pendant l'actualisation.",
-      "La comparaison des parcs dispose maintenant d'un état de chargement initial et actualise les parcs sélectionnés en parallèle.",
-      "Les écrans Statistiques, Watchlist et météo ont des états de chargement ou vides plus agréables et des commandes mieux localisées.",
-      "Les listes vides ne ressemblent plus à des résultats définitifs \"aucune donnée\" tant que le chargement en arrière-plan est encore en cours.",
-      "Les points de mesure statistiques centraux sont plus robustes après les mises à jour du Worker, car les tables D1 nécessaires sont vérifiées avant les lectures et écritures.",
-      "Métadonnées Android mises à jour vers `versionCode 10109` / `versionName 1.1.9`.",
-      "Les chemins statistiques du Worker assurent `attraction_history_days`, `attraction_history_snapshots` et leurs index via `ensureAttractionHistoryD1`.",
-      "`testDebugUnitTest` et les tests Worker couvrent les changements."
-    ],
-    "nl": [
-      "Versie 1.1.9 maakt laadfasen en lege toestanden veel duidelijker en verstevigt de centrale statistiekverzameling na Worker-updates.",
-      "De parklijst laat bij het filter \"alleen open\" nu duidelijk zien wanneer actuele openings- en wachttijdgegevens nog worden gecontroleerd.",
-      "Parkdetails tonen nuttige meldingen tijdens het eerste laden en wanneer attractielijsten tijdens verversen nog leeg zijn.",
-      "De parkvergelijking heeft nu een eigen laadstatus bij het starten en vernieuwt geselecteerde parken parallel.",
-      "Statistieken, Watchlist en weer hebben vriendelijkere laad- of lege toestanden en beter gelokaliseerde bediening.",
-      "Lege lijsten voelen niet meer als definitieve \"geen gegevens\"-resultaten terwijl achtergrondladen nog bezig is.",
-      "Centrale statistiekmeetpunten zijn robuuster na Worker-updates doordat de benodigde D1-statistiektabellen vóór reads en writes worden gecontroleerd.",
-      "Android-metadata verhoogd naar `versionCode 10109` / `versionName 1.1.9`.",
-      "Worker-statistiekpaden waarborgen `attraction_history_days`, `attraction_history_snapshots` en hun indexen via `ensureAttractionHistoryD1`.",
-      "`testDebugUnitTest` en Worker-tests dekken de wijzigingen."
-    ]
-  },
   "showBanner": true
 }
