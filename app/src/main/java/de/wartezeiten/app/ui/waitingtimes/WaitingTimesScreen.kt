@@ -401,7 +401,7 @@ private fun WaitingTimesContent(
     onAttractionClick: (String) -> Unit,
 ) {
     if (state.isLoading && (state.lastRefreshed == 0L)) {
-        LoadingDetailState()
+        LoadingDetailState(language = state.language)
         return
     }
 
@@ -496,7 +496,11 @@ private fun WaitingTimesContent(
             }
         }
 
-        if (state.waitingTimes.isEmpty() && !state.isLoading) {
+        if (state.waitingTimes.isEmpty() && state.isLoading) {
+            item {
+                WaitingTimesLoadingCard(language = state.language)
+            }
+        } else if (state.waitingTimes.isEmpty()) {
             item {
                 EmptyState(
                     state = state,
@@ -803,14 +807,77 @@ private fun WaitForecastChart(
 }
 
 @Composable
-private fun LoadingDetailState() {
+private fun LoadingDetailState(language: String) {
     Box(
         modifier = Modifier
             .fillMaxSize()
             .padding(24.dp),
         contentAlignment = Alignment.Center,
     ) {
-        CircularProgressIndicator(color = MaterialTheme.colorScheme.primary)
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(14.dp),
+        ) {
+            CircularProgressIndicator(color = MaterialTheme.colorScheme.primary)
+            Text(
+                text = localized(
+                    language,
+                    de = "Parkdaten werden geladen…",
+                    en = "Loading park data…",
+                    fr = "Chargement des données du parc…",
+                    nl = "Parkgegevens worden geladen…",
+                ),
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+    }
+}
+
+@Composable
+private fun WaitingTimesLoadingCard(language: String) {
+    OutlinedCard(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(12.dp),
+        colors = CardDefaults.outlinedCardColors(
+            containerColor = MaterialTheme.colorScheme.secondaryContainer,
+            contentColor = MaterialTheme.colorScheme.onSecondaryContainer,
+        ),
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            CircularProgressIndicator(
+                modifier = Modifier.size(22.dp),
+                strokeWidth = 2.5.dp,
+                color = MaterialTheme.colorScheme.onSecondaryContainer,
+            )
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = localized(
+                        language,
+                        de = "Attraktionen werden geladen",
+                        en = "Loading attractions",
+                        fr = "Chargement des attractions",
+                        nl = "Attracties worden geladen",
+                    ),
+                    style = MaterialTheme.typography.labelLarge,
+                    fontWeight = FontWeight.Bold,
+                )
+                Text(
+                    text = localized(
+                        language,
+                        de = "Öffnungszeiten, Status und Wartezeiten werden gerade aktualisiert.",
+                        en = "Opening times, status, and wait times are being updated.",
+                        fr = "Les horaires, statuts et temps d'attente sont en cours d'actualisation.",
+                        nl = "Openingstijden, status en wachttijden worden bijgewerkt.",
+                    ),
+                    style = MaterialTheme.typography.bodySmall,
+                )
+            }
+        }
     }
 }
 
