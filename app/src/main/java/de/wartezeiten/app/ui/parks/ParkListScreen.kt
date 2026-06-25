@@ -440,7 +440,11 @@ fun ParkListScreen(
                             }
                         }
 
-                        if (state.parks.isEmpty()) {
+                        if (state.parks.isEmpty() && state.showOpenOnly && state.isOpenParkDataLoading) {
+                            item {
+                                OpenParksLoadingCard(language = state.language)
+                            }
+                        } else if (state.parks.isEmpty()) {
                             item {
                                 Box(
                                     modifier = Modifier
@@ -1354,6 +1358,55 @@ private fun RefreshSnackbar(data: SnackbarData) {
                 TextButton(onClick = { data.performAction() }) {
                     Text(action)
                 }
+            }
+        }
+    }
+}
+
+@Composable
+private fun OpenParksLoadingCard(language: String) {
+    OutlinedCard(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(top = 32.dp),
+        shape = RoundedCornerShape(16.dp),
+        colors = CardDefaults.outlinedCardColors(
+            containerColor = MaterialTheme.colorScheme.secondaryContainer,
+            contentColor = MaterialTheme.colorScheme.onSecondaryContainer,
+        ),
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 16.dp, vertical = 14.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            CircularProgressIndicator(
+                modifier = Modifier.size(24.dp),
+                strokeWidth = 2.5.dp,
+                color = MaterialTheme.colorScheme.onSecondaryContainer,
+            )
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = localized(
+                        language,
+                        de = "Offene Parks werden gesucht",
+                        en = "Checking open parks",
+                        fr = "Recherche des parcs ouverts",
+                        nl = "Open parken worden gezocht",
+                    ),
+                    style = MaterialTheme.typography.labelLarge,
+                    fontWeight = FontWeight.Bold,
+                )
+                Text(
+                    text = localized(
+                        language,
+                        de = "Aktuelle Öffnungszeiten und Wartezeitdaten werden abgeglichen. Das kann ein paar Sekunden dauern.",
+                        en = "Current opening times and wait-time data are being checked. This can take a few seconds.",
+                        fr = "Les horaires et temps d'attente actuels sont vérifiés. Cela peut prendre quelques secondes.",
+                        nl = "Actuele openingstijden en wachttijden worden gecontroleerd. Dit kan enkele seconden duren.",
+                    ),
+                    style = MaterialTheme.typography.bodySmall,
+                )
             }
         }
     }

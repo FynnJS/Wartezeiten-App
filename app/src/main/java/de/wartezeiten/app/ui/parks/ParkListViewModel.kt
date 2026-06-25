@@ -27,6 +27,7 @@ import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import javax.inject.Inject
@@ -55,6 +56,7 @@ data class ParkListUiState(
     val isShowingOfflineData: Boolean = false,
     val offlineDataAgeMinutes: Long? = null,
     val isLoading: Boolean = false,
+    val isOpenParkDataLoading: Boolean = false,
     val errorMessage: String? = null,
     val refreshTrigger: Int = 0,
     val attractionSearchResults: List<AttractionSearchResult> = emptyList(),
@@ -113,6 +115,7 @@ class ParkListViewModel @Inject constructor(
     private val showFavoritesOnly = MutableStateFlow(false)
     private val sort = MutableStateFlow(ParkSort.Name)
     private val isLoading = MutableStateFlow(value = false)
+    private val openParkDataLoadCount = MutableStateFlow(0)
     private val isRecommendationLoading = MutableStateFlow(value = false)
     private val recommendationScanProgress = MutableStateFlow<ParkRecommendationScanProgress?>(null)
     private val currentLanguage = MutableStateFlow(PreferencesDataSource.DEFAULT_LANGUAGE)
@@ -153,6 +156,7 @@ class ParkListViewModel @Inject constructor(
         recommendationScanProgress,
         currentLanguage,
         isLoading,
+        openParkDataLoadCount,
         errorMessage,
         refreshTrigger,
         statisticsIndex,
@@ -174,11 +178,12 @@ class ParkListViewModel @Inject constructor(
         val scanProgress = args[12] as ParkRecommendationScanProgress?
         val language = args[13] as String
         val loading = args[14] as Boolean
-        val error = args[15] as String?
-        val trigger = args[16] as Int
-        val statsIndex = args[17] as StatisticsIndex
-        val statsLoading = args[18] as Boolean
-        val aliases = args[19] as Map<String, List<String>>
+        val openParkDataLoading = (args[15] as Int) > 0
+        val error = args[16] as String?
+        val trigger = args[17] as Int
+        val statsIndex = args[18] as StatisticsIndex
+        val statsLoading = args[19] as Boolean
+        val aliases = args[20] as Map<String, List<String>>
 
         val favorites = parks.filter { it.isFavorite }
         val recent = currentRecentParkKeys.mapNotNull { key ->
@@ -239,6 +244,7 @@ class ParkListViewModel @Inject constructor(
             isShowingOfflineData = error != null && parks.isNotEmpty(),
             offlineDataAgeMinutes = parks.latestCacheAgeMinutes(),
             isLoading = loading,
+            isOpenParkDataLoading = openParkDataLoading,
             errorMessage = error,
             refreshTrigger = trigger,
             attractionSearchResults = attractionResults,
@@ -423,7 +429,12 @@ class ParkListViewModel @Inject constructor(
     private fun refreshPublicOpenSnapshots() {
         viewModelScope.launch {
             preferences.setParkSearchQuery("")
-            repository.refreshParkRecommendationSnapshots(currentLanguage.value)
+            beginOpenParkDataLoad()
+            try {
+                repository.refreshParkRecommendationSnapshots(currentLanguage.value)
+            } finally {
+                endOpenParkDataLoad()
+            }
         }
     }
 
@@ -431,6 +442,7 @@ class ParkListViewModel @Inject constructor(
         recommendationRefreshJob?.cancel()
         recommendationRefreshJob = viewModelScope.launch {
             isRecommendationLoading.value = true
+            beginOpenParkDataLoad()
             recommendationScanProgress.value = null
             try {
                 repository.refreshParkRecommendationSnapshots(language) { progress ->
@@ -438,9 +450,18 @@ class ParkListViewModel @Inject constructor(
                 }
             } finally {
                 recommendationScanProgress.value = null
+                endOpenParkDataLoad()
                 isRecommendationLoading.value = false
             }
         }
+    }
+
+    private fun beginOpenParkDataLoad() {
+        openParkDataLoadCount.update { it + 1 }
+    }
+
+    private fun endOpenParkDataLoad() {
+        openParkDataLoadCount.update { (it - 1).coerceAtLeast(0) }
     }
 
     private fun ParkRecommendationScanProgress.toStatusText(language: String): String {
