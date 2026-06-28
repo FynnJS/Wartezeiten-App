@@ -10,6 +10,8 @@ https://wartezeiten-app.tutorialfynn.workers.dev/
 
 Die Website liest `website/release.json` und verlinkt auf den neuesten GitHub Release im Repository `FynnJS/Wartezeiten-App`.
 
+Unter [Live-Wartezeiten](https://wartezeiten-app.tutorialfynn.workers.dev/wartezeiten) stehen aktuelle Wartezeiten, Öffnungszeiten, Auslastung und Statistiken auch ohne die App direkt im Browser zur Verfügung.
+
 ## Funktionen
 
 - Parkliste mit Länder-, Favoriten- und Öffnungsstatus-Filter
@@ -25,6 +27,7 @@ Die Website liest `website/release.json` und verlinkt auf den neuesten GitHub Re
 - Vier Sprachen (Deutsch, Englisch, Französisch, Niederländisch) mit zentraler Sprachauswahl in den Einstellungen
 - Pflicht-Update-Sperre mit In-App-APK-Download samt Fortschrittsanzeige, SHA-256-Prüfung und direktem Installationsdialog; "Was ist neu"-Dialog nach erfolgreichem Update
 - Offline-First-Datenhaltung über Room, Cache-Hinweis und automatische Aktualisierung für Live-Daten
+- Live-Wartezeiten, Öffnungszeiten, Auslastung und Statistik-Diagramme auch ohne App direkt auf der Projekt-Website
 
 ## Watchlist-Benachrichtigungen
 
@@ -114,6 +117,8 @@ Lokale `assembleRelease`-Builds brechen ohne diese `keystore.properties` ebenfal
 Der dabei ausgegebene Sicherungsordner muss zusätzlich außerhalb des Rechners gesichert werden. Der private Keystore lässt sich aus einer veröffentlichten APK nicht wiederherstellen.
 
 Cloudflare App-Daten für Ranking, Trends und zentrale Attraktionsstatistiken werden vom Worker-Cron erzeugt. Der Cron schreibt D1-Statistik-Snapshots parkweise und nutzt bei aktivem D1 nur die drei realen 5-Minuten-Cron-Shards; `APP_DATA_HISTORY_SHARDS` ist nur noch für Legacy-KV-Fallbacks relevant. Setup-Hinweise stehen in `website/CLOUDFLARE-APP-DATA.md`.
+
+Die Live-Wartezeiten-Seite (`website/wartezeiten.html`) nutzt zusätzlich die Worker-Endpunkte `/api/parks` und `/api/parks/{parkKey}/live`, die direkt die Wartezeiten.APP-API proxyen (kein D1/KV nötig). Lokal testen mit `npm run worker:dev` unter `http://localhost:8787/wartezeiten`; Details und Befehle zum Befüllen der lokalen Statistik-Datenbank stehen in `website/CLOUDFLARE-APP-DATA.md`.
 
 Vor jedem Release prüfen:
 

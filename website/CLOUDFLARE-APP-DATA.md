@@ -9,6 +9,11 @@ Der Worker sammelt zentrale Live-Snapshots für die Android-App und stellt sie a
 - `/app-data/statistics/parks/{parkKey}/dates.json` für verfügbare Tage eines Parks
 - `/app-data/statistics/parks/{parkKey}/days/{yyyy-MM-dd}.json` für Wartezeiten- und Statusverlauf aller Attraktionen eines Tages
 
+Zusätzlich proxyt der Worker für die Website-Seite `wartezeiten.html` direkt die öffentliche Wartezeiten.APP-API, ohne D1/KV-Abhängigkeit:
+
+- `/api/parks` für die Parkliste (`parkKey`, `name`, `land`)
+- `/api/parks/{parkKey}/live` für aktuelle Öffnungszeiten, Auslastung und Wartezeiten je Attraktion
+
 Die App importiert Park- und Trenddaten in Room und nutzt lokale/API-Scans nur noch als Fallback.
 Die Attraktionsstatistiken werden nicht lokal gespeichert, sondern zentral in Cloudflare D1 abgelegt.
 Dadurch kann die App später gezielt alte Tagesdateien laden, z.B. für Vergleiche oder Monatsübersichten.
@@ -85,11 +90,21 @@ Wichtig: Sehr viele Parks können zusätzlich an Worker-Subrequest-, API- und D1
 npm run worker:dev
 ```
 
+Das startet `wrangler dev --test-scheduled` und damit auch die Website samt Live-Wartezeiten-Seite unter `http://localhost:8787/wartezeiten`. Die lokale Instanz nutzt eine eigene, leere lokale D1/KV-Kopie (`.wrangler/state`, per `.gitignore` ausgeschlossen) - getrennt von den Remote-Daten.
+
 Cron manuell triggern:
 
 ```powershell
 curl "http://localhost:8787/__scheduled?cron=*+*+*+*+*"
 ```
+
+Bei aktivem D1-Binding verarbeitet ein einzelner Cron-Aufruf nur einen von vier Park-Shards (siehe `DEFAULT_CRON_SHARDS`). Für lokale Tests mit mehr Parks gleichzeitig eignet sich der manuelle Refresh-Endpunkt besser, der denselben Shard-Parameter direkt per Query annimmt und ohne Token funktioniert, solange `APP_DATA_REFRESH_TOKEN` nicht gesetzt ist:
+
+```powershell
+0..3 | ForEach-Object { curl -Method POST "http://localhost:8787/app-data/refresh?shardIndex=$_&shardCount=4" }
+```
+
+Mehrfaches Ausführen erzeugt mehrere Messpunkte pro Park am selben Tag, was für die Diagramme der Statistikansicht hilfreich ist.
 
 Endpunkte prüfen:
 
@@ -99,6 +114,8 @@ curl "http://localhost:8787/app-data/trend-history.json"
 curl "http://localhost:8787/app-data/global-markers/latest.json"
 curl "http://localhost:8787/app-data/statistics/index.json"
 curl "http://localhost:8787/app-data/statistics/parks/europapark/days/2026-06-03.json"
+curl "http://localhost:8787/api/parks"
+curl "http://localhost:8787/api/parks/europapark/live"
 ```
 
 ## Deploy

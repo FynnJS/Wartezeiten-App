@@ -6,6 +6,7 @@
   <meta name="description" content="Wartezeiten App - Live-Wartezeiten für Freizeitparks weltweit. Kostenlos, werbefrei, offline verfügbar." />
   <title>Wartezeiten App - Freizeitpark Wartezeiten Live</title>
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='75' font-size='75'>⏱️</text></svg>" />
+  <script src="theme.js"></script>
   <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
@@ -16,7 +17,13 @@
           <div class="logo">⏱️</div>
           <h1>Wartezeiten</h1>
         </div>
-        <p class="tagline">Live-Wartezeiten für Freizeitparks</p>
+        <div class="header-actions">
+          <nav class="top-nav">
+            <a href="index.html" class="active">Start &amp; Download</a>
+            <a href="wartezeiten.html">Live-Wartezeiten</a>
+          </nav>
+          <button id="themeToggle" type="button" class="theme-toggle" aria-label="Zu hellem Design wechseln">☀️ Hell</button>
+        </div>
       </div>
     </div>
   </header>
@@ -30,7 +37,7 @@
           <a id="downloadButton" class="btn btn-primary" href="https://github.com/FynnJS/Wartezeiten-App/releases/latest" target="_blank" rel="noopener">
             <span class="icon">⬇️</span> APK herunterladen
           </a>
-          <a href="#features" class="btn btn-secondary">Mehr erfahren</a>
+          <a href="wartezeiten.html" class="btn btn-secondary">⏱️ Wartezeiten live ansehen</a>
         </div>
       </div>
     </section>
@@ -58,6 +65,11 @@
             <div class="feature-icon">▮▮▮</div>
             <h3>Flexible Alarme</h3>
             <p>Standby-Push mit Ruhezeit, Einmal-Zustellung, Mindestabstand und täglicher Parkzusammenfassung konfigurieren.</p>
+          </div>
+          <div class="feature-card">
+            <div class="feature-icon">🌐</div>
+            <h3>Live-Wartezeiten im Browser</h3>
+            <p>Auch ohne App: <a href="wartezeiten.html">Aktuelle Wartezeiten, Öffnungszeiten, Auslastung und Statistiken direkt auf der Website</a> abrufen.</p>
           </div>
         </div>
       </div>
@@ -117,6 +129,10 @@
           <details class="faq-item">
             <summary>Wo kommen die Daten her?</summary>
             <p>Die Wartezeiten werden von der <a href="https://www.wartezeiten.app" target="_blank">Wartezeiten.APP API</a> bereitgestellt.</p>
+          </details>
+          <details class="faq-item">
+            <summary>Kann ich Wartezeiten auch ohne die App ansehen?</summary>
+            <p>Ja. Unter <a href="wartezeiten.html">Live-Wartezeiten</a> stehen aktuelle Wartezeiten, Öffnungszeiten, Auslastung und Statistiken direkt im Browser zur Verfügung - ganz ohne Installation.</p>
           </details>
           <details class="faq-item">
             <summary>Funktioniert die App auch offline?</summary>

@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
+  buildLiveParkResponse,
   buildScheduledAppDataOptions,
   buildManualRefreshOptions,
   buildStatisticsIndexFromD1Rows,
@@ -10,6 +11,7 @@ import {
   ensureAttractionHistoryD1,
   evaluatePushAlert,
   mergeStatisticsIndexes,
+  normalizeApiLanguage,
   pruneAttractionHistoryD1,
   selectCronParkShard,
   toAttractionSnapshotRow,
@@ -420,4 +422,57 @@ test("push alert text is localized for Dutch wait-time alerts", () => {
 
   assert.equal(evaluation.title, "Rijvenster: Silver Star");
   assert.equal(evaluation.body, "Silver Star staat op 10 min.");
+});
+
+test("normalizeApiLanguage only accepts de/en and defaults to de", () => {
+  assert.equal(normalizeApiLanguage("en"), "en");
+  assert.equal(normalizeApiLanguage("de"), "de");
+  assert.equal(normalizeApiLanguage("fr"), "de");
+  assert.equal(normalizeApiLanguage(undefined), "de");
+});
+
+test("live park response sorts open attractions by wait time before closed ones", () => {
+  const snapshot = {
+    parkKey: "europapark",
+    capturedAtMillis: 1000,
+    openedToday: true,
+    openFrom: "2026-06-22T09:00:00+02:00",
+    closedFrom: "2026-06-22T18:00:00+02:00",
+    displayCrowdLevel: 42,
+    openAttractions: 2,
+    totalAttractions: 3,
+    errors: [],
+    attractions: [
+      { id: "a", name: "Silver Star", value: 10, statusCode: 0, status: "opened" },
+      { id: "b", name: "Wodan", value: 30, statusCode: 0, status: "opened" },
+      { id: "c", name: "Blue Fire", value: -1, statusCode: -1, status: "closed" },
+    ],
+  };
+
+  const response = buildLiveParkResponse(snapshot);
+
+  assert.deepEqual(response.attractions.map((item) => item.id), ["b", "a", "c"]);
+  assert.equal(response.attractions[0].waitMinutes, 30);
+  assert.equal(response.attractions[2].waitMinutes, null);
+  assert.equal(response.crowdLevel, 42);
+});
+
+test("live park response keeps crowd level suppressed when park is not open", () => {
+  const snapshot = {
+    parkKey: "phantasialand",
+    capturedAtMillis: 1000,
+    openedToday: false,
+    openFrom: null,
+    closedFrom: null,
+    displayCrowdLevel: null,
+    openAttractions: 0,
+    totalAttractions: 0,
+    errors: [],
+    attractions: [],
+  };
+
+  const response = buildLiveParkResponse(snapshot);
+
+  assert.equal(response.crowdLevel, null);
+  assert.equal(response.openedToday, false);
 });

@@ -73,6 +73,36 @@ export default {
       return jsonResponse(await readAttractionDay(env, parkKey, date));
     }
 
+    if (url.pathname === "/api/parks") {
+      const language = normalizeApiLanguage(url.searchParams.get("lang"));
+      try {
+        const parks = await apiJson("/parks", { language });
+        const items = (Array.isArray(parks) ? parks : [])
+          .map((park) => ({
+            parkKey: park.id || park.uuid || stableAttractionId(park.name),
+            name: park.name || park.id || "",
+            land: park.land || null,
+          }))
+          .filter((park) => park.parkKey)
+          .sort((a, b) => a.name.localeCompare(b.name));
+        return jsonResponse({ generatedAtMillis: Date.now(), language, parks: items }, 200, 3600);
+      } catch (error) {
+        return jsonResponse({ error: error instanceof Error ? error.message : String(error) }, 502, 30);
+      }
+    }
+
+    const liveMatch = url.pathname.match(/^\/api\/parks\/([^/]+)\/live$/);
+    if (liveMatch) {
+      const parkKey = decodeURIComponent(liveMatch[1]);
+      const language = normalizeApiLanguage(url.searchParams.get("lang"));
+      try {
+        const snapshot = await collectParkSnapshot(parkKey, Date.now(), { includeCrowd: true, language });
+        return jsonResponse(buildLiveParkResponse(snapshot), 200, 30);
+      } catch (error) {
+        return jsonResponse({ error: error instanceof Error ? error.message : String(error) }, 502, 15);
+      }
+    }
+
     if (url.pathname === "/app-data/refresh" && request.method === "POST") {
       const expectedToken = env.APP_DATA_REFRESH_TOKEN;
       if (expectedToken && request.headers.get("authorization") !== `Bearer ${expectedToken}`) {
@@ -340,9 +370,10 @@ async function resolveParkKeys(env) {
 
 async function collectParkSnapshot(parkKey, now, options = {}) {
   const includeCrowd = options.includeCrowd !== false;
+  const language = normalizeApiLanguage(options.language);
   const [openingResult, waitingResult, crowdResult] = await Promise.allSettled([
     apiJson("/openingtimes", { park: parkKey }),
-    apiJson("/waitingtimes", { park: parkKey, language: "de" }),
+    apiJson("/waitingtimes", { park: parkKey, language }),
     includeCrowd ? apiJson("/crowdlevel", { park: parkKey }) : Promise.resolve(null),
   ]);
 
@@ -482,6 +513,38 @@ function deriveAttractionSnapshotTiming(opening, waitingItems, now) {
     historyDate,
     historyEligible: true,
     skipReason: null,
+  };
+}
+
+function normalizeApiLanguage(value) {
+  return value === "en" ? "en" : "de";
+}
+
+function buildLiveParkResponse(snapshot) {
+  const attractions = [...(snapshot.attractions ?? [])].sort((a, b) => {
+    const aOpen = a.statusCode === 0;
+    const bOpen = b.statusCode === 0;
+    if (aOpen !== bOpen) return aOpen ? -1 : 1;
+    if (aOpen) return b.value - a.value;
+    return a.name.localeCompare(b.name);
+  });
+  return {
+    parkKey: snapshot.parkKey,
+    capturedAtMillis: snapshot.capturedAtMillis,
+    openedToday: snapshot.openedToday,
+    openFrom: snapshot.openFrom,
+    closedFrom: snapshot.closedFrom,
+    crowdLevel: snapshot.displayCrowdLevel,
+    openAttractions: snapshot.openAttractions,
+    totalAttractions: snapshot.totalAttractions,
+    attractions: attractions.map((item) => ({
+      id: item.id,
+      name: item.name,
+      waitMinutes: item.statusCode === 0 ? item.value : null,
+      statusCode: item.statusCode,
+      status: item.status,
+    })),
+    errors: snapshot.errors,
   };
 }
 
@@ -2233,12 +2296,12 @@ function round(value, decimals) {
   return Math.round(value * factor) / factor;
 }
 
-function jsonResponse(value, status = 200) {
+function jsonResponse(value, status = 200, maxAgeSeconds = 60) {
   return new Response(JSON.stringify(value), {
     status,
     headers: {
       "content-type": "application/json; charset=utf-8",
-      "cache-control": "public, max-age=60",
+      "cache-control": `public, max-age=${maxAgeSeconds}`,
       "access-control-allow-origin": "*",
     },
   });
@@ -2372,6 +2435,7 @@ function delay(ms) {
 }
 
 export {
+  buildLiveParkResponse,
   buildScheduledAppDataOptions,
   buildManualRefreshOptions,
   buildStatisticsIndexFromD1Rows,
@@ -2380,6 +2444,7 @@ export {
   evaluatePushAlert,
   ensureAttractionHistoryD1,
   mergeStatisticsIndexes,
+  normalizeApiLanguage,
   pruneAttractionHistoryD1,
   selectCronParkShard,
   scheduledHistoryShardIndex,

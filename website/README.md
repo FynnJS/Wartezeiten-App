@@ -1,10 +1,12 @@
 # Wartezeiten App Website
 
-Die Website stellt die aktuelle APK bereit und dient gleichzeitig als Cloudflare Worker fuer zentrale App-Daten, Statistik-Snapshots und optionale Watchlist-Push-Alarme.
+Die Website stellt die aktuelle APK bereit, bietet unter `wartezeiten.html` Live-Wartezeiten direkt im Browser an und dient gleichzeitig als Cloudflare Worker fuer zentrale App-Daten, Statistik-Snapshots und optionale Watchlist-Push-Alarme.
 
 ## Dateien
 
 - `index.html`, `styles.css`, `script.js`: Download-Seite
+- `wartezeiten.html`, `app.css`, `wartezeiten.js`: Live-Wartezeiten-Seite (Park-Dropdown/-Suche, aktuelle Wartezeiten/Öffnungszeiten/Auslastung, Statistik-Diagramm) - reines Client-seitiges Hash-Routing (`#park=parkKey`), keine eigene Server-Route nötig
+- `theme.js`: gemeinsamer Dark/Light-Mode-Umschalter fuer beide Seiten (Standard: Dark Mode, Speicherung in `localStorage`, Farben an `app/.../ui/theme/Theme.kt` angeglichen - siehe `Agents.md`)
 - `release.json`: Release-Metadaten fuer Website und In-App-Update
 - `CLOUDFLARE-APP-DATA.md`: Setup fuer Worker, KV, D1 und Cron
 - `../worker/migrations/`: D1-Migrationen fuer Statistik- und Push-Tabellen
@@ -59,6 +61,19 @@ Der Worker stellt zentrale JSON-Endpunkte bereit:
 - `/app-data/statistics/parks/{parkKey}/dates.json`
 - `/app-data/statistics/parks/{parkKey}/days/{date}.json`
 
-Diese Daten werden per Cron aktualisiert und von der Android-App als schnelle Quelle fuer Ranking-, Trend- und Attraktionsdaten genutzt.
+Diese Daten werden per Cron aktualisiert und von der Android-App als schnelle Quelle fuer Ranking-, Trend- und Attraktionsdaten genutzt. Dieselben Statistik-Endpunkte werden auch von `wartezeiten.js` fuer die Browser-Statistikansicht verwendet.
+
+Fuer die Live-Wartezeiten-Seite proxyt der Worker zusaetzlich direkt die Wartezeiten.APP-API (kein D1/KV noetig, daher ohne Cron sofort verfuegbar):
+
+- `GET /api/parks?lang=de|en` - Parkliste (`parkKey`, `name`, `land`), 1h Browser-Cache
+- `GET /api/parks/{parkKey}/live?lang=de|en` - aktuelle Oeffnungszeiten, Auslastung und Wartezeiten je Attraktion, 30s Browser-Cache
 
 Watchlist-Push nutzt zusaetzlich die Worker-Endpunkte `/push/register`, `/push/watchlist`, `/push/unregister` und `/push/status`. Der Push-Cron laeuft separat minuetlich; ohne FCM-Secrets bleibt dieser Pfad inaktiv und die Android-App nutzt den lokalen WorkManager-Fallback. Vor einer Veroeffentlichung mit Standby-Push muss `/push/status` den Wert `pushReady: true` liefern.
+
+## Lokal testen
+
+```powershell
+npm run worker:dev
+```
+
+Startet die Website samt Worker unter `http://localhost:8787/`. `wartezeiten.html` (Live-Wartezeiten) funktioniert sofort, da `/api/parks` und `/api/parks/{parkKey}/live` nur die oeffentliche Wartezeiten.APP-API proxyen und kein D1/KV brauchen. Fuer die Statistikansicht in `wartezeiten.html` muss die lokale D1-Datenbank erst Messpunkte enthalten; dafuer den Cron manuell ein paar Mal antriggern (siehe `CLOUDFLARE-APP-DATA.md`).

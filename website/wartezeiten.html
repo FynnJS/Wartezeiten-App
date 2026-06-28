@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="description" content="Live-Wartezeiten, Öffnungszeiten, Auslastung und Statistiken für Freizeitparks weltweit - direkt im Browser." />
+  <title>Live-Wartezeiten - Wartezeiten App</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='75' font-size='75'>⏱️</text></svg>" />
+  <script src="theme.js"></script>
+  <link rel="stylesheet" href="styles.css" />
+  <link rel="stylesheet" href="app.css" />
+</head>
+<body>
+  <header class="header app-header">
+    <div class="container">
+      <div class="header-content">
+        <div class="logo-area">
+          <div class="logo">⏱️</div>
+          <h1>Wartezeiten</h1>
+        </div>
+        <div class="header-actions">
+          <nav class="top-nav">
+            <a href="index.html">Start &amp; Download</a>
+            <a href="wartezeiten.html" class="active">Live-Wartezeiten</a>
+          </nav>
+          <button id="themeToggle" type="button" class="theme-toggle" aria-label="Zu hellem Design wechseln">☀️ Hell</button>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <main class="main app-main">
+    <div class="container">
+      <section id="view-overview" class="app-view">
+        <div id="recentParks" class="chip-row" hidden>
+          <span class="chip-row-label">Zuletzt angesehen</span>
+        </div>
+
+        <div class="app-toolbar">
+          <h2>Parks</h2>
+          <div class="app-search">
+            <input id="parkSearch" type="search" placeholder="Park oder Land suchen..." autocomplete="off" />
+          </div>
+        </div>
+        <p id="parksStatus" class="app-status-text">Parks werden geladen...</p>
+        <div id="parkList" class="park-grid" role="list"></div>
+      </section>
+
+      <section id="view-detail" class="app-view" hidden>
+        <button id="backButton" type="button" class="btn btn-secondary app-back">&larr; Zurück zur Parkübersicht</button>
+
+        <div class="park-detail-head">
+          <div>
+            <h2 id="detailParkName">-</h2>
+            <p id="detailParkLand" class="app-muted"></p>
+          </div>
+          <div class="park-detail-actions">
+            <span id="detailUpdated" class="app-muted"></span>
+            <button id="refreshButton" type="button" class="btn btn-secondary">⟳ Aktualisieren</button>
+          </div>
+        </div>
+
+        <div id="dataGapBanner" class="app-banner app-banner-warning" hidden>
+          Der Park ist laut Öffnungszeiten geöffnet, aber aktuell meldet keine Attraktion eine Wartezeit. Das deutet auf ein Problem bei der Datenquelle hin, nicht bei dieser Anzeige.
+        </div>
+        <div id="liveError" class="app-banner app-banner-error" hidden></div>
+
+        <div class="status-grid">
+          <div class="status-card">
+            <span class="status-card-label">Status</span>
+            <span id="statusOpen" class="status-card-value">-</span>
+            <span id="statusHours" class="app-muted"></span>
+          </div>
+          <div class="status-card">
+            <span class="status-card-label">Auslastung</span>
+            <div class="crowd-bar"><div id="crowdBarFill" class="crowd-bar-fill"></div></div>
+            <span id="crowdText" class="app-muted">-</span>
+          </div>
+          <div class="status-card">
+            <span class="status-card-label">Attraktionen</span>
+            <span id="statusAttractions" class="status-card-value">-</span>
+          </div>
+        </div>
+
+        <div class="app-toolbar">
+          <h3>Wartezeiten</h3>
+          <div class="app-filters">
+            <input id="attractionSearch" type="search" placeholder="Attraktion suchen..." autocomplete="off" />
+            <select id="statusFilter">
+              <option value="all">Alle</option>
+              <option value="open">Nur offen</option>
+              <option value="closed">Geschlossen / Wartung</option>
+            </select>
+            <select id="sortOrder">
+              <option value="wait-desc">Wartezeit ↓</option>
+              <option value="wait-asc">Wartezeit ↑</option>
+              <option value="name">Name</option>
+            </select>
+          </div>
+        </div>
+        <p id="attractionsStatus" class="app-status-text"></p>
+        <div id="attractionList" class="attraction-list"></div>
+
+        <div id="statsSection">
+          <div class="app-toolbar">
+            <h3>Statistik</h3>
+            <div class="app-filters">
+              <select id="dateSelect"></select>
+              <select id="attractionSelect"></select>
+            </div>
+          </div>
+          <p class="app-muted stats-hint">Tipp: Auf eine Attraktion oben klicken, um direkt ihre Statistik zu sehen.</p>
+          <p id="statsStatus" class="app-status-text"></p>
+          <div id="statsSummary" class="stats-summary-grid"></div>
+          <div class="stats-chart-wrap">
+            <svg id="statsChart" class="stats-chart" viewBox="0 0 600 220" preserveAspectRatio="none" hidden></svg>
+            <div id="chartTooltip" class="chart-tooltip" hidden></div>
+          </div>
+        </div>
+      </section>
+    </div>
+  </main>
+
+  <footer class="footer">
+    <div class="container">
+      <div class="footer-content">
+        <p>Daten bereitgestellt von <a href="https://www.wartezeiten.app" target="_blank" rel="noopener">wartezeiten.app</a></p>
+        <p class="footer-note">Diese App ist ein inoffizielles Drittanwendungsprojekt.</p>
+      </div>
+    </div>
+  </footer>
+
+  <script src="wartezeiten.js"></script>
+</body>
+</html>
