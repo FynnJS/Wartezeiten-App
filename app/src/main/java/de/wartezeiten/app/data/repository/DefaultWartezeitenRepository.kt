@@ -170,6 +170,7 @@ class DefaultWartezeitenRepository @Inject constructor(
 
     override suspend fun refreshParkRecommendationSnapshots(
         language: String,
+        allowLocalFallbackScan: Boolean,
         onProgress: (ParkRecommendationScanProgress) -> Unit,
     ): ApiResult<Unit> = withContext(ioDispatcher) {
         val publicResult = refreshPublicAppData()
@@ -186,6 +187,10 @@ class DefaultWartezeitenRepository @Inject constructor(
                     )
             }
         if (publicResult is ApiResult.Success && hasFreshOpenSnapshot) {
+            onProgress(ParkRecommendationScanProgress(completedParks = 0, totalParks = 0, estimatedRemainingMillis = 0L))
+            return@withContext publicResult
+        }
+        if (!allowLocalFallbackScan) {
             onProgress(ParkRecommendationScanProgress(completedParks = 0, totalParks = 0, estimatedRemainingMillis = 0L))
             return@withContext publicResult
         }

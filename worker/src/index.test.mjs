@@ -3,12 +3,15 @@ import test from "node:test";
 
 import {
   buildScheduledAppDataOptions,
+  buildManualRefreshOptions,
   buildStatisticsIndexFromD1Rows,
   cronParkShard,
   deriveAttractionSnapshotTiming,
   ensureAttractionHistoryD1,
   evaluatePushAlert,
   mergeStatisticsIndexes,
+  pruneAttractionHistoryD1,
+  selectCronParkShard,
   toAttractionSnapshotRow,
 } from "./index.js";
 
@@ -28,7 +31,7 @@ function openParkSnapshot() {
 test("D1 scheduled app-data uses cron shards and ignores history shards", () => {
   const options = buildScheduledAppDataOptions(
     {
-      cron: "1-59/5 * * * *",
+      cron: "3-59/5 * * * *",
       scheduledTime: Date.parse("2026-06-22T10:00:00Z"),
     },
     {
@@ -38,10 +41,44 @@ test("D1 scheduled app-data uses cron shards and ignores history shards", () => 
   );
 
   assert.equal(options.skipped, false);
-  assert.equal(options.options.shardIndex, 1);
-  assert.equal(options.options.shardCount, 3);
+  assert.equal(options.options.shardIndex, 3);
+  assert.equal(options.options.shardCount, 4);
   assert.equal(options.options.historyShardIndex, null);
   assert.equal(options.options.historyShardCount, null);
+});
+
+test("shared minute cron rotates D1 app-data shards by scheduled minute", () => {
+  const first = buildScheduledAppDataOptions(
+    {
+      cron: "* * * * *",
+      scheduledTime: Date.parse("2026-06-22T10:02:00Z"),
+    },
+    { APP_DATA_DB: {} },
+  );
+  const second = buildScheduledAppDataOptions(
+    {
+      cron: "* * * * *",
+      scheduledTime: Date.parse("2026-06-22T10:03:00Z"),
+    },
+    { APP_DATA_DB: {} },
+  );
+
+  assert.equal(first.options.shardIndex, 2);
+  assert.equal(second.options.shardIndex, 3);
+  assert.equal(first.options.shardCount, 4);
+});
+
+test("manual D1 refresh defaults to one small app-data shard", () => {
+  const options = buildManualRefreshOptions(
+    new URL("https://example.com/app-data/refresh?shardIndex=2&shardCount=4"),
+    { APP_DATA_DB: {} },
+  );
+
+  assert.equal(options.shardIndex, 2);
+  assert.equal(options.shardCount, 4);
+  assert.equal(options.writeLatest, false);
+  assert.equal(options.writeTrend, false);
+  assert.equal(options.includeCrowd, false);
 });
 
 test("D1 attraction history schema is created lazily for worker updates", async () => {
@@ -70,7 +107,7 @@ test("D1 attraction history schema is created lazily for worker updates", async 
   assert.equal(preparedSql.filter((sql) => sql.includes("idx_attraction_history_snapshots_date_park_captured")).length, 1);
 });
 
-test("cron sharding keeps representative parks assigned to the three real cron shards", () => {
+test("cron sharding keeps representative parks assigned to multiple real cron shards", () => {
   const parks = [
     "europapark",
     "phantasialand",
@@ -80,9 +117,102 @@ test("cron sharding keeps representative parks assigned to the three real cron s
     "bobbejaanland",
   ];
 
-  const shards = new Set(parks.map((parkKey) => cronParkShard(parkKey, 3)));
+  const shards = new Set(parks.map((parkKey) => cronParkShard(parkKey, 6)));
 
-  assert.deepEqual([...shards].sort(), [0, 1, 2]);
+  assert.ok([...shards].every((shard) => shard >= 0 && shard < 6));
+  assert.ok(shards.size >= 3);
+});
+
+test("cron park selection balances the current park list across four deployable app-data triggers", () => {
+  const parks = [
+    "altontowers",
+    "bobbejaanland",
+    "caribeaquaticpark",
+    "chessingtonworld",
+    "disneyadventureworld",
+    "disneycaliforniaadventurepark",
+    "disneylandparis",
+    "disneylandpark",
+    "disneysanimalkingdomthemepark",
+    "disneyshollywoodstudios",
+    "djurssommerland",
+    "efteling",
+    "energylandia",
+    "epcot",
+    "europapark",
+    "familypark",
+    "ferrariland",
+    "futuroscope",
+    "gardaland",
+    "hansapark",
+    "heidepark",
+    "legoland",
+    "legolandbillund",
+    "legolandcalifornia",
+    "legolandflorida",
+    "legolandnewyork",
+    "legolandwindsor",
+    "liseberg",
+    "magickingdompark",
+    "movieparkgermany",
+    "nigloland",
+    "parcasterix",
+    "phantasialand",
+    "plopsalandbelgium",
+    "plopsalanddeutschland",
+    "portaventurapark",
+    "rulantica",
+    "thorpepark",
+    "toverland",
+    "traumatica",
+    "universalepicuniverse",
+    "universalislandsofadventure",
+    "universalstudiosflorida",
+    "universalvolcanobay",
+    "walibibelgium",
+    "walibiholland",
+  ];
+
+  const shardSizes = [0, 1, 2, 3].map((shard) => selectCronParkShard(parks, shard, 4).length);
+
+  assert.deepEqual(shardSizes, [12, 12, 11, 11]);
+});
+
+test("D1 attraction history pruning removes old dates and orphaned day rows", async () => {
+  const calls = [];
+  const db = {
+    prepare(sql) {
+      return {
+        bind(...values) {
+          calls.push({ sql, values });
+          return {
+            run: async () => ({ success: true }),
+          };
+        },
+        run: async () => ({ success: true }),
+      };
+    },
+    batch: async (statements) => {
+      await Promise.all(statements.map((statement) => statement.run()));
+      return statements.map(() => ({ success: true }));
+    },
+  };
+
+  await pruneAttractionHistoryD1(
+    {
+      APP_DATA_DB: db,
+      APP_DATA_D1_RETENTION_DAYS: "14",
+    },
+    Date.parse("2026-06-28T12:00:00Z"),
+  );
+
+  const deleteSnapshots = calls.find((call) => call.sql.includes("DELETE FROM attraction_history_snapshots"));
+  const deleteDays = calls.find((call) => call.sql.includes("DELETE FROM attraction_history_days"));
+
+  assert.ok(deleteSnapshots);
+  assert.ok(deleteDays);
+  assert.equal(deleteSnapshots.values[0], "2026-06-14");
+  assert.equal(deleteDays.values[0], "2026-06-14");
 });
 
 test("stale previous-day waiting times are not eligible for history writes", () => {

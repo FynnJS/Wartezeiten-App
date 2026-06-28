@@ -11,8 +11,9 @@ const MAX_ATTRACTION_SNAPSHOTS_PER_DAY = 288;
 const REQUEST_DELAY_MILLIS = 900;
 const DEFAULT_ATTRACTION_HISTORY_SHARDS = 3;
 const DEFAULT_INDEX_UPDATE_INTERVAL_MILLIS = 60 * 60 * 1000;
-const DEFAULT_CRON_SHARDS = 3;
+const DEFAULT_CRON_SHARDS = 4;
 const DEFAULT_PUSH_SCAN_LIMIT = 1000;
+const DEFAULT_D1_HISTORY_RETENTION_DAYS = 14;
 const SUPPORTED_PUSH_LANGUAGES = new Set(["de", "en", "fr", "nl"]);
 const D1_SCHEMA_VERSION = 1;
 let cachedFcmAccessToken = null;
@@ -77,7 +78,7 @@ export default {
       if (expectedToken && request.headers.get("authorization") !== `Bearer ${expectedToken}`) {
         return jsonResponse({ error: "Unauthorized" }, 401);
       }
-      const result = await updateAppData(env);
+      const result = await updateAppData(env, buildManualRefreshOptions(url, env));
       return jsonResponse(result);
     }
 
@@ -113,7 +114,6 @@ export default {
   async scheduled(controller, env, ctx) {
     if (controller?.cron === "* * * * *") {
       ctx.waitUntil(runPushWatchlistScan(env));
-      return;
     }
     ctx.waitUntil(updateScheduledAppData(controller, env));
   },
@@ -129,7 +129,11 @@ async function updateScheduledAppData(controller, env) {
 
 function buildScheduledAppDataOptions(controller, env, now = Date.now()) {
   const cronShardCount = parsePositiveInt(env.APP_DATA_CRON_SHARDS) ?? DEFAULT_CRON_SHARDS;
-  const cronShardIndex = scheduledShardIndex(controller?.cron, cronShardCount);
+  const cronShardIndex = scheduledShardIndex(
+    controller?.cron,
+    cronShardCount,
+    Number(controller?.scheduledTime) || now,
+  );
   if (hasD1(env)) {
     return {
       skipped: false,
@@ -195,7 +199,7 @@ async function updateAppData(env, options = {}) {
     ? allParkKeys.filter((parkKey) => attractionHistoryShard(env, parkKey, historyShardCount) === historyShardIndex)
     : options.shardIndex == null
       ? allParkKeys
-      : allParkKeys.filter((parkKey) => cronParkShard(parkKey, options.shardCount) === options.shardIndex);
+      : selectCronParkShard(allParkKeys, options.shardIndex, options.shardCount);
   const existingHistory = options.writeTrend === false
     ? emptyTrendHistory()
     : await readJson(env, TREND_KEY, emptyTrendHistory());
@@ -208,6 +212,10 @@ async function updateAppData(env, options = {}) {
   const errors = [];
   const skippedHistory = [];
   const attractionDayUpdates = [];
+
+  if (hasD1(env)) {
+    await pruneAttractionHistoryD1(env, now);
+  }
 
   for (const parkKey of parkKeys) {
     try {
@@ -1519,6 +1527,60 @@ async function writeAttractionSnapshotsD1(env, snapshots) {
   await db.batch(statements);
 }
 
+function buildManualRefreshOptions(url, env) {
+  if (!hasD1(env)) return {};
+  const shardCount = parsePositiveInt(url.searchParams.get("shardCount")) ?? DEFAULT_CRON_SHARDS;
+  const requestedShardIndex = parseNonNegativeInt(url.searchParams.get("shardIndex"));
+  return {
+    shardIndex: Math.min(requestedShardIndex ?? 0, shardCount - 1),
+    shardCount,
+    historyShardIndex: null,
+    historyShardCount: null,
+    writeLatest: false,
+    writeTrend: false,
+    includeCrowd: false,
+  };
+}
+
+function parseNonNegativeInt(value) {
+  const parsed = Number(value);
+  return Number.isInteger(parsed) && parsed >= 0 ? parsed : null;
+}
+
+async function pruneAttractionHistoryD1(env, now = Date.now()) {
+  const db = env.APP_DATA_DB;
+  if (!db) return;
+  await ensureAttractionHistoryD1(env);
+
+  const retentionDays = parsePositiveInt(env.APP_DATA_D1_RETENTION_DAYS) ?? DEFAULT_D1_HISTORY_RETENTION_DAYS;
+  const cutoffMillis = now - (retentionDays * 24 * 60 * 60 * 1000);
+  const cutoffDate = isoDate(cutoffMillis);
+  const statements = [
+    db.prepare(`
+      DELETE FROM attraction_history_snapshots
+      WHERE date < ? OR captured_at_millis < ?
+    `).bind(cutoffDate, cutoffMillis),
+    db.prepare(`
+      DELETE FROM attraction_history_days
+      WHERE date < ?
+        OR NOT EXISTS (
+          SELECT 1
+          FROM attraction_history_snapshots s
+          WHERE s.park_key = attraction_history_days.park_key
+            AND s.date = attraction_history_days.date
+        )
+    `).bind(cutoffDate),
+  ];
+
+  if (typeof db.batch === "function") {
+    await db.batch(statements);
+  } else {
+    for (const statement of statements) {
+      await statement.run();
+    }
+  }
+}
+
 async function buildUpdatedAttractionHistory(env, snapshot, now) {
   const date = snapshot.historyDate ?? isoDate(snapshot.capturedAtMillis);
   const existing = await readAttractionDay(env, snapshot.parkKey, date);
@@ -2271,8 +2333,18 @@ function cronParkShard(parkKey, shardCount) {
   return hashString(parkKey) % shardCount;
 }
 
-function scheduledShardIndex(cron, shardCount) {
+function selectCronParkShard(parkKeys, shardIndex, shardCount) {
+  const count = parsePositiveInt(shardCount) ?? DEFAULT_CRON_SHARDS;
+  const index = Number.isInteger(shardIndex) ? shardIndex : 0;
+  return (parkKeys ?? []).filter((parkKey, parkIndex) => parkKey && (parkIndex % count) === index);
+}
+
+function scheduledShardIndex(cron, shardCount, scheduledTimeMillis = Date.now()) {
   const configured = String(cron || "");
+  if (configured === "* * * * *") {
+    const minuteSlot = Math.floor(Number(scheduledTimeMillis) / (60 * 1000));
+    return Math.abs(minuteSlot) % shardCount;
+  }
   const offset = Number(configured.match(/^(\d+)-59\/5 /)?.[1]);
   if (Number.isInteger(offset)) return Math.max(0, Math.min(shardCount - 1, offset));
   return 0;
@@ -2301,12 +2373,15 @@ function delay(ms) {
 
 export {
   buildScheduledAppDataOptions,
+  buildManualRefreshOptions,
   buildStatisticsIndexFromD1Rows,
   cronParkShard,
   deriveAttractionSnapshotTiming,
   evaluatePushAlert,
   ensureAttractionHistoryD1,
   mergeStatisticsIndexes,
+  pruneAttractionHistoryD1,
+  selectCronParkShard,
   scheduledHistoryShardIndex,
   scheduledShardIndex,
   toAttractionSnapshotRow,

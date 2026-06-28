@@ -25,6 +25,7 @@ interface WartezeitenRepository {
     suspend fun refreshParks(language: String): ApiResult<Unit>
     suspend fun refreshParkRecommendationSnapshots(
         language: String,
+        allowLocalFallbackScan: Boolean = true,
         onProgress: (ParkRecommendationScanProgress) -> Unit = {},
     ): ApiResult<Unit>
     suspend fun refreshPublicAppData(): ApiResult<Unit>

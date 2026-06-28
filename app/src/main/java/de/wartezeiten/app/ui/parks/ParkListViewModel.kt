@@ -304,7 +304,7 @@ class ParkListViewModel @Inject constructor(
         viewModelScope.launch {
             preferences.language.distinctUntilChanged().collect { language ->
                 currentLanguage.value = language
-                refresh(language = language, showFeedback = false)
+                refresh(language = language, showFeedback = false, refreshRecommendations = false)
             }
         }
     }
@@ -390,7 +390,8 @@ class ParkListViewModel @Inject constructor(
     fun refresh(
         language: String = currentLanguage.value,
         silent: Boolean = false,
-        showFeedback: Boolean = !silent
+        showFeedback: Boolean = !silent,
+        refreshRecommendations: Boolean = !silent,
     ) {
         refreshJob?.cancel()
         refreshJob = viewModelScope.launch {
@@ -400,7 +401,7 @@ class ParkListViewModel @Inject constructor(
                 is ApiResult.Success -> {
                     repository.refreshPublicAppData()
                     if (showFeedback) refreshTrigger.value += 1
-                    if (!silent) {
+                    if (refreshRecommendations) {
                         refreshRecommendationsInBackground(language)
                     }
                 }
@@ -431,7 +432,10 @@ class ParkListViewModel @Inject constructor(
             preferences.setParkSearchQuery("")
             beginOpenParkDataLoad()
             try {
-                repository.refreshParkRecommendationSnapshots(currentLanguage.value)
+                repository.refreshParkRecommendationSnapshots(
+                    language = currentLanguage.value,
+                    allowLocalFallbackScan = false,
+                )
             } finally {
                 endOpenParkDataLoad()
             }
