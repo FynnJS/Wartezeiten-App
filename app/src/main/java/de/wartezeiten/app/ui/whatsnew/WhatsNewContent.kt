@@ -25,6 +25,34 @@ data class WhatsNewRelease(
 
 val WHATS_NEW_RELEASES = listOf(
     WhatsNewRelease(
+        versionCode = 10200,
+        versionName = "1.2.0",
+        highlightsDe = listOf(
+            "Aktuelle Wartezeiten, Auslastung und Statistiken sind jetzt auch ohne App direkt im Browser abrufbar.",
+            "Zentrale Wartezeit-Messpunkte für Parks und Attraktionen werden wieder zuverlässig erfasst.",
+            "Historische Tagesdaten auf der Statistik-Detailseite laden jetzt deutlich schneller.",
+            "Attraktionssuche und Statistik-Index im Hintergrund sind spürbar schneller geworden.",
+        ),
+        highlightsEn = listOf(
+            "Live wait times, crowd levels, and statistics are now available directly in the browser — no app needed.",
+            "Central wait-time measurement points for parks and attractions are being tracked reliably again.",
+            "Historical daily data on the statistics detail page now loads significantly faster.",
+            "Attraction search and the statistics index in the background are noticeably faster.",
+        ),
+        highlightsFr = listOf(
+            "Les temps d'attente en direct, les niveaux d'affluence et les statistiques sont désormais accessibles directement dans le navigateur, sans application.",
+            "Les points de mesure centraux des temps d'attente pour les parcs et les attractions sont à nouveau enregistrés de manière fiable.",
+            "Les données historiques journalières sur la page de détail des statistiques se chargent désormais bien plus rapidement.",
+            "La recherche d'attractions et l'index des statistiques en arrière-plan sont sensiblement plus rapides.",
+        ),
+        highlightsNl = listOf(
+            "Live wachttijden, drukte en statistieken zijn nu rechtstreeks in de browser beschikbaar, zonder app.",
+            "Centrale meetslagen voor wachttijden van parken en attracties worden weer betrouwbaar bijgehouden.",
+            "Historische daggegevens op de statistiekendetailpagina laden nu aanzienlijk sneller.",
+            "Attractiezoeken en de statistiekenindex op de achtergrond zijn merkbaar sneller geworden.",
+        ),
+    ),
+    WhatsNewRelease(
         versionCode = 10109,
         versionName = "1.1.9",
         highlightsDe = listOf(

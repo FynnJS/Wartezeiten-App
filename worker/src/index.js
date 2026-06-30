@@ -244,7 +244,11 @@ async function updateAppData(env, options = {}) {
   const attractionDayUpdates = [];
 
   if (hasD1(env)) {
-    await pruneAttractionHistoryD1(env, now);
+    try {
+      await pruneAttractionHistoryD1(env, now);
+    } catch (error) {
+      console.error("pruneAttractionHistoryD1 failed:", error);
+    }
   }
 
   for (const parkKey of parkKeys) {
@@ -1746,38 +1750,66 @@ async function readStatisticsIndex(env) {
 
 async function readStatisticsIndexD1(env) {
   await ensureAttractionHistoryD1(env);
-  const result = await env.APP_DATA_DB.prepare(`
-    SELECT
-      d.park_key AS parkKey,
-      d.date AS date,
-      d.generated_at_millis AS generatedAtMillis,
-      COUNT(
-        CASE
-          WHEN s.captured_at_millis IS NOT NULL
-            AND s.attractions_json IS NOT NULL
-            AND s.attractions_json != '[]'
-            AND (
-              COALESCE(s.open_from, d.open_from) IS NULL
-              OR s.captured_at_millis >= unixepoch(COALESCE(s.open_from, d.open_from)) * 1000
-            )
-            AND (
-              COALESCE(s.closed_from, d.closed_from) IS NULL
-              OR s.captured_at_millis <= unixepoch(COALESCE(s.closed_from, d.closed_from)) * 1000
-            )
-          THEN 1
-        END
-      ) AS deliverableSampleCount
-    FROM attraction_history_days d
-    LEFT JOIN attraction_history_snapshots s
-      ON s.park_key = d.park_key AND s.date = d.date
-    GROUP BY d.park_key, d.date
-    ORDER BY d.park_key, d.date
-  `).all();
+  const [indexResult, latestResult] = await Promise.all([
+    env.APP_DATA_DB.prepare(`
+      SELECT
+        d.park_key AS parkKey,
+        d.date AS date,
+        d.generated_at_millis AS generatedAtMillis,
+        COUNT(
+          CASE
+            WHEN s.captured_at_millis IS NOT NULL
+              AND s.attractions_json IS NOT NULL
+              AND s.attractions_json != '[]'
+              AND (
+                COALESCE(s.open_from, d.open_from) IS NULL
+                OR s.captured_at_millis >= unixepoch(COALESCE(s.open_from, d.open_from)) * 1000
+              )
+              AND (
+                COALESCE(s.closed_from, d.closed_from) IS NULL
+                OR s.captured_at_millis <= unixepoch(COALESCE(s.closed_from, d.closed_from)) * 1000
+              )
+            THEN 1
+          END
+        ) AS deliverableSampleCount
+      FROM attraction_history_days d
+      LEFT JOIN attraction_history_snapshots s
+        ON s.park_key = d.park_key AND s.date = d.date
+      GROUP BY d.park_key, d.date
+      ORDER BY d.park_key, d.date
+    `).all(),
+    env.APP_DATA_DB.prepare(`
+      SELECT
+        s.park_key AS parkKey,
+        s.date,
+        s.generated_at_millis AS generatedAtMillis,
+        s.attractions_json AS attractionsJson
+      FROM attraction_history_snapshots s
+      INNER JOIN (
+        SELECT park_key, MAX(captured_at_millis) AS max_cap
+        FROM attraction_history_snapshots
+        WHERE attractions_json IS NOT NULL AND attractions_json != '[]'
+        GROUP BY park_key
+      ) latest ON latest.park_key = s.park_key AND latest.max_cap = s.captured_at_millis
+      ORDER BY s.park_key
+    `).all(),
+  ]);
 
-  return buildStatisticsIndexFromD1Rows(result.results ?? [], readAttractionDayD1.bind(null, env));
+  const latestByPark = new Map(
+    (latestResult.results ?? []).map((row) => [
+      String(row.parkKey ?? ""),
+      {
+        date: String(row.date ?? ""),
+        generatedAtMillis: Number(row.generatedAtMillis ?? 0),
+        attractions: parseJsonArray(row.attractionsJson),
+      },
+    ]),
+  );
+
+  return buildStatisticsIndexFromD1Rows(indexResult.results ?? [], null, latestByPark);
 }
 
-async function buildStatisticsIndexFromD1Rows(rows, readDay = null) {
+async function buildStatisticsIndexFromD1Rows(rows, readDay = null, latestByPark = null) {
   const coveredDatesByPark = new Map();
   const byPark = new Map();
   for (const row of rows ?? []) {
@@ -1816,7 +1848,23 @@ async function buildStatisticsIndexFromD1Rows(rows, readDay = null) {
   for (const park of byPark.values()) {
     const dates = [...new Set(park.dates)].sort();
     let latestDay = null;
-    if (readDay) {
+    if (latestByPark?.has(park.parkKey)) {
+      const snapshotData = latestByPark.get(park.parkKey);
+      const rawAttractions = snapshotData.attractions ?? [];
+      latestDay = {
+        date: snapshotData.date,
+        generatedAtMillis: snapshotData.generatedAtMillis,
+        snapshots: [{ attractions: rawAttractions }],
+        attractions: rawAttractions.map((a) => ({
+          id: a.id,
+          name: a.name,
+          sampleCount: null,
+          averageWaitMinutes: null,
+          lastValue: a.value ?? null,
+          lastStatusCode: a.statusCode ?? null,
+        })),
+      };
+    } else if (readDay) {
       for (const date of dates.slice().reverse()) {
         const day = await readDay(park.parkKey, date);
         if ((day.snapshots ?? []).length > 0 && (day.attractions ?? []).length > 0) {

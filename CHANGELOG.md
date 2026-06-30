@@ -1,5 +1,18 @@
 # Changelog
 
+## v1.2.0 - 2026-06-30
+
+- Added a live wait-times page on the website showing real-time park status, waiting times, opening hours, crowd levels, and statistics directly in the browser — no app installation required.
+- Added dark mode support for the website, matching the app's visual design.
+- Fixed central wait-time measurement points for parks and attractions not being recorded since the cron migration in v1.1.8: a bug in the scheduled handler caused statistics to never run on the shared `* * * * *` cron. Statistics now run every minute with rotating four-shard coverage.
+- Fixed app startup loading: the park list no longer triggers a slow per-park API scan when the "open only" filter is active at startup.
+- Fixed the UI-language switch from triggering a redundant park recommendation scan.
+- Fixed statistics collection resilience: a failing pre-run D1 snapshot prune no longer aborts the entire shard's statistics run.
+- Improved statistics index response time: the `statistics/index.json` endpoint now uses two parallel D1 queries instead of N sequential per-park queries.
+- Improved park statistics loading speed on the detail screen: up to 8 history-day HTTP requests now load in parallel instead of sequentially.
+- Hardened CI release signing: the pipeline validates the APK certificate fingerprint before uploading to prevent update-incompatible APKs.
+- Bumped Android release metadata to `versionCode 10200` / `versionName 1.2.0`.
+
 ## v1.1.9 - 2026-06-25
 
 - Added clearer loading information across the app so empty lists no longer look like final results while parks, attractions, statistics, or comparison data are still loading.

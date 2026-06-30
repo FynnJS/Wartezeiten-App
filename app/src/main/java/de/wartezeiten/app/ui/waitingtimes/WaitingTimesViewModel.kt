@@ -25,6 +25,9 @@ import de.wartezeiten.app.domain.model.isParkOpenWithoutWaitingTimeData
 import de.wartezeiten.app.domain.model.WeatherInfo
 import de.wartezeiten.app.domain.repository.WartezeitenRepository
 import de.wartezeiten.app.domain.usecase.RefreshParkDetailUseCase
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.currentCoroutineContext
@@ -308,17 +311,15 @@ class WaitingTimesViewModel @Inject constructor(
             } ?: return@launch
             val today = LocalDate.now().toString()
             val statisticDate = today.takeIf { it in indexedPark.dates }
-            val loadedDays = mutableListOf<AttractionHistoryDay>()
             val comparisonDates = indexedPark.dates.asReversed()
                 .filter { it != today }
                 .take(7)
             val datesToLoad = (listOfNotNull(statisticDate) + comparisonDates).distinct()
-            datesToLoad.forEach { historyDate ->
-                when (val dayResult = repository.getAttractionHistoryDay(indexedPark.parkKey, historyDate)) {
-                    is ApiResult.Success -> loadedDays += dayResult.data
-                    is ApiResult.Error -> Unit
-                }
-            }
+            val loadedDays = coroutineScope {
+                datesToLoad.map { historyDate ->
+                    async { repository.getAttractionHistoryDay(indexedPark.parkKey, historyDate) }
+                }.awaitAll()
+            }.filterIsInstance<ApiResult.Success<AttractionHistoryDay>>().map { it.data }
             parkStatistics.value = statisticDate?.let { date ->
                 loadedDays.firstOrNull { it.date == date }?.toParkWaitStatistics()
             }
