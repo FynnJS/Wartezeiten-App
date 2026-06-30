@@ -35,17 +35,10 @@ jobs:
           RELEASE_STORE_PASSWORD: ${{ secrets.RELEASE_STORE_PASSWORD }}
           RELEASE_KEY_ALIAS: ${{ secrets.RELEASE_KEY_ALIAS }}
           RELEASE_KEY_PASSWORD: ${{ secrets.RELEASE_KEY_PASSWORD }}
-          RELEASE_CERT_SHA256: ${{ secrets.RELEASE_CERT_SHA256 }}
         run: |
-          CANONICAL_RELEASE_CERT=$(sed -n 's/^[[:space:]]*releaseCertSha256[[:space:]]*=[[:space:]]*//p' config/release-signing.properties | head -n 1 | tr -d ':[:space:]' | tr '[:upper:]' '[:lower:]')
-          SECRET_RELEASE_CERT=$(printf '%s' "$RELEASE_CERT_SHA256" | tr -d ':[:space:]' | tr '[:upper:]' '[:lower:]')
           if [ "${{ github.event_name }}" = "release" ] || [ -n "${{ inputs.release_tag }}" ]; then
-            if [ -z "$RELEASE_KEYSTORE_BASE64" ] || [ -z "$RELEASE_STORE_PASSWORD" ] || [ -z "$RELEASE_KEY_ALIAS" ] || [ -z "$RELEASE_KEY_PASSWORD" ] || [ -z "$RELEASE_CERT_SHA256" ]; then
+            if [ -z "$RELEASE_KEYSTORE_BASE64" ] || [ -z "$RELEASE_STORE_PASSWORD" ] || [ -z "$RELEASE_KEY_ALIAS" ] || [ -z "$RELEASE_KEY_PASSWORD" ]; then
               echo "::error::Release signing secrets are required for APK releases to remain update-compatible."
-              exit 1
-            fi
-            if [ -z "$CANONICAL_RELEASE_CERT" ] || [ "$SECRET_RELEASE_CERT" != "$CANONICAL_RELEASE_CERT" ]; then
-              echo "::error::RELEASE_CERT_SHA256 must match config/release-signing.properties. Expected $CANONICAL_RELEASE_CERT but got $SECRET_RELEASE_CERT."
               exit 1
             fi
           fi
@@ -70,8 +63,6 @@ jobs:
           ./gradlew :app:assembleRelease
 
       - name: Verify release certificate
-        env:
-          RELEASE_CERT_SHA256: ${{ secrets.RELEASE_CERT_SHA256 }}
         run: |
           $apkFile = Get-ChildItem app/build/outputs/apk/release -Filter *.apk | Select-Object -First 1
           if (-not $apkFile) {

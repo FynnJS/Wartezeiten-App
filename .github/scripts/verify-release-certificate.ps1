@@ -42,16 +42,6 @@ if (-not $canonicalCert) {
     exit 1
 }
 
-$secretCert = Normalize-CertificateFingerprint $env:RELEASE_CERT_SHA256
-if (-not $secretCert) {
-    Write-GitHubError "RELEASE_CERT_SHA256 secret is required."
-    exit 1
-}
-if ($secretCert -ne $canonicalCert) {
-    Write-GitHubError "RELEASE_CERT_SHA256 secret does not match the canonical release certificate in $CanonicalFile. Expected $canonicalCert but secret contains $secretCert."
-    exit 1
-}
-
 $apksigner = $env:APKSIGNER
 if (-not $apksigner) {
     if (-not $env:ANDROID_HOME) {

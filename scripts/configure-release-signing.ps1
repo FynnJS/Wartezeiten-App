@@ -100,7 +100,6 @@ $secrets = [ordered]@{
     RELEASE_STORE_PASSWORD = $storePassword
     RELEASE_KEY_ALIAS = $KeyAlias
     RELEASE_KEY_PASSWORD = $keyPassword
-    RELEASE_CERT_SHA256 = $certificateSha256
 }
 foreach ($entry in $secrets.GetEnumerator()) {
     $ghExecutable = if ($gh.Source) { $gh.Source } else { $gh.FullName }

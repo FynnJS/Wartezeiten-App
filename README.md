@@ -100,11 +100,10 @@ Für veröffentlichte GitHub-Releases muss die Pipeline mit einem stabilen Relea
 - `RELEASE_STORE_PASSWORD`
 - `RELEASE_KEY_ALIAS`
 - `RELEASE_KEY_PASSWORD`
-- `RELEASE_CERT_SHA256`
 
 Fehlen diese Secrets bei einem Release-Event, bricht die Pipeline ab. Das verhindert APKs, die wegen abweichender Signatur nicht als Update über eine bestehende Installation installiert werden können.
 
-Zusätzlich liegt der öffentliche, kanonische Release-Zertifikatsfingerprint in `config/release-signing.properties`. Die Pipeline prüft `RELEASE_CERT_SHA256` und die fertige APK gegen diesen Repo-Wert; ein gemeinsam ausgetauschter Keystore plus Secret darf nicht unbemerkt eine update-inkompatible APK veröffentlichen.
+Zusätzlich liegt der öffentliche, kanonische Release-Zertifikatsfingerprint in `config/release-signing.properties`. Die Pipeline prüft die fertige APK gegen diesen Repo-Wert; ein ausgetauschter Keystore kann dadurch nicht unbemerkt eine update-inkompatible APK veröffentlichen. Ein eventuell noch vorhandenes altes `RELEASE_CERT_SHA256`-Secret wird nicht mehr benötigt.
 
 Der dauerhafte Schlüssel wird einmalig eingerichtet und anschließend lokal sowie in GitHub hinterlegt:
 
