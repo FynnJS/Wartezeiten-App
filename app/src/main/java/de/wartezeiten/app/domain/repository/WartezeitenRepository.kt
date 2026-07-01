@@ -20,6 +20,8 @@ interface WartezeitenRepository {
     fun observeParks(query: String?): Flow<List<Park>>
     fun observeCurrentAttractions(): Flow<List<CurrentAttractionSearchEntry>>
     fun observeLatestOpenParkKeys(capturedAfterMillis: Long = Long.MIN_VALUE): Flow<Set<String>>
+    fun observeFallbackWaitTimeSourceParkKeys(): Flow<Set<String>>
+    fun observeUsingFallbackParkList(): Flow<Boolean>
     fun observeBestParkRecommendation(): Flow<ParkRecommendation?>
     fun observeParkRecommendations(limit: Int = 5): Flow<List<ParkRecommendation>>
     suspend fun refreshParks(language: String): ApiResult<Unit>

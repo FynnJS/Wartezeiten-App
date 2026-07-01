@@ -315,6 +315,12 @@ fun ParkListScreen(
                             }
                         }
 
+                        if (state.usingFallbackParkList) {
+                            item {
+                                FallbackParkListBanner(language = state.language)
+                            }
+                        }
+
                         item(key = "park_search_field") {
                             OutlinedTextField(
                                 value = state.query,
@@ -752,6 +758,48 @@ private fun OfflineDataBanner(
                     ),
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onErrorContainer.copy(alpha = 0.86f),
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun FallbackParkListBanner(language: String) {
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(12.dp),
+        color = MaterialTheme.colorScheme.tertiaryContainer,
+        contentColor = MaterialTheme.colorScheme.onTertiaryContainer,
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            Icon(Icons.Default.Warning, contentDescription = null, modifier = Modifier.size(20.dp))
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = localized(
+                        language,
+                        de = "Eingeschränkte Parkliste (Ausweichquelle)",
+                        en = "Limited park list (fallback source)",
+                        fr = "Liste de parcs limitée (source de secours)",
+                        nl = "Beperkte parklijst (alternatieve bron)",
+                    ),
+                    style = MaterialTheme.typography.bodySmall,
+                    fontWeight = FontWeight.SemiBold,
+                )
+                Text(
+                    text = localized(
+                        language,
+                        de = "wartezeiten.app ist aktuell nicht erreichbar. Es werden bekannte große Parks angezeigt (Quelle: queue-times.com); Wartezeiten und Öffnungszeiten der jeweiligen Parks funktionieren normal.",
+                        en = "wartezeiten.app is currently unreachable. Well-known large parks are shown instead (source: queue-times.com); wait times and opening hours for these parks work normally.",
+                        fr = "wartezeiten.app est actuellement injoignable. De grands parcs connus sont affichés à la place (source : queue-times.com) ; les temps d'attente et horaires de ces parcs fonctionnent normalement.",
+                        nl = "wartezeiten.app is momenteel niet bereikbaar. In plaats daarvan worden bekende grote parken getoond (bron: queue-times.com); wachttijden en openingstijden van deze parken werken normaal.",
+                    ),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onTertiaryContainer.copy(alpha = 0.86f),
                 )
             }
         }

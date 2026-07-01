@@ -10,6 +10,7 @@ import de.wartezeiten.app.data.local.dao.ParkDetailDao
 import de.wartezeiten.app.data.local.dao.ParkSnapshotDao
 import de.wartezeiten.app.data.local.PreferencesDataSource
 import de.wartezeiten.app.data.local.entity.HolidayEntity
+import de.wartezeiten.app.data.local.entity.ParkEntity
 import de.wartezeiten.app.data.local.entity.ParkSnapshotEntity
 import de.wartezeiten.app.data.local.entity.WaitingTimeEntity
 import de.wartezeiten.app.data.local.entity.WeatherEntity
@@ -19,9 +20,12 @@ import de.wartezeiten.app.data.mapper.toCurrentAttractionSearchEntry
 import de.wartezeiten.app.data.mapper.toEntity
 import de.wartezeiten.app.data.remote.HolidayApiService
 import de.wartezeiten.app.data.remote.PublicAppDataApiService
+import de.wartezeiten.app.data.remote.QueueTimesApiService
 import de.wartezeiten.app.data.remote.WartezeitenApiService
 import de.wartezeiten.app.data.remote.WeatherApiService
+import de.wartezeiten.app.data.remote.dto.WaitingTimeDto
 import de.wartezeiten.app.data.remote.dto.toDomain
+import de.wartezeiten.app.data.remote.fallback.QueueTimesParkMapping
 import de.wartezeiten.app.domain.model.Park
 import de.wartezeiten.app.domain.model.ParkDetail
 import de.wartezeiten.app.domain.model.ParkRecommendation
@@ -32,10 +36,13 @@ import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.async
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.supervisorScope
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
@@ -59,9 +66,25 @@ class DefaultWartezeitenRepository @Inject constructor(
     private val weatherApi: WeatherApiService,
     private val holidayApi: HolidayApiService,
     private val publicAppDataApi: PublicAppDataApiService,
+    private val queueTimesApi: QueueTimesApiService,
     private val preferences: PreferencesDataSource,
     @param:IoDispatcher private val ioDispatcher: CoroutineDispatcher,
 ) : WartezeitenRepository {
+
+    // Rein transient: welche Parks aktuell Wartezeiten ueber die queue-times.com-Ausweichquelle
+    // beziehen, weil /v1/waitingtimes fuer sie fehlschlaegt. Bewusst nicht in Room persistiert, da es
+    // sich um einen Sitzungszustand fuer die UI handelt, keine dauerhaft relevante Information.
+    private val fallbackWaitTimeSourceParkKeys = MutableStateFlow<Set<String>>(emptySet())
+
+    override fun observeFallbackWaitTimeSourceParkKeys(): Flow<Set<String>> =
+        fallbackWaitTimeSourceParkKeys.asStateFlow()
+
+    // Rein transient: ist die aktuell in Room gecachte Parkliste die kuratierte queue-times.com-
+    // Ausweichliste (weil /v1/parks bei leerem Cache fehlschlug)? Solange das zutrifft, unterdrueckt
+    // refreshParks() die generische "Serverfehler"-Meldung, da bereits nutzbare Daten angezeigt werden.
+    private val usingFallbackParkList = MutableStateFlow(false)
+
+    override fun observeUsingFallbackParkList(): Flow<Boolean> = usingFallbackParkList.asStateFlow()
 
     override fun observeParks(query: String?): Flow<List<Park>> {
         return parkDao.observeParks(query.takeUnless { it.isNullOrBlank() })
@@ -157,14 +180,44 @@ class DefaultWartezeitenRepository @Inject constructor(
                 val now = System.currentTimeMillis()
                 val currentParks = parkDao.observeParks(null).first()
                 val favoritesMap = currentParks.associateBy({ it.id }, { it.isFavorite })
-                
+
                 val entities = result.data.map { dto ->
                     dto.toEntity(now).copy(isFavorite = favoritesMap[dto.id] ?: false)
                 }
                 parkDao.upsertParks(entities)
+                usingFallbackParkList.value = false
                 ApiResult.Success(Unit)
             }
-            is ApiResult.Error -> result
+            is ApiResult.Error -> {
+                // Neuinstallation waehrend eines Ausfalls von /v1/parks: ohne diesen Seed waere die
+                // Parkliste komplett leer. Solange die aktuell gecachte Liste noch die zuletzt
+                // gesaete Ausweichliste ist (die echte API liefert weiterhin einen Fehler), gilt der
+                // Ausfall bereits als abgefedert - es wird kein generischer "Serverfehler" mehr
+                // zurueckgegeben, nur noch das Ausweichquelle-Flag gesetzt. Ist die gecachte Liste
+                // hingegen eine echte, zuvor erfolgreich geladene Parkliste, bleibt das bisherige
+                // Verhalten (Fehler zurueckgeben, bestehender Offline-Banner mit Cache-Alter greift).
+                val currentParks = parkDao.observeParks(null).first()
+                if (currentParks.isEmpty()) {
+                    val now = System.currentTimeMillis()
+                    val fallbackEntities = QueueTimesParkMapping.ENTRIES.map { info ->
+                        ParkEntity(
+                            id = info.parkKey,
+                            uuid = info.parkKey,
+                            name = info.name,
+                            country = info.country,
+                            isFavorite = false,
+                            updatedAtMillis = now,
+                        )
+                    }
+                    parkDao.upsertParks(fallbackEntities)
+                    usingFallbackParkList.value = true
+                    ApiResult.Success(Unit)
+                } else if (usingFallbackParkList.value) {
+                    ApiResult.Success(Unit)
+                } else {
+                    result
+                }
+            }
         }
     }
 
@@ -396,6 +449,21 @@ class DefaultWartezeitenRepository @Inject constructor(
             val weatherResult = weather.await()
             val holidayResult = holidays.await()
 
+            // Ausweichquelle fuer Wartezeiten (queue-times.com), wenn /v1/waitingtimes mit einem
+            // Serverfehler fehlschlaegt und fuer diesen Park eine kuratierte Zuordnung existiert.
+            // Oeffnungszeiten/Crowd-Level bleiben unberuehrt, da queue-times.com dafuer keine Daten hat.
+            val fallbackParkInfo = QueueTimesParkMapping.findByParkKey(parkKey)
+            val fallbackWaitingResult: ApiResult<List<WaitingTimeDto>>? =
+                if (waitingResult is ApiResult.Error && waitingResult.type == NetworkError.Server && fallbackParkInfo != null) {
+                    fetchQueueTimesWaitingTimes(fallbackParkInfo.queueTimesId)
+                } else {
+                    null
+                }
+            val effectiveWaitingResult = fallbackWaitingResult ?: waitingResult
+            fallbackWaitTimeSourceParkKeys.update { keys ->
+                if (fallbackWaitingResult is ApiResult.Success) keys + parkKey else keys - parkKey
+            }
+
             (openingResult as? ApiResult.Success)?.let {
                 parkDetailDao.upsertOpeningTimes(it.data.toEntity(parkKey, now))
             }
@@ -413,7 +481,7 @@ class DefaultWartezeitenRepository @Inject constructor(
             } else {
                 true
             }
-            (waitingResult as? ApiResult.Success)?.let {
+            (effectiveWaitingResult as? ApiResult.Success)?.let {
                 parkDetailDao.replaceWaitingTimes(
                     parkKey = parkKey,
                     waitingTimes = it.data.map { dto -> dto.toEntity(parkKey, now) },
@@ -423,12 +491,12 @@ class DefaultWartezeitenRepository @Inject constructor(
                 parkDetailDao.upsertCrowdLevel(it.data.toEntity(parkKey, now))
             }
 
-            if (openingResult is ApiResult.Success || waitingResult is ApiResult.Success || crowdResult is ApiResult.Success) {
-                val openAttractions = (waitingResult as? ApiResult.Success)
+            if (openingResult is ApiResult.Success || effectiveWaitingResult is ApiResult.Success || crowdResult is ApiResult.Success) {
+                val openAttractions = (effectiveWaitingResult as? ApiResult.Success)
                     ?.data
                     ?.count { currentlyOpen && it.status.equals("opened", ignoreCase = true) }
                     ?: 0
-                val totalAttractions = (waitingResult as? ApiResult.Success)?.data?.size ?: 0
+                val totalAttractions = (effectiveWaitingResult as? ApiResult.Success)?.data?.size ?: 0
                 val canDisplayCrowdLevel = currentlyOpen && openAttractions > 0
                 val apiCrowdLevel = (crowdResult as? ApiResult.Success)
                     ?.data
@@ -508,18 +576,37 @@ class DefaultWartezeitenRepository @Inject constructor(
             }
 
             val hasUsableCoreData = openingResult is ApiResult.Success ||
-                    waitingResult is ApiResult.Success ||
+                    effectiveWaitingResult is ApiResult.Success ||
                     crowdResult is ApiResult.Success
             if (hasUsableCoreData) {
                 ApiResult.Success(Unit)
             } else {
-                listOf(openingResult, waitingResult, crowdResult)
+                listOf(openingResult, effectiveWaitingResult, crowdResult)
                     .asSequence()
                     .filterIsInstance<ApiResult.Error>()
                     .sortedBy { errorPriority(it.type) }
                     .firstOrNull()
                     ?: ApiResult.Success(Unit)
             }
+        }
+    }
+
+    private suspend fun fetchQueueTimesWaitingTimes(queueTimesId: Int): ApiResult<List<WaitingTimeDto>> {
+        return when (val result = safeApiCall { queueTimesApi.getQueueTimes(queueTimesId) }) {
+            is ApiResult.Success -> {
+                val rides = result.data.rides + result.data.lands.flatMap { it.rides }
+                ApiResult.Success(
+                    rides.map { ride ->
+                        WaitingTimeDto(
+                            id = ride.id.toString(),
+                            name = ride.name,
+                            waitingTime = ride.wait_time,
+                            status = if (ride.is_open) "opened" else "closed",
+                        )
+                    }
+                )
+            }
+            is ApiResult.Error -> result
         }
     }
 

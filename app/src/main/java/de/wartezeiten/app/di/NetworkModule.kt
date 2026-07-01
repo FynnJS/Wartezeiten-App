@@ -13,6 +13,7 @@ import de.wartezeiten.app.core.network.CacheHeadersInterceptor
 import de.wartezeiten.app.data.remote.HolidayApiService
 import de.wartezeiten.app.data.remote.PushApiService
 import de.wartezeiten.app.data.remote.PublicAppDataApiService
+import de.wartezeiten.app.data.remote.QueueTimesApiService
 import de.wartezeiten.app.data.remote.UpdateApiService
 import de.wartezeiten.app.data.remote.WartezeitenApiService
 import de.wartezeiten.app.data.remote.WeatherApiService
@@ -130,6 +131,20 @@ object NetworkModule {
             .addConverterFactory(GsonConverterFactory.create(gson))
             .build()
             .create(PublicAppDataApiService::class.java)
+    }
+
+    @Provides
+    @Singleton
+    fun provideQueueTimesApiService(
+        client: OkHttpClient,
+        gson: Gson
+    ): QueueTimesApiService {
+        return Retrofit.Builder()
+            .baseUrl("https://queue-times.com/")
+            .client(client)
+            .addConverterFactory(GsonConverterFactory.create(gson))
+            .build()
+            .create(QueueTimesApiService::class.java)
     }
 
     @Provides

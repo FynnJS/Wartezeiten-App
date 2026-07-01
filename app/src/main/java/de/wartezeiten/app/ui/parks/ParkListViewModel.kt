@@ -62,6 +62,7 @@ data class ParkListUiState(
     val attractionSearchResults: List<AttractionSearchResult> = emptyList(),
     val statisticsParkKeys: Map<String, String> = emptyMap(),
     val isStatisticsIndexLoading: Boolean = false,
+    val usingFallbackParkList: Boolean = false,
 )
 
 data class FavoriteDashboardItem(
@@ -161,7 +162,8 @@ class ParkListViewModel @Inject constructor(
         refreshTrigger,
         statisticsIndex,
         isStatisticsIndexLoading,
-        parkAliases
+        parkAliases,
+        repository.observeUsingFallbackParkList(),
     ) { args: Array<Any?> ->
         val parks = args[0] as List<Park>
         val currentAttractionEntries = args[1] as List<CurrentAttractionSearchEntry>
@@ -184,6 +186,7 @@ class ParkListViewModel @Inject constructor(
         val statsIndex = args[18] as StatisticsIndex
         val statsLoading = args[19] as Boolean
         val aliases = args[20] as Map<String, List<String>>
+        val usingFallbackParkList = args[21] as Boolean
 
         val favorites = parks.filter { it.isFavorite }
         val recent = currentRecentParkKeys.mapNotNull { key ->
@@ -250,6 +253,7 @@ class ParkListViewModel @Inject constructor(
             attractionSearchResults = attractionResults,
             statisticsParkKeys = statisticsParkKeys,
             isStatisticsIndexLoading = statsLoading,
+            usingFallbackParkList = usingFallbackParkList,
         )
     }.stateIn(
         scope = viewModelScope,
@@ -407,7 +411,9 @@ class ParkListViewModel @Inject constructor(
                 }
                 is ApiResult.Error -> {
                     val hasCachedParks = uiState.value.totalParkCount > 0
-                    if (showFeedback || !hasCachedParks || result.type != NetworkError.RateLimited) {
+                    val canKeepShowingCachedParksWithoutError = hasCachedParks &&
+                            (result.type == NetworkError.RateLimited || result.type == NetworkError.Server)
+                    if (!canKeepShowingCachedParksWithoutError && (showFeedback || !hasCachedParks)) {
                         errorMessage.value = result.type.toUserMessage(currentLanguage.value)
                     }
                 }

@@ -417,7 +417,6 @@ private fun WaitingTimesContent(
                     AttractionDetailSection(
                         park = state.park,
                         item = highlighted,
-                        waitAdvice = state.waitAdviceByAttractionId[highlightedId],
                         forecast = state.forecastByAttractionId[highlightedId],
                         history = state.historyByAttractionId[highlightedId].orEmpty(),
                         note = state.highlightedAttractionNote,
@@ -442,6 +441,12 @@ private fun WaitingTimesContent(
         item {
             if (state.isWaitingTimeDataLikelyMissing) {
                 WaitingTimeDataGapBanner(language = state.language)
+            }
+        }
+
+        item {
+            if (state.usedFallbackWaitTimeSource) {
+                FallbackWaitTimeSourceBanner(language = state.language)
             }
         }
 
@@ -513,7 +518,6 @@ private fun WaitingTimesContent(
             ) { index ->
                 WaitingTimeRow(
                     item = state.waitingTimes[index],
-                    waitAdvice = state.waitAdviceByAttractionId[state.waitingTimes[index].attractionId],
                     isPlanned = state.waitingTimes[index].attractionId in state.plannedAttractionIds,
                     onTogglePlanned = onTogglePlannedAttraction,
                     onAddWatchlist = onAddWatchlistForAttraction,
@@ -580,7 +584,6 @@ private fun HighlightedAttractionCard(
 private fun AttractionDetailSection(
     park: Park?,
     item: WaitingTime,
-    waitAdvice: AttractionWaitAdvice?,
     forecast: AttractionWaitForecast?,
     history: List<AttractionWaitForecastPoint>,
     note: String,
@@ -620,7 +623,6 @@ private fun AttractionDetailSection(
                     fontWeight = FontWeight.Black,
                     color = item.status.indicatorColor(),
                 )
-                waitAdvice?.let { WaitAdviceLabel(advice = it, language = language) }
             }
 
             WaitForecastChart(
@@ -1221,7 +1223,6 @@ private fun ParkHeaderSection(
 @Composable
 private fun WaitingTimeRow(
     item: WaitingTime,
-    waitAdvice: AttractionWaitAdvice?,
     isPlanned: Boolean,
     onTogglePlanned: (String) -> Unit,
     onAddWatchlist: (String) -> Unit,
@@ -1277,12 +1278,6 @@ private fun WaitingTimeRow(
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
-                waitAdvice?.let { advice ->
-                    WaitAdviceLabel(
-                        advice = advice,
-                        language = language,
-                    )
-                }
             }
 
             IconButton(
@@ -1363,82 +1358,6 @@ private fun WaitingTimeRow(
             }
         }
     }
-}
-
-@Composable
-private fun WaitAdviceLabel(
-    advice: AttractionWaitAdvice,
-    language: String,
-) {
-    val colors = advice.colors()
-    Surface(
-        modifier = Modifier.padding(top = 5.dp),
-        shape = RoundedCornerShape(6.dp),
-        color = colors.container,
-        contentColor = colors.content,
-        border = androidx.compose.foundation.BorderStroke(1.dp, colors.border),
-    ) {
-        Text(
-            text = advice.label(language),
-            modifier = Modifier.padding(horizontal = 7.dp, vertical = 4.dp),
-            style = MaterialTheme.typography.labelSmall,
-            fontWeight = FontWeight.Bold,
-        )
-    }
-}
-
-private fun AttractionWaitAdvice.label(language: String): String {
-    return when (type) {
-        AttractionWaitAdviceType.GoNow -> localized(
-            language,
-            de = "JETZT: Günstig · üblich $typicalWaitMinutes Min.",
-            en = "NOW: Good time · typically $typicalWaitMinutes min",
-            fr = "MAINTENANT : Bon moment · habituellement $typicalWaitMinutes min",
-            nl = "NU: Gunstig moment · gewoonlijk $typicalWaitMinutes min.",
-        )
-        AttractionWaitAdviceType.WaitUntil -> {
-            val time = suggestedLocalTime?.format(DateTimeFormatter.ofPattern("HH:mm")) ?: return ""
-            localized(
-                language,
-                de = "SPÄTER: Gegen $time etwa ${expectedWaitMinutes ?: typicalWaitMinutes} Min.",
-                en = "LATER: Around $time about ${expectedWaitMinutes ?: typicalWaitMinutes} min",
-                fr = "PLUS TARD : Vers $time environ ${expectedWaitMinutes ?: typicalWaitMinutes} min",
-                nl = "LATER: Rond $time ongeveer ${expectedWaitMinutes ?: typicalWaitMinutes} min.",
-            )
-        }
-        AttractionWaitAdviceType.Typical -> localized(
-            language,
-            de = "ÜBLICH: Meist etwa $typicalWaitMinutes Min.",
-            en = "TYPICAL: Usually about $typicalWaitMinutes min",
-            fr = "HABITUEL : Généralement environ $typicalWaitMinutes min",
-            nl = "GEBRUIKELIJK: Meestal ongeveer $typicalWaitMinutes min.",
-        )
-    }
-}
-
-private data class WaitAdviceColors(
-    val container: Color,
-    val content: Color,
-    val border: Color,
-)
-
-@Composable
-private fun AttractionWaitAdvice.colors(): WaitAdviceColors = when (type) {
-    AttractionWaitAdviceType.GoNow -> WaitAdviceColors(
-        container = Color(0xFFE2F4E3),
-        content = Color(0xFF163A18),
-        border = Color(0xFF4CAF50),
-    )
-    AttractionWaitAdviceType.WaitUntil -> WaitAdviceColors(
-        container = Color(0xFFFFEFC2),
-        content = Color(0xFF493100),
-        border = Color(0xFFFFB300),
-    )
-    AttractionWaitAdviceType.Typical -> WaitAdviceColors(
-        container = MaterialTheme.colorScheme.secondaryContainer,
-        content = MaterialTheme.colorScheme.onSecondaryContainer,
-        border = MaterialTheme.colorScheme.secondary,
-    )
 }
 
 private fun plannerLine(item: WaitingTime, language: String): String {
@@ -1531,6 +1450,48 @@ private fun WaitingTimeDataGapBanner(language: String) {
                         en = "The park is reported as open, but no wait times have come in since opening. This is likely a temporary issue with the data source, not the app.",
                         fr = "Le parc est annoncé comme ouvert, mais aucun temps d'attente n'a été reçu depuis l'ouverture. Il s'agit probablement d'un problème temporaire de la source de données, pas de l'application.",
                         nl = "Het park wordt als open gemeld, maar er zijn sinds de opening geen wachttijden binnengekomen. Dit is waarschijnlijk een tijdelijk probleem bij de databron, niet bij de app.",
+                    ),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onTertiaryContainer.copy(alpha = 0.86f),
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun FallbackWaitTimeSourceBanner(language: String) {
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(12.dp),
+        color = MaterialTheme.colorScheme.tertiaryContainer,
+        contentColor = MaterialTheme.colorScheme.onTertiaryContainer,
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            Icon(Icons.Default.Warning, contentDescription = null, modifier = Modifier.size(20.dp))
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = localized(
+                        language,
+                        de = "Ausweichquelle aktiv",
+                        en = "Fallback source active",
+                        fr = "Source de secours active",
+                        nl = "Alternatieve bron actief",
+                    ),
+                    style = MaterialTheme.typography.bodySmall,
+                    fontWeight = FontWeight.SemiBold,
+                )
+                Text(
+                    text = localized(
+                        language,
+                        de = "wartezeiten.app ist aktuell nicht erreichbar. Die Wartezeiten stammen momentan von queue-times.com; Öffnungszeiten und Auslastung sind währenddessen nicht verfügbar.",
+                        en = "wartezeiten.app is currently unreachable. Wait times are temporarily sourced from queue-times.com; opening hours and crowd level are unavailable until it recovers.",
+                        fr = "wartezeiten.app est actuellement injoignable. Les temps d'attente proviennent temporairement de queue-times.com ; les horaires d'ouverture et l'affluence ne sont pas disponibles en attendant.",
+                        nl = "wartezeiten.app is momenteel niet bereikbaar. Wachttijden komen tijdelijk van queue-times.com; openingstijden en drukte zijn ondertussen niet beschikbaar.",
                     ),
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onTertiaryContainer.copy(alpha = 0.86f),

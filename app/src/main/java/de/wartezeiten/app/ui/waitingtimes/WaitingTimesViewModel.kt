@@ -86,13 +86,13 @@ data class WaitingTimesUiState(
     val weather: WeatherInfo? = null,
     val holidays: List<HolidayInfo> = emptyList(),
     val parkStatistics: ParkWaitStatistics? = null,
-    val waitAdviceByAttractionId: Map<String, AttractionWaitAdvice> = emptyMap(),
     val forecastByAttractionId: Map<String, AttractionWaitForecast> = emptyMap(),
     val historyByAttractionId: Map<String, List<AttractionWaitForecastPoint>> = emptyMap(),
     val language: String = PreferencesDataSource.DEFAULT_LANGUAGE,
     val highlightedAttractionId: String? = null,
     val highlightedAttractionNote: String = "",
     val isWaitingTimeDataLikelyMissing: Boolean = false,
+    val usedFallbackWaitTimeSource: Boolean = false,
 )
 
 private data class DetailAuxState(
@@ -141,8 +141,12 @@ class WaitingTimesViewModel @Inject constructor(
         FilterState(s, f, query, maxWait, plan)
     }
 
-    private val timeAndLanguageState = combine(currentLocalTime, currentLanguage) { currentTime, language ->
-        currentTime to language
+    private val timeAndLanguageState = combine(
+        currentLocalTime,
+        currentLanguage,
+        repository.observeFallbackWaitTimeSourceParkKeys(),
+    ) { currentTime, language, fallbackKeys ->
+        Triple(currentTime, language, parkKey in fallbackKeys)
     }
 
     private val loadState = combine(isLoading, errorMessage, lastRefreshed, refreshTrigger, timeAndLanguageState) { l, e, r, t, timeAndLanguage ->
@@ -153,6 +157,7 @@ class WaitingTimesViewModel @Inject constructor(
             val refreshTrigger = t
             val currentTime = timeAndLanguage.first
             val language = timeAndLanguage.second
+            val usedFallbackWaitTimeSource = timeAndLanguage.third
         }
     }
 
@@ -190,12 +195,13 @@ class WaitingTimesViewModel @Inject constructor(
 
         if (detail.park == null) {
             val dataUpdatedAtMillis = detail.latestDataUpdatedAtMillis()
+            val effectiveErrorMessage = status.errorMessage
             WaitingTimesUiState(
                 isLoading = status.isLoading,
-                errorMessage = status.errorMessage,
+                errorMessage = effectiveErrorMessage,
                 lastRefreshed = status.lastRefreshed,
                 dataUpdatedAtMillis = dataUpdatedAtMillis,
-                isShowingOfflineData = status.errorMessage != null && dataUpdatedAtMillis > 0L,
+                isShowingOfflineData = effectiveErrorMessage != null && dataUpdatedAtMillis > 0L,
                 offlineDataAgeMinutes = dataUpdatedAtMillis.toAgeMinutes(),
                 refreshTrigger = status.refreshTrigger,
                 currentLocalTime = status.currentTime,
@@ -225,6 +231,8 @@ class WaitingTimesViewModel @Inject constructor(
             )
             val today = LocalDate.now().toString()
             val openWaitingTimes = detail.waitingTimes.filter { it.status == AttractionStatus.Opened }
+            val suppressServerErrorForFallback = status.usedFallbackWaitTimeSource && detail.waitingTimes.isNotEmpty()
+            val effectiveErrorMessage = status.errorMessage.takeUnless { suppressServerErrorForFallback }
             val forecasts = buildAttractionWaitForecasts(
                 waitingTimes = openWaitingTimes,
                 historyDays = aux.historyDays.filter { it.date != today },
@@ -247,10 +255,10 @@ class WaitingTimesViewModel @Inject constructor(
                 maxWaitMinutes = maxWait,
                 plannedAttractionIds = plannedIds,
                 isLoading = status.isLoading,
-                errorMessage = status.errorMessage,
+                errorMessage = effectiveErrorMessage,
                 lastRefreshed = status.lastRefreshed,
                 dataUpdatedAtMillis = dataUpdatedAtMillis,
-                isShowingOfflineData = status.errorMessage != null && dataUpdatedAtMillis > 0L,
+                isShowingOfflineData = effectiveErrorMessage != null && dataUpdatedAtMillis > 0L,
                 offlineDataAgeMinutes = dataUpdatedAtMillis.toAgeMinutes(),
                 refreshTrigger = status.refreshTrigger,
                 currentLocalTime = status.currentTime,
@@ -261,12 +269,6 @@ class WaitingTimesViewModel @Inject constructor(
                     confidenceScore = if (detail.crowdLevel != null) 0.9f else 0.7f
                 ),
                 parkStatistics = aux.parkStatistics,
-                waitAdviceByAttractionId = buildAttractionWaitAdvice(
-                    waitingTimes = openWaitingTimes,
-                    historyDays = aux.historyDays.filter { it.date != today },
-                    currentTimeMillis = status.currentTime,
-                    localTimeOffsetSeconds = detail.localTimeOffsetSeconds(),
-                ),
                 forecastByAttractionId = forecasts,
                 historyByAttractionId = detail.waitingTimes.associate { waitingTime ->
                     waitingTime.attractionId to buildAttractionHistorySeries(waitingTime.attractionId, aux.historyDays, today)
@@ -275,6 +277,7 @@ class WaitingTimesViewModel @Inject constructor(
                 highlightedAttractionId = highlightedAttractionId,
                 highlightedAttractionNote = aux.note?.note.orEmpty(),
                 isWaitingTimeDataLikelyMissing = isWaitingTimeDataLikelyMissing,
+                usedFallbackWaitTimeSource = status.usedFallbackWaitTimeSource,
             )
         }
     }.stateIn(
@@ -426,7 +429,9 @@ class WaitingTimesViewModel @Inject constructor(
                     if (!silent) refreshParkStatistics()
                 }
                 is ApiResult.Error -> {
-                    if (!silent || uiState.value.allWaitingTimes.isEmpty()) {
+                    val currentState = uiState.value
+                    val hasFallbackWaitTimes = currentState.usedFallbackWaitTimeSource && currentState.allWaitingTimes.isNotEmpty()
+                    if (!hasFallbackWaitTimes && (!silent || currentState.allWaitingTimes.isEmpty())) {
                         errorMessage.value = result.type.toUserMessage(currentLanguage.value)
                     }
                 }
