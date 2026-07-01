@@ -2,20 +2,24 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
+  buildFallbackParksResponse,
   buildLiveParkResponse,
   buildScheduledAppDataOptions,
   buildManualRefreshOptions,
   buildStatisticsIndexFromD1Rows,
+  collectParkSnapshot,
   cronParkShard,
   deriveAttractionSnapshotTiming,
   ensureAttractionHistoryD1,
   evaluatePushAlert,
+  fetchQueueTimesWaitingItems,
   mergeStatisticsIndexes,
   normalizeApiLanguage,
   pruneAttractionHistoryD1,
   selectCronParkShard,
   toAttractionSnapshotRow,
 } from "./index.js";
+import { FALLBACK_PARKS } from "./fallbackParks.js";
 
 function openParkSnapshot() {
   return {
@@ -475,4 +479,163 @@ test("live park response keeps crowd level suppressed when park is not open", ()
 
   assert.equal(response.crowdLevel, null);
   assert.equal(response.openedToday, false);
+});
+
+test("fallback parks response is marked degraded and reuses the curated queue-times mapping", () => {
+  const response = buildFallbackParksResponse("de");
+
+  assert.equal(response.degraded, true);
+  assert.equal(response.source, "queue-times.com");
+  assert.equal(response.parks.length, FALLBACK_PARKS.length);
+  assert.ok(response.parks.every((park) => park.parkKey && park.name && park.land));
+  const names = response.parks.map((park) => park.name);
+  assert.deepEqual(names, [...names].sort((a, b) => a.localeCompare(b)));
+});
+
+test("queue-times waiting items are mapped to the wartezeiten-like shape used by collectParkSnapshot", async (t) => {
+  t.mock.method(globalThis, "fetch", async (url) => {
+    assert.equal(url, "https://queue-times.com/parks/56/queue_times.json");
+    return new Response(
+      JSON.stringify({
+        lands: [
+          {
+            name: "Berlin",
+            rides: [
+              { id: 1, name: "Taron", is_open: true, wait_time: 20, last_updated: "2026-06-22T10:00:00.000Z" },
+              { id: 2, name: "F.L.Y.", is_open: false, wait_time: 0, last_updated: "2026-06-22T10:00:00.000Z" },
+            ],
+          },
+        ],
+      }),
+      { status: 200 },
+    );
+  });
+
+  const items = await fetchQueueTimesWaitingItems(56);
+
+  assert.deepEqual(
+    items.map((item) => [item.id, item.name, item.status, item.waitingtime]),
+    [
+      ["qt-1", "Taron", "opened", 20],
+      ["qt-2", "F.L.Y.", "closed", 0],
+    ],
+  );
+});
+
+test("queue-times waiting items fetch failure throws so collectParkSnapshot can fall back to the original error", async (t) => {
+  t.mock.method(globalThis, "fetch", async () => new Response("", { status: 500 }));
+
+  await assert.rejects(() => fetchQueueTimesWaitingItems(56));
+});
+
+function mockWartezeitenAndQueueTimesFetch(
+  t,
+  {
+    openingtimesStatus = 200,
+    waitingtimesStatus = 200,
+    waitingtimesBody = [],
+    crowdlevelStatus = 200,
+  } = {},
+) {
+  t.mock.method(globalThis, "fetch", async (url) => {
+    const href = String(url);
+    if (href.includes("/v1/openingtimes")) {
+      return new Response(
+        JSON.stringify([{ opened_today: true, open_from: "2026-06-22T09:00:00+02:00", closed_from: "2026-06-22T18:00:00+02:00" }]),
+        { status: openingtimesStatus },
+      );
+    }
+    if (href.includes("/v1/waitingtimes")) {
+      return new Response(JSON.stringify(waitingtimesBody), { status: waitingtimesStatus });
+    }
+    if (href.includes("/v1/crowdlevel")) {
+      return new Response(JSON.stringify({ crowd_level: "12,50" }), { status: crowdlevelStatus });
+    }
+    if (href.includes("queue-times.com/parks/56/queue_times.json")) {
+      return new Response(
+        JSON.stringify({
+          lands: [
+            {
+              rides: [
+                { id: 1, name: "Taron", is_open: true, wait_time: 15, last_updated: "2026-06-22T10:00:00.000Z" },
+              ],
+            },
+          ],
+        }),
+        { status: 200 },
+      );
+    }
+    throw new Error(`unexpected fetch url in test: ${href}`);
+  });
+}
+
+test("collectParkSnapshot falls back to queue-times.com waiting times when /v1/waitingtimes fails and a mapping exists", async (t) => {
+  mockWartezeitenAndQueueTimesFetch(t, { waitingtimesStatus: 500 });
+
+  const snapshot = await collectParkSnapshot("phantasialand", Date.parse("2026-06-22T10:00:00+02:00"));
+
+  assert.equal(snapshot.dataSource, "queue-times.com");
+  assert.equal(snapshot.totalAttractions, 1);
+  assert.equal(snapshot.attractions[0].id, "qt-1");
+  assert.equal(snapshot.attractions[0].statusCode, 0);
+  assert.deepEqual(snapshot.errors, []);
+  // Oeffnungszeiten kamen erfolgreich von wartezeiten.app und bleiben massgeblich, auch im Fallback.
+  assert.equal(snapshot.openedToday, true);
+  assert.equal(snapshot.historyEligible, true);
+});
+
+test("collectParkSnapshot reports degraded queue-times fallback without upstream server errors", async (t) => {
+  mockWartezeitenAndQueueTimesFetch(t, {
+    openingtimesStatus: 500,
+    waitingtimesStatus: 500,
+    crowdlevelStatus: 500,
+  });
+
+  const snapshot = await collectParkSnapshot("phantasialand", Date.parse("2026-06-22T10:00:00+02:00"));
+
+  assert.equal(snapshot.dataSource, "queue-times.com");
+  assert.equal(snapshot.totalAttractions, 1);
+  assert.equal(snapshot.openAttractions, 1);
+  assert.equal(snapshot.openedToday, true);
+  assert.deepEqual(snapshot.errors, []);
+});
+
+test("collectParkSnapshot without a fallback mapping keeps the original upstream-error behavior", async (t) => {
+  mockWartezeitenAndQueueTimesFetch(t, { waitingtimesStatus: 500 });
+
+  const snapshot = await collectParkSnapshot("some-unmapped-park", Date.parse("2026-06-22T10:00:00+02:00"));
+
+  assert.equal(snapshot.dataSource, null);
+  assert.equal(snapshot.historyEligible, false);
+  assert.equal(snapshot.historySkipReason, "upstream_error");
+  assert.equal(snapshot.totalAttractions, 0);
+});
+
+test("attraction-specific wait-time alerts do not fall back to a different attraction when the target is missing from the snapshot", () => {
+  const snapshot = {
+    parkKey: "phantasialand",
+    openedToday: true,
+    openFrom: "2026-06-22T09:00:00+02:00",
+    closedFrom: "2026-06-22T18:00:00+02:00",
+    displayCrowdLevel: null,
+    attractions: [
+      // Simuliert eine queue-times.com-Ausweichquelle: die echte Ziel-UUID des Alarms taucht hier
+      // nicht auf, dafuer eine andere, guenstige Attraktion.
+      { id: "qt-1", name: "Andere Attraktion", value: 5, statusCode: 0, status: "opened" },
+    ],
+  };
+  const alert = {
+    type: "WAIT_TIME_BELOW",
+    attraction_id: "real-wartezeiten-uuid",
+    threshold_value: 30,
+    language: "de",
+    last_seen_value: null,
+  };
+
+  const result = evaluatePushAlert(alert, snapshot);
+
+  // Ohne den Fix wuerde "Andere Attraktion" (5 Min., unter dem Schwellwert 30) faelschlich als
+  // Treffer fuer den eigentlich gesuchten - hier fehlenden - Ziel-Attraktions-Alarm gewertet.
+  assert.equal(result.shouldNotify, false);
+  assert.equal(result.nextSeenValue, "false");
 });

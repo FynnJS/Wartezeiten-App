@@ -43,6 +43,9 @@
           </div>
         </div>
         <p id="parksStatus" class="app-status-text">Parks werden geladen...</p>
+        <div id="parksDegradedBanner" class="app-banner app-banner-warning" hidden>
+          wartezeiten.app ist aktuell nicht erreichbar. Es wird eine eingeschränkte Ausweichliste bekannter Parks angezeigt (Quelle: queue-times.com).
+        </div>
         <div id="parkList" class="park-grid" role="list"></div>
       </section>
 
@@ -62,6 +65,9 @@
 
         <div id="dataGapBanner" class="app-banner app-banner-warning" hidden>
           Der Park ist laut Öffnungszeiten geöffnet, aber aktuell meldet keine Attraktion eine Wartezeit. Das deutet auf ein Problem bei der Datenquelle hin, nicht bei dieser Anzeige.
+        </div>
+        <div id="fallbackSourceBanner" class="app-banner app-banner-warning" hidden>
+          wartezeiten.app ist aktuell nicht erreichbar. Die Wartezeiten stammen momentan von einer Ausweichquelle (queue-times.com); Öffnungszeiten und Auslastung sind währenddessen nicht verfügbar.
         </div>
         <div id="liveError" class="app-banner app-banner-error" hidden></div>
 

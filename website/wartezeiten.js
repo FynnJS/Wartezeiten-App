@@ -2,6 +2,7 @@ const overviewView = document.getElementById('view-overview');
 const detailView = document.getElementById('view-detail');
 const parkListEl = document.getElementById('parkList');
 const parksStatusEl = document.getElementById('parksStatus');
+const parksDegradedBannerEl = document.getElementById('parksDegradedBanner');
 const parkSearchEl = document.getElementById('parkSearch');
 const recentParksEl = document.getElementById('recentParks');
 
@@ -11,6 +12,7 @@ const detailParkName = document.getElementById('detailParkName');
 const detailParkLand = document.getElementById('detailParkLand');
 const detailUpdated = document.getElementById('detailUpdated');
 const dataGapBanner = document.getElementById('dataGapBanner');
+const fallbackSourceBannerEl = document.getElementById('fallbackSourceBanner');
 const liveErrorEl = document.getElementById('liveError');
 
 const statusOpenEl = document.getElementById('statusOpen');
@@ -192,6 +194,7 @@ async function loadParks() {
     parksStatusEl.textContent = allParks.length > 0
       ? `${allParks.length} Parks verfügbar.`
       : 'Aktuell sind keine Parks verfügbar.';
+    parksDegradedBannerEl.hidden = data.degraded !== true;
     renderParkList(parkSearchEl.value);
     renderRecentParks();
   } catch (error) {
@@ -261,6 +264,7 @@ function showDetailView(name, land) {
   pendingAttractionSelection = null;
   liveErrorEl.hidden = true;
   dataGapBanner.hidden = true;
+  fallbackSourceBannerEl.hidden = true;
   attractionListEl.replaceChildren();
   renderLoadingStatus(attractionsStatusEl, 'Attraktionen werden geladen…');
   window.scrollTo(0, 0);
@@ -316,6 +320,7 @@ async function loadLiveData(parkKey) {
     if (parkKey !== currentParkKey) return;
     liveData = data;
     liveErrorEl.hidden = true;
+    fallbackSourceBannerEl.hidden = data.dataSource !== 'queue-times.com';
     renderLiveStatus();
     renderAttractionList();
   } catch (error) {

@@ -1,4 +1,7 @@
+import { FALLBACK_PARKS, FALLBACK_PARK_BY_KEY } from "./fallbackParks.js";
+
 const WARTEZEITEN_API_BASE = "https://api.wartezeiten.app/v1";
+const QUEUE_TIMES_API_BASE = "https://queue-times.com";
 const LATEST_KEY = "app-data/latest.json";
 const TREND_KEY = "app-data/trend-history.json";
 const GLOBAL_MARKERS_PATH = "/app-data/global-markers/latest.json";
@@ -87,7 +90,7 @@ export default {
           .sort((a, b) => a.name.localeCompare(b.name));
         return jsonResponse({ generatedAtMillis: Date.now(), language, parks: items }, 200, 3600);
       } catch (error) {
-        return jsonResponse({ error: error instanceof Error ? error.message : String(error) }, 502, 30);
+        return jsonResponse(buildFallbackParksResponse(language), 200, 30);
       }
     }
 
@@ -96,6 +99,9 @@ export default {
       const parkKey = decodeURIComponent(liveMatch[1]);
       const language = normalizeApiLanguage(url.searchParams.get("lang"));
       try {
+        // collectParkSnapshot faellt intern bereits auf queue-times.com zurueck, wenn /v1/waitingtimes
+        // fehlschlaegt und eine kuratierte Zuordnung existiert (siehe FALLBACK_PARK_BY_KEY). Ein 502
+        // bleibt hier nur fuer den Fall, dass auch dieser Fallback fehlschlaegt oder nicht existiert.
         const snapshot = await collectParkSnapshot(parkKey, Date.now(), { includeCrowd: true, language });
         return jsonResponse(buildLiveParkResponse(snapshot), 200, 30);
       } catch (error) {
@@ -382,20 +388,40 @@ async function collectParkSnapshot(parkKey, now, options = {}) {
   ]);
 
   const openingTimes = settledValue(openingResult);
-  const waitingTimes = settledValue(waitingResult);
   const crowdLevel = settledValue(crowdResult);
   const opening = firstItem(openingTimes);
-  const waitingItems = Array.isArray(waitingTimes) ? waitingTimes : [];
+
+  // Ausweichquelle fuer Wartezeiten (queue-times.com), wenn /v1/waitingtimes fehlschlaegt und fuer
+  // diesen Park eine kuratierte Zuordnung existiert. Betrifft ausschliesslich die Attraktionsliste -
+  // Oeffnungszeiten/Crowd-Level bleiben von der echten wartezeiten.app-API, falls verfuegbar, da
+  // queue-times.com dafuer keine Daten liefert. Wird von D1-Statistik-Cron und Push-Watchlist-Scan
+  // automatisch mitgenutzt, da beide diese Funktion aufrufen.
+  let waitingItems = Array.isArray(settledValue(waitingResult)) ? settledValue(waitingResult) : [];
+  let usedFallbackWaitingTimes = false;
+  let fallbackError = null;
+  if (waitingResult.status === "rejected") {
+    const fallbackPark = FALLBACK_PARK_BY_KEY.get(parkKey);
+    if (fallbackPark) {
+      try {
+        waitingItems = await fetchQueueTimesWaitingItems(fallbackPark.queueTimesId);
+        usedFallbackWaitingTimes = true;
+      } catch (error) {
+        fallbackError = error instanceof Error ? error.message : String(error);
+      }
+    }
+  }
+
   const attractionItems = waitingItems.map((item) => toAttractionSnapshotItem(item));
   let timing = deriveAttractionSnapshotTiming(opening, waitingItems, now);
-  if (waitingResult.status === "rejected") {
+  if (waitingResult.status === "rejected" && !usedFallbackWaitingTimes) {
     timing = {
       ...timing,
       historyEligible: false,
       skipReason: "upstream_error",
     };
   }
-  const openedToday = opening?.opened_today === true;
+  const openedToday = opening?.opened_today === true ||
+    (opening == null && usedFallbackWaitingTimes && attractionItems.length > 0);
   const openAttractions = attractionItems.filter((item) => item.statusCode === 0).length;
   const totalAttractions = waitingItems.length;
   const apiCrowdLevel = parseCrowdLevel(crowdLevel?.crowd_level);
@@ -403,15 +429,19 @@ async function collectParkSnapshot(parkKey, now, options = {}) {
   const displayCrowdLevel = openedToday && openAttractions > 0
     ? (apiCrowdLevel ?? calculatedCrowdLevel)
     : null;
-  const errors = [
-    settledError("/openingtimes", openingResult),
-    settledError("/waitingtimes", waitingResult),
-    includeCrowd ? settledError("/crowdlevel", crowdResult) : null,
-  ].filter(Boolean);
+  const errors = usedFallbackWaitingTimes
+    ? []
+    : [
+        settledError("/openingtimes", openingResult),
+        settledError("/waitingtimes", waitingResult),
+        includeCrowd ? settledError("/crowdlevel", crowdResult) : null,
+        fallbackError ? `queue-times fallback: ${fallbackError}` : null,
+      ].filter(Boolean);
 
+  const waitingUsable = waitingResult.status === "fulfilled" || usedFallbackWaitingTimes;
   if (
     openingResult.status === "rejected" &&
-    waitingResult.status === "rejected" &&
+    !waitingUsable &&
     (!includeCrowd || crowdResult.status === "rejected")
   ) {
     throw new Error(errors.join("; ") || "all upstream requests failed");
@@ -433,6 +463,7 @@ async function collectParkSnapshot(parkKey, now, options = {}) {
     totalAttractions,
     attractions: attractionItems,
     errors,
+    dataSource: usedFallbackWaitingTimes ? "queue-times.com" : null,
   };
 }
 
@@ -549,6 +580,7 @@ function buildLiveParkResponse(snapshot) {
       status: item.status,
     })),
     errors: snapshot.errors,
+    dataSource: snapshot.dataSource ?? null,
   };
 }
 
@@ -561,6 +593,51 @@ async function apiJson(path, headers) {
     throw new Error(`${path} failed with HTTP ${response.status}`);
   }
   return response.json();
+}
+
+// Fallback-Parkliste, wenn die wartezeiten.app-API fuer /parks nicht erreichbar ist.
+// `degraded: true` signalisiert Konsumenten, dass es sich um eine reduzierte Ausweichliste handelt.
+function buildFallbackParksResponse(language) {
+  const parks = [...FALLBACK_PARKS]
+    .map((park) => ({ parkKey: park.parkKey, name: park.name, land: park.land }))
+    .sort((a, b) => a.name.localeCompare(b.name));
+  return {
+    generatedAtMillis: Date.now(),
+    language: normalizeApiLanguage(language),
+    parks,
+    degraded: true,
+    source: "queue-times.com",
+  };
+}
+
+async function queueTimesJson(path) {
+  const response = await fetch(`${QUEUE_TIMES_API_BASE}${path}`, {
+    cf: { cacheTtl: 30, cacheEverything: false },
+  });
+  if (!response.ok) {
+    throw new Error(`queue-times ${path} failed with HTTP ${response.status}`);
+  }
+  return response.json();
+}
+
+// Liefert die Ride-Liste eines queue-times.com-Parks in der von deriveAttractionSnapshotTiming()/
+// toAttractionSnapshotItem() erwarteten wartezeiten-aehnlichen Form. Wird von collectParkSnapshot()
+// als Ausweichquelle fuer /v1/waitingtimes genutzt. Die ID wird bewusst mit "qt-" praefixiert, damit
+// sie niemals mit einer echten wartezeiten.app-Attraktions-UUID kollidieren kann (wichtig fuer
+// Attraktions-spezifische Watchlist-Alarme und D1-Attraktionshistorie).
+async function fetchQueueTimesWaitingItems(queueTimesId) {
+  const data = await queueTimesJson(`/parks/${queueTimesId}/queue_times.json`);
+  const rides = [
+    ...(Array.isArray(data.rides) ? data.rides : []),
+    ...(Array.isArray(data.lands) ? data.lands.flatMap((land) => land.rides ?? []) : []),
+  ];
+  return rides.map((ride) => ({
+    id: ride.id != null ? `qt-${ride.id}` : undefined,
+    name: ride.name,
+    status: ride.is_open ? "opened" : "closed",
+    waitingtime: ride.wait_time,
+    datetime: ride.last_updated ?? null,
+  }));
 }
 
 async function registerPushInstallation(env, payload) {
@@ -953,7 +1030,11 @@ function evaluatePushAlert(alert, snapshot) {
     );
   }
   if (type === "WAIT_TIME_BELOW" || type === "WAIT_TIME_ABOVE") {
-    const candidates = target ? [target] : openAttractions;
+    // Bei gesetzter attraction_id ausschliesslich diese eine Attraktion werten (kein Fallback auf
+    // eine andere Attraktion), auch wenn das Ziel im aktuellen Snapshot fehlt - z.B. weil eine
+    // queue-times.com-Ausweichquelle andere Attraktions-IDs liefert. Sonst wuerde faelschlich eine
+    // voellig andere Attraktion benachrichtigt (siehe "Wartezeit-Alarm-Fallstrick" in Agents.md).
+    const candidates = alert.attraction_id ? (target ? [target] : []) : openAttractions;
     const selected = type === "WAIT_TIME_BELOW"
       ? candidates.filter(hasOpenWait).sort((a, b) => a.value - b.value)[0]
       : candidates.filter(hasOpenWait).sort((a, b) => b.value - a.value)[0];
@@ -2483,14 +2564,17 @@ function delay(ms) {
 }
 
 export {
+  buildFallbackParksResponse,
   buildLiveParkResponse,
   buildScheduledAppDataOptions,
   buildManualRefreshOptions,
   buildStatisticsIndexFromD1Rows,
+  collectParkSnapshot,
   cronParkShard,
   deriveAttractionSnapshotTiming,
   evaluatePushAlert,
   ensureAttractionHistoryD1,
+  fetchQueueTimesWaitingItems,
   mergeStatisticsIndexes,
   normalizeApiLanguage,
   pruneAttractionHistoryD1,
