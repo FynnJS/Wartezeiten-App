@@ -6,7 +6,7 @@ data class ParkDto(
     @SerializedName("id")
     val id: String,
     @SerializedName("uuid")
-    val uuid: String,
+    val uuid: String?,
     @SerializedName("name")
     val name: String,
     @SerializedName("land")

@@ -22,9 +22,10 @@ import de.wartezeiten.app.domain.model.WaitingTime
 import de.wartezeiten.app.domain.model.WeatherInfo
 
 fun ParkDto.toEntity(updatedAtMillis: Long): ParkEntity {
+    val stableUuid = uuid?.takeIf { it.isNotBlank() } ?: id
     return ParkEntity(
         id = id,
-        uuid = uuid,
+        uuid = stableUuid,
         name = name,
         country = country,
         isFavorite = false, // Initial value, will be merged in repository if needed
