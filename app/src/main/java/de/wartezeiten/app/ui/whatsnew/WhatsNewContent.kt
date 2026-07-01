@@ -25,6 +25,34 @@ data class WhatsNewRelease(
 
 val WHATS_NEW_RELEASES = listOf(
     WhatsNewRelease(
+        versionCode = 10201,
+        versionName = "1.2.1",
+        highlightsDe = listOf(
+            "Live-Wartezeiten bleiben bei Serverfehlern haeufig weiter verfuegbar, weil die App und Website dann auf queue-times.com ausweichen.",
+            "Fallback-Daten werden jetzt als Ausweichquelle erklaert, ohne irrefuehrende rote Serverfehler fuer nutzbare Daten.",
+            "Die alten Wartezeit-Empfehlungslabels wie JETZT, SPAETER und UEBLICH wurden aus der Attraktionsliste entfernt.",
+            "Watchlist-Alarme sind waehrend Fallback-Zeitraeumen robuster gegen falsche Attraktions-Treffer.",
+        ),
+        highlightsEn = listOf(
+            "Live wait times often remain available during server errors because the app and website can fall back to queue-times.com.",
+            "Fallback data is now explained as an alternate source instead of showing misleading red server errors for usable data.",
+            "The old wait-time advice labels like NOW, LATER, and TYPICAL were removed from the attraction list.",
+            "Watchlist alerts are more robust against mismatched attraction hits during fallback periods.",
+        ),
+        highlightsFr = listOf(
+            "Les temps d'attente en direct restent souvent disponibles lors d'erreurs serveur grace au repli vers queue-times.com.",
+            "Les donnees de secours sont maintenant expliquees comme source alternative au lieu d'afficher une erreur serveur trompeuse.",
+            "Les anciens labels de conseil comme MAINTENANT, PLUS TARD et HABITUEL ont ete retires de la liste des attractions.",
+            "Les alertes Watchlist evitent mieux les mauvaises correspondances d'attractions pendant les periodes de secours.",
+        ),
+        highlightsNl = listOf(
+            "Live wachttijden blijven bij serverfouten vaak beschikbaar doordat app en website kunnen uitwijken naar queue-times.com.",
+            "Fallbackgegevens worden nu uitgelegd als alternatieve bron, zonder misleidende rode serverfouten voor bruikbare data.",
+            "De oude wachttijdadviezen zoals NU, LATER en GEBRUIKELIJK zijn uit de attractielijst verwijderd.",
+            "Watchlist-meldingen zijn robuuster tegen verkeerde attractietreffers tijdens fallbackperiodes.",
+        ),
+    ),
+    WhatsNewRelease(
         versionCode = 10200,
         versionName = "1.2.0",
         highlightsDe = listOf(

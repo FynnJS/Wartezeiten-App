@@ -18,7 +18,7 @@ Unter [Live-Wartezeiten](https://wartezeiten-app.tutorialfynn.workers.dev/wartez
 - Gemeinsame Suche nach Parks und Attraktionen mit direktem Sprung zur passenden Attraktion
 - Parkdetails mit Wartezeiten, Öffnungszeiten, Wetter, Feiertagen, aktueller Auslastung, Datenqualitäts-Hinweisen und zentraler Parkstatistik
 - Attraktions-Detailkarten mit Verlauf, Prognose, persönlicher Notiz, Watchlist-Shortcut und Deep-Link-Share
-- Historisch gestützte "Jetzt oder später?"-Einordnung für geöffnete Attraktionen
+- Live-Wartezeiten mit queue-times.com-Ausweichquelle bei temporären Wartezeiten.APP-Serverfehlern
 - Zentrale Cloudflare App-Daten für Ranking-, Trend- und Attraktionsstatistik-Snapshots
 - Statistikbereich mit Park-, Datum- und Attraktionsauswahl für zentrale Tagesverläufe
 - Watchlist-Alarme mit Ruhezeiten, Einmal-Zustellung, Parköffnungsregel, Mindestabstand und täglicher Parkzusammenfassung

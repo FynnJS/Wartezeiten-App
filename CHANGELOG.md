@@ -1,5 +1,14 @@
 # Changelog
 
+## v1.2.1 - 2026-07-01
+
+- Added a queue-times.com fallback for live waiting times when the Wartezeiten.APP upstream returns server errors, including Android, the website live page, Worker live snapshots, D1 statistics collection, and park-wide Watchlist/push scans.
+- Added reduced-source banners on Android and the website so users can see when fallback data is active without showing misleading generic server errors.
+- Fixed cached park lists so temporary upstream 5xx errors no longer keep showing the stale "Serverfehler / last successful park update" banner when usable park data is already present.
+- Removed the per-attraction "now / later / typical" wait-time advice chips from the waiting-times list and attraction detail header while keeping forecast and history charts intact.
+- Hardened attraction-specific Watchlist evaluation during fallback periods so queue-times IDs can never trigger an alert for a different watched attraction.
+- Bumped Android release metadata to `versionCode 10201` / `versionName 1.2.1`.
+
 ## v1.2.0 - 2026-06-30
 
 - Added a live wait-times page on the website showing real-time park status, waiting times, opening hours, crowd levels, and statistics directly in the browser — no app installation required.
