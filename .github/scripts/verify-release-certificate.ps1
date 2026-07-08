@@ -42,6 +42,8 @@ if (-not $canonicalCert) {
     exit 1
 }
 
+Write-Host "Using canonical certificate from $CanonicalFile : $canonicalCert"
+
 $apksigner = $env:APKSIGNER
 if (-not $apksigner) {
     if (-not $env:ANDROID_HOME) {

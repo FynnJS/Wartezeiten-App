@@ -62,6 +62,18 @@ jobs:
           chmod +x gradlew
           ./gradlew :app:assembleRelease
 
+      - name: Show signing configuration (for diagnostics)
+        run: |
+          Write-Host "=== config/release-signing.properties ==="
+          if (Test-Path config/release-signing.properties) {
+            Get-Content config/release-signing.properties
+          } else {
+            Write-Host "(file not present)"
+          }
+          Write-Host "=== APKs in output ==="
+          Get-ChildItem app/build/outputs/apk/release -Filter *.apk -ErrorAction SilentlyContinue | Select-Object FullName, Length
+        shell: pwsh
+
       - name: Verify release certificate
         run: |
           $apkFile = Get-ChildItem app/build/outputs/apk/release -Filter *.apk | Select-Object -First 1
