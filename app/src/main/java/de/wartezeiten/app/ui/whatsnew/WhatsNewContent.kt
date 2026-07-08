@@ -25,6 +25,30 @@ data class WhatsNewRelease(
 
 val WHATS_NEW_RELEASES = listOf(
     WhatsNewRelease(
+        versionCode = 10202,
+        versionName = "1.2.2",
+        highlightsDe = listOf(
+            "Statistik-Graphen und Tagesdaten verwenden jetzt die Ortszeit des Parks (z. B. korrekte 'heutige' Statistiken für USA-Parks auch bei Betrachtung aus Deutschland).",
+            "Zahlreiche Stabilitätsverbesserungen: robusterer APK-Download, bessere Fehlerbehandlung bei Push, sichere Typ-Umwandlungen und verbesserte Benachrichtigungs-IDs.",
+            "Korrigierte Perzentil-Berechnung für Crowd-Level-Schätzungen und verbesserte Eingabevalidierung.",
+        ),
+        highlightsEn = listOf(
+            "Statistics graphs and daily data now respect the park's local timezone (e.g. correct 'today' stats for US parks even when viewed from Germany).",
+            "Numerous stability improvements: more robust APK download, better push error handling, safe type casts, and improved notification IDs.",
+            "Fixed percentile calculation for crowd level estimates and improved input sanitization.",
+        ),
+        highlightsFr = listOf(
+            "Les graphiques de statistiques et les données quotidiennes respectent désormais le fuseau horaire local du parc (ex. : stats 'aujourd'hui' correctes pour les parcs US même vues depuis l'Allemagne).",
+            "Nombreuses améliorations de stabilité : téléchargement APK plus robuste, meilleure gestion des erreurs push, casts de type sécurisés et IDs de notification améliorés.",
+            "Calcul de percentile corrigé pour les estimations de niveau d'affluence et validation d'entrée améliorée.",
+        ),
+        highlightsNl = listOf(
+            "Statistiekdiagrammen en daggegevens gebruiken nu de lokale tijdzone van het park (bijv. correcte 'vandaag'-statistieken voor Amerikaanse parken, ook bij bekijken vanuit Duitsland).",
+            "Talrijke stabiliteitsverbeteringen: robuustere APK-download, betere push-foutafhandeling, veilige typecasts en verbeterde notificatie-ID's.",
+            "Gecorrigeerde percentielberekening voor crowd-level schattingen en verbeterde inputvalidatie.",
+        ),
+    ),
+    WhatsNewRelease(
         versionCode = 10201,
         versionName = "1.2.1",
         highlightsDe = listOf(

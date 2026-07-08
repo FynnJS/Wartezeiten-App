@@ -1,19 +1,16 @@
 {
-  "versionName": "1.1.8",
-  "versionCode": 10108,
-  "releaseDate": "2026-06-24",
-  "releasePageUrl": "https://github.com/FynnJS/Wartezeiten-App/releases/tag/v1.1.8",
-  "apkUrl": "https://github.com/FynnJS/Wartezeiten-App/releases/download/v1.1.8/wartezeiten-app-1.1.8.apk",
-  "apkSize": "4.16",
+  "versionName": "1.2.2",
+  "versionCode": 10202,
+  "releaseDate": "2026-07-08",
+  "releasePageUrl": "https://github.com/FynnJS/Wartezeiten-App/releases/tag/v1.2.2",
+  "apkUrl": "https://github.com/FynnJS/Wartezeiten-App/releases/download/v1.2.2/wartezeiten-app-1.2.2.apk",
+  "apkSize": "4.2",
   "releaseNotes": [
-    "## v1.1.8 - 2026-06-24",
-    "- Fixed local Watchlist wait-time notifications for attraction-specific alerts so a closed target attraction no longer falls back to another attraction while keeping the original attraction name in the title.",
-    "- Fixed local push crowd-level percentages to use whole-number rounding, matching the rest of the app and the Cloudflare Worker.",
-    "- Improved the settings language selector with country flags and native language names, making each language recognizable regardless of the currently selected UI language.",
-    "- Added a park-detail warning when a park is open according to opening times for at least 15 minutes but no attraction reports live wait-time data, clarifying likely upstream data-source outages.",
-    "- Fixed attribution footers in bottom bars so they respect the Android system navigation bar on gesture and 3-button navigation.",
-    "- Fixed global statistics collection after v1.1.6: central D1 snapshots now use the actual Worker collection time as the measurement timestamp again, while upstream wait-time timestamps are only used to reject stale days.",
-    "- Bumped Android release metadata to `versionCode 10108` / `versionName 1.1.8`."
+    "## v1.2.2 - 2026-07-08",
+    "- Statistics graphs and 'today' data now correctly use the park's local timezone (fixes wrong day for US/Asia parks when viewed from other timezones).",
+    "- Hardened APK downloader, push error handling, lifecycle scopes, and type safety for improved stability.",
+    "- Fixed percentile math for crowd levels and notification ID collisions.",
+    "- Bumped Android release metadata to `versionCode 10202` / `versionName 1.2.2`."
   ],
   "showBanner": true
 }

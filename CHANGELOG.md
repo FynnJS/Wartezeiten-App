@@ -1,5 +1,19 @@
 # Changelog
 
+## v1.2.2 - 2026-07-08
+
+- Fixed statistics and statistic graphs to use the park's local timezone for "today" instead of the device's timezone. Parks in the USA (or other timezones) now correctly show the current local day's data and history even when viewed late at night or early morning from Germany.
+- Hardened APK downloader with temporary files, guaranteed cleanup on errors, and broader exception handling to prevent partial downloads and resource leaks.
+- Fixed memory leak in Application: CoroutineScope for watchlist sync is now properly stored and cancelled.
+- Added robust error handling and logging in Firebase Messaging Service (token registration and one-time alert disabling).
+- Prevented potential ClassCastException crashes in ParkListViewModel with safe runtime casts and fallbacks.
+- Improved notification ID generation across NotificationWorker and FCM service to reduce collision risk using better key separators.
+- Fixed potential zero-delay busy loop in the park detail time ticker.
+- Corrected p75 percentile calculation in worker crowd level estimation with proper linear interpolation.
+- Enhanced input sanitization in worker (cleanString now strips control characters).
+- Updated Agents.md with new pitfall documentation for CoroutineScope lifecycle management.
+- Bumped Android release metadata to `versionCode 10202` / `versionName 1.2.2`.
+
 ## v1.2.1 - 2026-07-01
 
 - Added a queue-times.com fallback for live waiting times when the Wartezeiten.APP upstream returns server errors, including Android, the website live page, Worker live snapshots, D1 statistics collection, and park-wide Watchlist/push scans.
