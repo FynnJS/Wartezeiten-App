@@ -167,7 +167,7 @@
 
 ### Release-Keystore
 - **Permanent:** `scripts/configure-release-signing.ps1` erzeugt Keystore + Secrets
-- **Fingerprint:** Kanonisch in `config/release-signing.properties` (v1.1.8: `22fdba79064411c314def3932f4ea499b9480fc63522a5cc8a6c89f136567659`)
+- **Fingerprint:** Kanonisch in `config/release-signing.properties` (aktuell: `272e40a90d94e756d6b940aa410d88a0c42617d11c81fe42af7fe5680be5660e`). Bei Keystore-Rotation den Hash aus einem erfolgreichen (oder fehlgeschlagenen Verify-)Build übernehmen und hier + in der Properties aktualisieren. Siehe auch Workflow-Fehlerbehebung in der Historie.
 - **Sicherung:** Außerhalb Repo aufbewahren, extern sichern
 - **GitHub Actions:** Secrets `RELEASE_KEYSTORE_BASE64`, `RELEASE_STORE_PASSWORD`, `RELEASE_KEY_ALIAS`, `RELEASE_KEY_PASSWORD`
 - **Verifikation:** `.github/scripts/verify-release-certificate.ps1` prüft fertige APK gegen Repo-Fingerprint
