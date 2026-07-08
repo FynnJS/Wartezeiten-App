@@ -334,7 +334,8 @@ class StatisticsViewModel @Inject constructor(
                     }
                 }
                 is ApiResult.Error -> {
-                    val indexedLatest = state.index.parks.firstOrNull { it.parkKey == parkKey }?.latestDate
+                    val currentState = mutableState.value
+                    val indexedLatest = currentState.index.parks.firstOrNull { it.parkKey == parkKey }?.latestDate
                     val isMissingToday = result.type == NetworkError.NotFound &&
                         (date == LocalDate.now().toString() || date == indexedLatest)
                     val language = preferences.language.first()
@@ -397,17 +398,17 @@ class StatisticsViewModel @Inject constructor(
             parkIndex.parkKey.normalizedParkKey() in candidates
         }?.parkKey
     }
+}
 
-    private fun parkCurrentDateFromIndex(dates: List<String>, latestDate: String?): String {
-        val now = LocalDate.now()
-        val candidates = listOf(
-            now.toString(),
-            now.minusDays(1).toString(),
-            now.plusDays(1).toString()
-        )
-        val datesSet = dates.toSet()
-        return candidates.firstOrNull { it in datesSet } ?: latestDate ?: now.toString()
-    }
+private fun parkCurrentDateFromIndex(dates: List<String>, latestDate: String?): String {
+    val now = LocalDate.now()
+    val candidates = listOf(
+        now.toString(),
+        now.minusDays(1).toString(),
+        now.plusDays(1).toString()
+    )
+    val datesSet = dates.toSet()
+    return candidates.firstOrNull { it in datesSet } ?: latestDate ?: now.toString()
 }
 
 private fun chooseInitialDate(

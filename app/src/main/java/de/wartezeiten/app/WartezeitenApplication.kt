@@ -9,9 +9,11 @@ import de.wartezeiten.app.ui.widget.ParkWidgetUpdateScheduler
 import de.wartezeiten.app.worker.NotificationScheduler
 import de.wartezeiten.app.worker.RecommendationScanScheduler
 import de.wartezeiten.app.worker.UpdateScheduler
+import android.util.Log
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
@@ -19,6 +21,8 @@ import javax.inject.Inject
 class WartezeitenApplication : Application(), Configuration.Provider {
     @Inject lateinit var workerFactory: HiltWorkerFactory
     @Inject lateinit var pushRegistrationManager: PushRegistrationManager
+
+    private val appScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
     override val workManagerConfiguration: Configuration
         get() = Configuration.Builder()
@@ -31,8 +35,21 @@ class WartezeitenApplication : Application(), Configuration.Provider {
         RecommendationScanScheduler.ensureBackgroundScans(this)
         UpdateScheduler.ensureBackgroundChecks(this)
         ParkWidgetUpdateScheduler.ensureBackgroundUpdates(this)
-        CoroutineScope(SupervisorJob() + Dispatchers.IO).launch {
-            pushRegistrationManager.syncCurrentWatchlist()
+        appScope.launch {
+            try {
+                pushRegistrationManager.syncCurrentWatchlist()
+            } catch (e: Exception) {
+                Log.e(TAG, "Failed to sync watchlist on startup", e)
+            }
         }
+    }
+
+    override fun onTerminate() {
+        super.onTerminate()
+        appScope.cancel()
+    }
+
+    companion object {
+        private const val TAG = "WartezeitenApplication"
     }
 }

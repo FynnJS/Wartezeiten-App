@@ -568,7 +568,7 @@ class NotificationWorker @AssistedInject constructor(
 
         return PendingIntent.getActivity(
             applicationContext,
-            (parkKey + (attractionId ?: "")).notificationId(),
+            generateNotificationId(parkKey, attractionId),
             intent,
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
         )
@@ -624,7 +624,7 @@ class NotificationWorker @AssistedInject constructor(
                 .setAutoCancel(true)
                 .build()
 
-            notificationManager.notify(parkKey.notificationId(), notification)
+            notificationManager.notify(generateNotificationId(parkKey), notification)
         }
 
         val summaryText = if (notifications.size == 1) {
@@ -661,9 +661,14 @@ class NotificationWorker @AssistedInject constructor(
         return dto.id ?: dto.safeName("de").trim().lowercase().replace(Regex("[^a-z0-9]+"), "-")
     }
 
-    private fun String.notificationId(): Int {
-        return 10_000 + hashCode().let { if (it == Int.MIN_VALUE) 0 else kotlin.math.abs(it) % 50_000 }
+    private fun generateNotificationId(parkKey: String, attractionId: String? = null, suffix: String = ""): Int {
+        // Use separator to reduce collision risk from string concat
+        val key = "$parkKey|${attractionId ?: "PARK"}|$suffix"
+        val h = key.hashCode()
+        return 10_000 + (if (h == Int.MIN_VALUE) 0 else kotlin.math.abs(h) % 50_000)
     }
+
+    private fun String.notificationId(): Int = generateNotificationId(this)
 
     private suspend fun <T> watchlistApiCall(
         label: String,

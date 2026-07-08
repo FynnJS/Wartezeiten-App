@@ -1,6 +1,7 @@
 package de.wartezeiten.app.ui.parks
 
 import android.content.Context
+import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -140,7 +141,6 @@ class ParkListViewModel @Inject constructor(
         .flatMapLatest { cutoff -> repository.observeLatestOpenParkKeys(cutoff) }
     private val recommendations = repository.observeParkRecommendations(limit = 5)
 
-    @Suppress("UNCHECKED_CAST")
     val uiState = combine(
         allParks,
         currentAttractions,
@@ -165,28 +165,38 @@ class ParkListViewModel @Inject constructor(
         parkAliases,
         repository.observeUsingFallbackParkList(),
     ) { args: Array<Any?> ->
-        val parks = args[0] as List<Park>
-        val currentAttractionEntries = args[1] as List<CurrentAttractionSearchEntry>
-        val openParkKeys = args[2] as Set<String>
-        val q = args[3] as String
-        val currentSearchHistory = args[4] as List<String>
-        val currentRecentParkKeys = args[5] as List<String>
-        val country = args[6] as String?
-        val openOnly = args[7] as Boolean
-        val favoritesOnly = args[8] as Boolean
-        val currentSort = args[9] as ParkSort
-        val currentRecommendations = args[10] as List<ParkRecommendation>
-        val recommendationLoading = args[11] as Boolean
-        val scanProgress = args[12] as ParkRecommendationScanProgress?
-        val language = args[13] as String
-        val loading = args[14] as Boolean
-        val openParkDataLoading = (args[15] as Int) > 0
-        val error = args[16] as String?
-        val trigger = args[17] as Int
-        val statsIndex = args[18] as StatisticsIndex
-        val statsLoading = args[19] as Boolean
-        val aliases = args[20] as Map<String, List<String>>
-        val usingFallbackParkList = args[21] as Boolean
+        fun <T> safeCast(index: Int, default: T, name: String): T {
+            return try {
+                @Suppress("UNCHECKED_CAST")
+                if (index < args.size && args[index] != null) args[index] as T else default
+            } catch (e: ClassCastException) {
+                Log.w("ParkListViewModel", "Type cast failed for $name at index $index, using default", e)
+                default
+            }
+        }
+
+        val parks = safeCast(0, emptyList<Park>(), "parks")
+        val currentAttractionEntries = safeCast(1, emptyList<CurrentAttractionSearchEntry>(), "attractions")
+        val openParkKeys = safeCast(2, emptySet<String>(), "openKeys")
+        val q = safeCast(3, "", "query")
+        val currentSearchHistory = safeCast(4, emptyList<String>(), "searchHistory")
+        val currentRecentParkKeys = safeCast(5, emptyList<String>(), "recentParks")
+        val country = safeCast<String?>(6, null, "country")
+        val openOnly = safeCast(7, false, "openOnly")
+        val favoritesOnly = safeCast(8, false, "favoritesOnly")
+        val currentSort = safeCast(9, ParkSort.Name, "sort")
+        val currentRecommendations = safeCast(10, emptyList<ParkRecommendation>(), "recommendations")
+        val recommendationLoading = safeCast(11, false, "recLoading")
+        val scanProgress = safeCast<ParkRecommendationScanProgress?>(12, null, "scanProgress")
+        val language = safeCast(13, PreferencesDataSource.DEFAULT_LANGUAGE, "language")
+        val loading = safeCast(14, false, "loading")
+        val openParkDataLoading = (safeCast(15, 0, "dataLoadCount")) > 0
+        val error = safeCast<String?>(16, null, "error")
+        val trigger = safeCast(17, 0, "trigger")
+        val statsIndex = safeCast(18, StatisticsIndex(generatedAtMillis = 0L, parks = emptyList()), "statsIndex")
+        val statsLoading = safeCast(19, false, "statsLoading")
+        val aliases = safeCast(20, emptyMap<String, List<String>>(), "aliases")
+        val usingFallbackParkList = safeCast(21, false, "usingFallback")
 
         val favorites = parks.filter { it.isFavorite }
         val recent = currentRecentParkKeys.mapNotNull { key ->

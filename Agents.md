@@ -161,6 +161,7 @@
 | **Wartezeit-Alarm-Kandidaten** | `candidates = alert.attraction_id ? (target ? [target] : []) : openAttractions` |
 | **Push-Prozent** | `formatPercent()` ganzzahlig runden |
 | **Watchlist-API-Fehler** | Park-Alarme brauchen `/v1/openingtimes`; Attraktionsalarme laufen auch ohne |
+| **CoroutineScope in Application/Service** | Nie anonymen Scope(SupervisorJob()) ohne Referenz erzeugen (Memory-Leak, kein Cancel). Immer als Property halten + cancel() in onTerminate/onDestroy. onTerminate ist nicht immer zuverlässig (Process kill). |
 
 ## 5. Release & Signierung
 

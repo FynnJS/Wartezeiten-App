@@ -19,6 +19,7 @@ import dagger.hilt.android.AndroidEntryPoint
 import de.wartezeiten.app.MainActivity
 import de.wartezeiten.app.R
 import de.wartezeiten.app.data.local.dao.WatchlistDao
+import android.util.Log
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -38,7 +39,12 @@ class WartezeitenFirebaseMessagingService : FirebaseMessagingService() {
 
     override fun onNewToken(token: String) {
         serviceScope.launch {
-            pushRegistrationManager.registerToken(token)
+            try {
+                pushRegistrationManager.registerToken(token)
+                Log.d(TAG, "FCM token registered successfully")
+            } catch (e: Exception) {
+                Log.e(TAG, "Failed to register FCM token", e)
+            }
         }
     }
 
@@ -69,10 +75,14 @@ class WartezeitenFirebaseMessagingService : FirebaseMessagingService() {
             .setAutoCancel(true)
             .build()
 
-        NotificationManagerCompat.from(this).notify((parkKey + (attractionId ?: "") + title).notificationId(), notification)
+        NotificationManagerCompat.from(this).notify(generateNotificationId(parkKey, attractionId, title), notification)
         if (notifyOnce && localAlertId != null) {
             serviceScope.launch {
-                watchlistDao.setEnabled(localAlertId, false)
+                try {
+                    watchlistDao.setEnabled(localAlertId, false)
+                } catch (e: Exception) {
+                    Log.e(TAG, "Failed to disable one-time alert", e)
+                }
             }
         }
     }
@@ -97,7 +107,7 @@ class WartezeitenFirebaseMessagingService : FirebaseMessagingService() {
         }
         return PendingIntent.getActivity(
             this,
-            (parkKey + (attractionId ?: "")).notificationId(),
+            generateNotificationId(parkKey, attractionId),
             intent,
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
         )
@@ -123,6 +133,19 @@ class WartezeitenFirebaseMessagingService : FirebaseMessagingService() {
     }
 
     private fun String.notificationId(): Int {
-        return 60_000 + hashCode().let { if (it == Int.MIN_VALUE) 0 else kotlin.math.abs(it) % 30_000 }
+        // Improved to reduce collision (use | separator)
+        val key = this
+        val h = key.hashCode()
+        return 60_000 + (if (h == Int.MIN_VALUE) 0 else kotlin.math.abs(h) % 30_000)
+    }
+
+    private fun generateNotificationId(parkKey: String, attractionId: String? = null, suffix: String = ""): Int {
+        val key = "$parkKey|${attractionId ?: "PARK"}|$suffix"
+        val h = key.hashCode()
+        return 60_000 + (if (h == Int.MIN_VALUE) 0 else kotlin.math.abs(h) % 30_000)
+    }
+
+    companion object {
+        private const val TAG = "WartezeitenFCMService"
     }
 }

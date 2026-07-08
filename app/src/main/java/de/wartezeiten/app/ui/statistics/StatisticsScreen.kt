@@ -606,6 +606,14 @@ private fun AttractionHistoryChart(
     }
 
     val sortedPoints = remember(points) { points.sortedBy { it.capturedAtMillis } }
+    val chartZoneId = remember(day?.openFrom, day?.closedFrom) {
+        day?.openFrom.toOffsetZoneIdOrNull()
+            ?: day?.closedFrom.toOffsetZoneIdOrNull()
+            ?: ZoneId.systemDefault()
+    }
+    val parkLocalToday = remember(chartZoneId) {
+        Instant.ofEpochMilli(System.currentTimeMillis()).atZone(chartZoneId).toLocalDate().toString()
+    }
     val axisBounds = remember(day, sortedPoints, parkLocalToday) {
         calculateAxisBounds(
             timestamps = sortedPoints.map { it.capturedAtMillis },
@@ -629,14 +637,6 @@ private fun AttractionHistoryChart(
     val yStep = remember(yMax) { calculateNiceTickStep(yMax) }
     val yLabels = remember(yMax, yStep) { (0..yMax step yStep).toList() }
     val hasStatusLane = statusPoints.isNotEmpty()
-    val chartZoneId = remember(day?.openFrom, day?.closedFrom) {
-        day?.openFrom.toOffsetZoneIdOrNull()
-            ?: day?.closedFrom.toOffsetZoneIdOrNull()
-            ?: ZoneId.systemDefault()
-    }
-    val parkLocalToday = remember(chartZoneId) {
-        Instant.ofEpochMilli(System.currentTimeMillis()).atZone(chartZoneId).toLocalDate().toString()
-    }
     val timeFormatter = remember(chartZoneId) {
         DateTimeFormatter.ofPattern("HH:mm").withZone(chartZoneId)
     }
@@ -783,6 +783,14 @@ private fun ParkAverageWaitChart(
     }
 
     val sortedPoints = remember(points) { points.sortedBy { it.capturedAtMillis } }
+    val chartZoneId = remember(day?.openFrom, day?.closedFrom) {
+        day?.openFrom.toOffsetZoneIdOrNull()
+            ?: day?.closedFrom.toOffsetZoneIdOrNull()
+            ?: ZoneId.systemDefault()
+    }
+    val parkLocalToday = remember(chartZoneId) {
+        Instant.ofEpochMilli(System.currentTimeMillis()).atZone(chartZoneId).toLocalDate().toString()
+    }
     val axisBounds = remember(day, sortedPoints, parkLocalToday) {
         calculateAxisBounds(
             timestamps = sortedPoints.map { it.capturedAtMillis },
@@ -805,14 +813,6 @@ private fun ParkAverageWaitChart(
     }
     val yStep = remember(yMax) { calculateNiceTickStep(yMax) }
     val yLabels = remember(yMax, yStep) { (0..yMax step yStep).toList() }
-    val chartZoneId = remember(day?.openFrom, day?.closedFrom) {
-        day?.openFrom.toOffsetZoneIdOrNull()
-            ?: day?.closedFrom.toOffsetZoneIdOrNull()
-            ?: ZoneId.systemDefault()
-    }
-    val parkLocalToday = remember(chartZoneId) {
-        Instant.ofEpochMilli(System.currentTimeMillis()).atZone(chartZoneId).toLocalDate().toString()
-    }
     val timeFormatter = remember(chartZoneId) {
         DateTimeFormatter.ofPattern("HH:mm").withZone(chartZoneId)
     }

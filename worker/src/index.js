@@ -1421,7 +1421,9 @@ function ensurePushD1(env) {
 }
 
 function cleanString(value, maxLength) {
-  return String(value ?? "").trim().slice(0, maxLength);
+  // Basic sanitization: trim, slice, remove control chars for safety
+  const s = String(value ?? "").trim().slice(0, maxLength);
+  return s.replace(/[\x00-\x1F\x7F]/g, "");
 }
 
 function groupBy(items, keySelector) {
@@ -2179,7 +2181,19 @@ function estimateCrowdLevelFromAttractions(attractions) {
   if (waits.length < 3) return null;
 
   const averageWait = waits.reduce((sum, value) => sum + value, 0) / waits.length;
-  const p75Wait = waits[Math.floor((waits.length - 1) * 0.75)];
+
+  // Correct percentile with linear interpolation (fixes off-by-one for small samples)
+  function percentile(sorted, p) {
+    if (sorted.length === 0) return 0;
+    const idx = (sorted.length - 1) * (p / 100);
+    const lower = Math.floor(idx);
+    const upper = Math.ceil(idx);
+    if (lower === upper) return sorted[lower];
+    const weight = idx - lower;
+    return sorted[lower] * (1 - weight) + sorted[upper] * weight;
+  }
+
+  const p75Wait = percentile(waits, 75);
   const estimated = ((averageWait / 60) * 0.7 + (p75Wait / 90) * 0.3) * 100;
   return roundToNearestFive(Math.max(0, Math.min(100, estimated)));
 }

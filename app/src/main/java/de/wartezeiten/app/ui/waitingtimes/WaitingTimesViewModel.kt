@@ -133,7 +133,9 @@ class WaitingTimesViewModel @Inject constructor(
     private val currentLocalTime = flow {
         while (currentCoroutineContext().isActive) {
             emit(System.currentTimeMillis())
-            delay(60_000 - (System.currentTimeMillis() % 60_000))
+            val now = System.currentTimeMillis()
+            val delayMs = (60_000 - (now % 60_000)).coerceAtLeast(1000L)
+            delay(delayMs)
         }
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), System.currentTimeMillis())
 

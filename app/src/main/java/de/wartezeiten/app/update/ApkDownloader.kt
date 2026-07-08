@@ -33,34 +33,37 @@ class ApkDownloader @Inject constructor(
     ): ApkDownloadResult = withContext(Dispatchers.IO) {
         val directory = File(context.cacheDir, "updates").apply { mkdirs() }
         val file = File(directory, "wartezeiten-update.apk")
+        val tempFile = File(directory, "wartezeiten-update.apk.tmp")
+        // Always start clean
+        tempFile.delete()
         file.delete()
 
         try {
             val request = Request.Builder().url(releaseInfo.apkUrl).build()
             client.newCall(request).execute().use { response ->
                 if (!response.isSuccessful) {
-                    return@withContext ApkDownloadResult.Error(
+                    throw IOException(
                         localized(
                             language,
                             de = "Download fehlgeschlagen (HTTP ${response.code}).",
                             en = "Download failed (HTTP ${response.code}).",
                             fr = "Téléchargement échoué (HTTP ${response.code}).",
                             nl = "Download mislukt (HTTP ${response.code}).",
-                        ),
+                        )
                     )
                 }
-                val body = response.body ?: return@withContext ApkDownloadResult.Error(
+                val body = response.body ?: throw IOException(
                     localized(
                         language,
                         de = "Download lieferte keine Daten.",
                         en = "Download returned no data.",
                         fr = "Le téléchargement n'a renvoyé aucune donnée.",
                         nl = "Download leverde geen gegevens op.",
-                    ),
+                    )
                 )
                 val totalBytes = body.contentLength()
                 body.byteStream().use { input ->
-                    file.outputStream().use { output ->
+                    tempFile.outputStream().use { output ->
                         val buffer = ByteArray(64 * 1024)
                         var totalRead = 0L
                         var bytesRead = input.read(buffer)
@@ -77,33 +80,38 @@ class ApkDownloader @Inject constructor(
             }
 
             releaseInfo.sha256?.takeIf { it.isNotBlank() }?.let { expectedHash ->
-                if (!file.sha256().equals(expectedHash, ignoreCase = true)) {
-                    file.delete()
-                    return@withContext ApkDownloadResult.Error(
-                        localized(
-                            language,
-                            de = "Prüfsumme stimmt nicht überein. Download wurde verworfen.",
-                            en = "Checksum mismatch. The download was discarded.",
-                            fr = "La somme de contrôle ne correspond pas. Le téléchargement a été annulé.",
-                            nl = "Controlesom komt niet overeen. De download is verwijderd.",
-                        ),
-                    )
+                if (!tempFile.sha256().equals(expectedHash, ignoreCase = true)) {
+                    throw IOException("SHA256 mismatch")
                 }
+            }
+
+            if (!tempFile.renameTo(file)) {
+                throw IOException("Failed to finalize downloaded file")
             }
 
             ApkDownloadResult.Success(
                 FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", file),
             )
-        } catch (exception: IOException) {
+        } catch (exception: Exception) {
+            tempFile.delete()
             file.delete()
             ApkDownloadResult.Error(
-                exception.message ?: localized(
-                    language,
-                    de = "Netzwerkfehler beim Download.",
-                    en = "Network error during download.",
-                    fr = "Erreur réseau pendant le téléchargement.",
-                    nl = "Netwerkfout tijdens het downloaden.",
-                ),
+                when (exception) {
+                    is IOException -> exception.message ?: localized(
+                        language,
+                        de = "Netzwerkfehler beim Download.",
+                        en = "Network error during download.",
+                        fr = "Erreur réseau pendant le téléchargement.",
+                        nl = "Netwerkfout tijdens het downloaden.",
+                    )
+                    else -> localized(
+                        language,
+                        de = "Fehler beim Download: ${exception.message}",
+                        en = "Error during download: ${exception.message}",
+                        fr = "Erreur lors du téléchargement : ${exception.message}",
+                        nl = "Fout tijdens download: ${exception.message}",
+                    )
+                }
             )
         }
     }
