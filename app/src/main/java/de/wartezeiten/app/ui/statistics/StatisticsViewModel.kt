@@ -44,8 +44,13 @@ data class StatisticsUiState(
     val availableDates: List<String>
         get() {
             val indexedDates = index.parks.firstOrNull { it.parkKey == selectedParkKey }?.dates.orEmpty()
-            val today = LocalDate.now().toString()
-            return (indexedDates + selectedDate + today)
+            val deviceToday = LocalDate.now().toString()
+            val parkIdx = index.parks.firstOrNull { it.parkKey == selectedParkKey }
+            val parkToday = if (parkIdx != null) {
+                val cands = listOf(deviceToday, LocalDate.now().minusDays(1).toString(), LocalDate.now().plusDays(1).toString())
+                cands.firstOrNull { it in parkIdx.dates } ?: parkIdx.latestDate ?: deviceToday
+            } else deviceToday
+            return (indexedDates + selectedDate + deviceToday + parkToday)
                 .filter { it.isNotBlank() }
                 .distinct()
         }
@@ -306,12 +311,14 @@ class StatisticsViewModel @Inject constructor(
             when (val result = repository.getAttractionHistoryDay(parkKey, date)) {
                 is ApiResult.Success -> {
                     mutableState.update { state ->
+                        val indexedLatest = state.index.parks.firstOrNull { it.parkKey == parkKey }?.latestDate
                         val day = result.data.takeIf { it.hasMeasurements() }
                             ?: buildCurrentDaySnapshot(
                                 parkKey = parkKey,
                                 date = date,
                                 parks = state.parks,
                                 currentAttractions = currentAttractions.value,
+                                latestDate = indexedLatest,
                             )
                         state.copy(
                             day = day,
@@ -327,7 +334,9 @@ class StatisticsViewModel @Inject constructor(
                     }
                 }
                 is ApiResult.Error -> {
-                    val isMissingToday = result.type == NetworkError.NotFound && date == LocalDate.now().toString()
+                    val indexedLatest = state.index.parks.firstOrNull { it.parkKey == parkKey }?.latestDate
+                    val isMissingToday = result.type == NetworkError.NotFound &&
+                        (date == LocalDate.now().toString() || date == indexedLatest)
                     val language = preferences.language.first()
                     mutableState.update { state ->
                         if (isMissingToday) {
@@ -337,6 +346,7 @@ class StatisticsViewModel @Inject constructor(
                                     date = date,
                                     parks = state.parks,
                                     currentAttractions = currentAttractions.value,
+                                    latestDate = indexedLatest,
                                 ),
                                 isLoading = false,
                                 errorMessage = null,
@@ -387,6 +397,17 @@ class StatisticsViewModel @Inject constructor(
             parkIndex.parkKey.normalizedParkKey() in candidates
         }?.parkKey
     }
+
+    private fun parkCurrentDateFromIndex(dates: List<String>, latestDate: String?): String {
+        val now = LocalDate.now()
+        val candidates = listOf(
+            now.toString(),
+            now.minusDays(1).toString(),
+            now.plusDays(1).toString()
+        )
+        val datesSet = dates.toSet()
+        return candidates.firstOrNull { it in datesSet } ?: latestDate ?: now.toString()
+    }
 }
 
 private fun chooseInitialDate(
@@ -396,15 +417,16 @@ private fun chooseInitialDate(
     currentDate: String?,
     currentAttractions: List<CurrentAttractionSearchEntry>,
 ): String {
-    val today = LocalDate.now().toString()
+    val deviceToday = LocalDate.now().toString()
     val hasCurrentAttractions = currentAttractions.any { it.matchesParkKey(parkKey) }
+    val parkToday = parkCurrentDateFromIndex(parkIndexDates, latestDate)
     return when {
         currentDate != null && currentDate in parkIndexDates -> currentDate
-        currentDate == today && hasCurrentAttractions -> currentDate
-        today in parkIndexDates -> today
-        hasCurrentAttractions && latestDate == null -> today
+        currentDate == deviceToday && hasCurrentAttractions -> currentDate
+        parkToday in parkIndexDates -> parkToday
+        hasCurrentAttractions && latestDate == null -> deviceToday
         latestDate != null -> latestDate
-        else -> today
+        else -> deviceToday
     }
 }
 
@@ -441,9 +463,10 @@ private fun buildCurrentDaySnapshot(
     date: String,
     parks: List<Park>,
     currentAttractions: List<CurrentAttractionSearchEntry>,
+    latestDate: String? = null,
 ): AttractionHistoryDay? {
-    val today = LocalDate.now().toString()
-    if (date != today) return null
+    val deviceToday = LocalDate.now().toString()
+    if (date != deviceToday && date != latestDate) return null
     val selectedPark = parks.firstOrNull { it.matchesParkKey(parkKey) }
     val entries = currentAttractions
         .filter { entry ->

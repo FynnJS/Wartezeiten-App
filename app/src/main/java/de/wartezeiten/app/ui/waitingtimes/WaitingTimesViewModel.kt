@@ -43,8 +43,9 @@ import kotlinx.coroutines.flow.take
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import java.time.Instant
-import java.time.OffsetDateTime
 import java.time.LocalDate
+import java.time.OffsetDateTime
+import java.time.ZoneOffset
 import javax.inject.Inject
 
 enum class WaitingTimesSort {
@@ -229,7 +230,10 @@ class WaitingTimesViewModel @Inject constructor(
                 hasOpenAttraction = hasOpenAttraction,
                 now = Instant.ofEpochMilli(status.currentTime),
             )
-            val today = LocalDate.now().toString()
+            val today = detail.localTimeOffsetSeconds()?.let { sec ->
+                val zone = ZoneOffset.ofTotalSeconds(sec)
+                Instant.ofEpochMilli(status.currentTime).atZone(zone).toLocalDate().toString()
+            } ?: LocalDate.now().toString()
             val openWaitingTimes = detail.waitingTimes.filter { it.status == AttractionStatus.Opened }
             val suppressServerErrorForFallback = status.usedFallbackWaitTimeSource && detail.waitingTimes.isNotEmpty()
             val effectiveErrorMessage = status.errorMessage.takeUnless { suppressServerErrorForFallback }
@@ -312,7 +316,7 @@ class WaitingTimesViewModel @Inject constructor(
             val indexedPark = indexResult.data.parks.firstOrNull {
                 it.parkKey.normalizedParkKey() in candidates
             } ?: return@launch
-            val today = LocalDate.now().toString()
+            val today = parkCurrentDateFromIndex(indexedPark.dates, indexedPark.latestDate)
             val statisticDate = today.takeIf { it in indexedPark.dates }
             val comparisonDates = indexedPark.dates.asReversed()
                 .filter { it != today }
@@ -499,6 +503,17 @@ class WaitingTimesViewModel @Inject constructor(
     private fun Long.toAgeMinutes(): Long? {
         if (this <= 0L) return null
         return ((System.currentTimeMillis() - this).coerceAtLeast(0L) / 60_000L)
+    }
+
+    private fun parkCurrentDateFromIndex(dates: List<String>, latestDate: String?): String {
+        val now = LocalDate.now()
+        val candidates = listOf(
+            now.toString(),
+            now.minusDays(1).toString(),
+            now.plusDays(1).toString()
+        )
+        val datesSet = dates.toSet()
+        return candidates.firstOrNull { it in datesSet } ?: latestDate ?: now.toString()
     }
 }
 

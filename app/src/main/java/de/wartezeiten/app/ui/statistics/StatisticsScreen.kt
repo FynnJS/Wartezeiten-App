@@ -219,11 +219,14 @@ fun StatisticsScreen(
                                     .height(220.dp),
                             )
                         }
-                    } else if (!state.isLoading && (state.day != null || state.selectedDate == LocalDate.now().toString())) {
+                    } else if (!state.isLoading && (state.day != null || state.selectedDate == LocalDate.now().toString() || state.selectedDate == state.index.parks.firstOrNull { it.parkKey == state.selectedParkKey }?.latestDate)) {
                         item {
+                            val parkLatest = state.index.parks.firstOrNull { it.parkKey == state.selectedParkKey }?.latestDate
+                            val treatAsToday = state.selectedDate == LocalDate.now().toString() || state.selectedDate == parkLatest
                             EmptyStatisticsState(
                                 selectedName = state.selectedPark?.name,
                                 selectedDate = state.selectedDate,
+                                treatAsToday = treatAsToday,
                             )
                         }
                     }
@@ -249,9 +252,12 @@ fun StatisticsScreen(
                     }
                 } else if (state.selectedAttractionId != null && !state.isLoading && (state.day == null || state.day.snapshots.isEmpty())) {
                     item {
+                        val parkLatest = state.index.parks.firstOrNull { it.parkKey == state.selectedParkKey }?.latestDate
+                        val treatAsToday = state.selectedDate == LocalDate.now().toString() || state.selectedDate == parkLatest
                         EmptyStatisticsState(
                             selectedName = state.selectedAttractionName ?: state.selectedPark?.name,
                             selectedDate = state.selectedDate,
+                            treatAsToday = treatAsToday,
                         )
                     }
                 }
@@ -600,7 +606,7 @@ private fun AttractionHistoryChart(
     }
 
     val sortedPoints = remember(points) { points.sortedBy { it.capturedAtMillis } }
-    val axisBounds = remember(day, sortedPoints) {
+    val axisBounds = remember(day, sortedPoints, parkLocalToday) {
         calculateAxisBounds(
             timestamps = sortedPoints.map { it.capturedAtMillis },
             openFrom = day?.openFrom,
@@ -608,6 +614,7 @@ private fun AttractionHistoryChart(
             firstOpenAtMillis = allWaitPoints.firstOrNull()?.capturedAtMillis,
             selectedDate = selectedDate,
             nowMillis = System.currentTimeMillis(),
+            parkLocalToday = parkLocalToday,
         )
     }
     val minTime = axisBounds.first
@@ -626,6 +633,9 @@ private fun AttractionHistoryChart(
         day?.openFrom.toOffsetZoneIdOrNull()
             ?: day?.closedFrom.toOffsetZoneIdOrNull()
             ?: ZoneId.systemDefault()
+    }
+    val parkLocalToday = remember(chartZoneId) {
+        Instant.ofEpochMilli(System.currentTimeMillis()).atZone(chartZoneId).toLocalDate().toString()
     }
     val timeFormatter = remember(chartZoneId) {
         DateTimeFormatter.ofPattern("HH:mm").withZone(chartZoneId)
@@ -773,7 +783,7 @@ private fun ParkAverageWaitChart(
     }
 
     val sortedPoints = remember(points) { points.sortedBy { it.capturedAtMillis } }
-    val axisBounds = remember(day, sortedPoints) {
+    val axisBounds = remember(day, sortedPoints, parkLocalToday) {
         calculateAxisBounds(
             timestamps = sortedPoints.map { it.capturedAtMillis },
             openFrom = day?.openFrom,
@@ -781,6 +791,7 @@ private fun ParkAverageWaitChart(
             firstOpenAtMillis = sortedPoints.firstOrNull()?.capturedAtMillis,
             selectedDate = selectedDate,
             nowMillis = System.currentTimeMillis(),
+            parkLocalToday = parkLocalToday,
         )
     }
     val minTime = axisBounds.first
@@ -798,6 +809,9 @@ private fun ParkAverageWaitChart(
         day?.openFrom.toOffsetZoneIdOrNull()
             ?: day?.closedFrom.toOffsetZoneIdOrNull()
             ?: ZoneId.systemDefault()
+    }
+    val parkLocalToday = remember(chartZoneId) {
+        Instant.ofEpochMilli(System.currentTimeMillis()).atZone(chartZoneId).toLocalDate().toString()
     }
     val timeFormatter = remember(chartZoneId) {
         DateTimeFormatter.ofPattern("HH:mm").withZone(chartZoneId)
@@ -974,8 +988,9 @@ private fun ErrorCard(message: String, onRetry: () -> Unit) {
 private fun EmptyStatisticsState(
     selectedName: String?,
     selectedDate: String,
+    treatAsToday: Boolean = false,
 ) {
-    val isToday = selectedDate == LocalDate.now().toString()
+    val isToday = treatAsToday || selectedDate == LocalDate.now().toString()
     OutlinedCard(modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(14.dp)) {
         Column(
             modifier = Modifier.padding(18.dp),
@@ -1030,6 +1045,7 @@ private fun calculateAxisBounds(
     firstOpenAtMillis: Long?,
     selectedDate: String,
     nowMillis: Long,
+    parkLocalToday: String? = null,
 ): Pair<Long, Long> {
     val firstSample = timestamps.minOrNull() ?: 0L
     val lastSample = timestamps.maxOrNull() ?: (firstSample + 1)
@@ -1042,8 +1058,9 @@ private fun calculateAxisBounds(
         else -> firstSample
     }
     val rawEnd = parkClose ?: lastSample
-    val today = LocalDate.now().toString()
-    val end = if (selectedDate == today) {
+    // Use provided parkLocalToday (computed with park zone) or fallback to device for "no future" cap
+    val effectiveToday = parkLocalToday ?: LocalDate.now().toString()
+    val end = if (selectedDate == effectiveToday) {
         minOf(rawEnd, maxOf(nowMillis, lastSample))
     } else {
         rawEnd
