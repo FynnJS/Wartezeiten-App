@@ -1,217 +1,235 @@
-# Wartezeiten App - Projekt-Dokumentation für KI-Agents
+# Wartezeiten App – Projekt-Dokumentation für KI-Agents
 
-Diese Datei dient als Grundlage für alle KIs, die an diesem Projekt arbeiten. Sie enthält die wichtigsten Fakten zur Architektur, den verwendeten Technologien und der API-Dokumentation.
-
-## Projektübersicht
-Die **Wartezeiten App** ist eine Android-Anwendung zur Anzeige von Wartezeiten in Freizeitparks weltweit. Sie basiert auf der API von [Wartezeiten.APP](https://wartezeiten.app).
+## 1. Projektübersicht
+**Wartezeiten App** ist eine Android-Anwendung zur Anzeige von Wartezeiten in Freizeitparks. Basiert auf [Wartezeiten.APP](https://wartezeiten.app) API.
 
 ### Tech-Stack
-- **Sprache:** Kotlin
-- **UI:** Jetpack Compose (Material 3)
-- **Architektur:** Clean Architecture mit MVVM
-- **Dependency Injection:** Hilt
-- **Datenhaltung:** Room (Lokal), Retrofit (Netzwerk)
-- **Nebenläufigkeit:** Coroutines & Flow
+| Komponente | Technologie |
+|-----------|-------------|
+| Sprache | Kotlin |
+| UI Framework | Jetpack Compose (Material 3) |
+| Architektur | Clean Architecture + MVVM |
+| Dependency Injection | Hilt |
+| Datenspeicherung | Room (lokal) + Retrofit (API) |
+| Concurrency | Coroutines & Flow |
 
-## Architektur & Paketstruktur
-Das Projekt ist in folgende Layer unterteilt:
+### Architektur-Layer
+- **`core`** – Netzwerk, Dispatcher, i18n, Utils
+- **`data`** – Repositories, lokale/remote Datenquellen, DTOs, Mapper
+- **`domain`** – Geschäftslogik, Use-Cases, Modelle
+- **`di`** – Hilt Dependency Injection Module
+- **`ui`** – Jetpack Compose Screens, Komponenten, Theming
 
-- `core`: Übergreifende Hilfsklassen (Netzwerk-Handling, Dispatcher).
-- `data`: Implementierung der Repositories, Datenquellen (Local & Remote), DTOs, Entities und Mapper.
-- `domain`: Geschäftslogik (Modelle, Repository-Interfaces, Use-Cases).
-- `di`: Hilt-Module für die Dependency Injection.
-- `ui`: UI-Komponenten, aufgeteilt nach Features (Parks, WaitingTimes) und Theme.
+## 2. API Dokumentation (Wartezeiten.APP v1.6.0)
+**Basis:** `https://api.wartezeiten.app`, Header-basierte Parameter ([vollständige Doku](https://api.wartezeiten.app))
 
-## API Dokumentation (Wartezeiten.APP - v1.6.0)
-Die App nutzt die Wartezeiten.APP API (OAS 3.0). Alle Endpunkte liefern JSON.
+| Endpunkt | Header | Response | Cache |
+|----------|--------|----------|-------|
+| `/v1/parks` | `language` (de/en) | Parks: `id`, `uuid`, `name`, `land` | 24h |
+| `/v1/openingtimes` | `park` | `opened_today`, `open_from`, `closed_from` | 30min* |
+| `/v1/waitingtimes` | `park`, `language` | Attraktionen: `name`, `waitingtime`, `status`, `uuid`, `datetime` | 5min |
+| `/v1/crowdlevel` | `park` | `crowd_level`, `timestamp` | 5-10min |
 
-### Basis-URL
-Die Basis-URL wird über das `NetworkModule` konfiguriert (aktuell `https://api.wartezeiten.app`).
+*clientseitig max. 30min trotz API-Hinweis (verhindert Tageswechsel-Probleme)
 
-### Endpunkte
-Die vollständige API-Dokumentation findest du unter [https://api.wartezeiten.app](https://api.wartezeiten.app).
+## 3. Kernarchitektur & Qualitätsrichtlinien
 
-#### 1. Liste der Freizeitparks
-`GET /v1/parks`
-- **Header:**
-    - `language` (erforderlich): `de` oder `en`
-- **Response:** Liste von Park-Objekten (`id`, `uuid`, `name`, `land`).
-- **Hinweis:** Caching für 24 Stunden.
+### Offline-First & Error Handling
+- Lokale Speicherung via Room, Daten über Flow an UI
+- Zentrales Error Handling via `ApiResult` Sealed Interface
+- Bei Netzwerkfehlern: Offline-Banner mit Alter der Cached-Daten
 
-#### 2. Öffnungszeiten
-`GET /v1/openingtimes`
-- **Header:**
-    - `park` (erforderlich): Park ID oder UUID
-- **Response:** Objekt mit `opened_today` (boolean), `open_from` und `closed_from` (ISO 8601).
-- **Hinweis:** Caching für 24 Stunden.
+### Qualitätsanforderungen
+✅ **Verifikation nach jeder Änderung** (UI visuell, Logik getestet)  
+✅ **Technisch robust, responsiv und visuell modern** (Material 3 konsistent)  
+✅ **Projektwissen aktualisieren:** Architekturentscheidungen, Fallstricke in dieser Datei dokumentieren  
 
-#### 3. Aktuelle Wartezeiten
-`GET /v1/waitingtimes`
-- **Header:**
-    - `park` (erforderlich): Park ID oder UUID
-    - `language` (erforderlich): `de` oder `en`
-- **Response:** Liste von Attraktionen mit `name`, `waitingtime` (Minuten), `status` (z.B. `opened`, `closed`), `uuid`, `datetime`.
-- **Hinweis:** Caching für 5 Minuten.
+## 4. Kritische Implementierungsdetails
 
-#### 4. Crowd Level (Besucheraufkommen)
-`GET /v1/crowdlevel`
-- **Header:**
-    - `park` (erforderlich): Park ID oder UUID
-- **Response:** Objekt mit `crowd_level` (float als String, z.B. "12,43") und `timestamp`.
-- **Hinweis:** Caching für 5-10 Minuten.
+### API & Caching
+| ⚠️ Detail | Impact |
+|-----------|--------|
+| **Header-Parameter** | `park`/`language` als Header (nicht Query), sonst falsche Daten pro Park |
+| **OkHttp Vary-Header** | `/v1/openingtimes`, `/v1/crowdlevel` → `Vary: park`; `/v1/waitingtimes` → `Vary: park, language` |
+| **Cache-Strategie** | `/v1/openingtimes`: Max. 30min (nicht 24h), verhindert Tageswechsel-Bugs |
 
-## Wichtige Implementierungsdetails
-- **Offline-First:** Die App nutzt Room zur lokalen Speicherung. Daten werden beim Aktualisieren in die Datenbank geschrieben und via Flow an die UI gestreamt.
-- **Error Handling:** Zentrales Error Handling über die `ApiResult` Sealed Interface.
-- **Projektwissen aktuell halten:** Relevante Änderungen, Architekturentscheidungen, Integrationsdetails oder Fallstricke, die für zukünftige Programmiererinnen/Programmierer oder programmierende KI-Agents wichtig sind, sollen in dieser `Agents.md` ergänzt werden.
-- **Visuelle & technische Qualität:** Bei jeder Änderung ist auf eine technisch robuste, reaktionsschnelle und visuell ansprechende Umsetzung zu achten. UI-Änderungen sollen klar, modern, konsistent mit Material 3 und im Nutzungskontext attraktiv wirken.
-- **Header-Parameter:** WICHTIG - Die Parameter `park` und `language` werden bei den Detail-Endpunkten als **Header** übergeben, nicht als Query-Parameter.
-- **HTTP-Cache für Header-Endpunkte:** Da die Detail-Endpunkte Parks und Sprache über Header unterscheiden, muss der OkHttp-Cache per `Vary` nach diesen Headern trennen. `/v1/openingtimes` und `/v1/crowdlevel` benötigen `Vary: park`; `/v1/waitingtimes` benötigt `Vary: park, language`. Ohne diese Trennung können Daten eines Parks bei einem anderen Park angezeigt werden.
-- **Öffnungszeiten-Cache:** `/v1/openingtimes` darf trotz des API-Hinweises zum 24-Stunden-Caching clientseitig höchstens 30 Minuten gecacht werden. Ein gleitender 24-Stunden-Cache reicht über den Tageswechsel und kann dadurch gestrige Zeitfenster als heutigen Status anzeigen.
-- **Öffnungszeiten-Mapping:** `opened_today` ist ein Boolean und die maßgebliche Quelle dafür, ob ein Park heute geöffnet ist. Der Wert darf nicht durch `status`-Strings überschrieben oder nur aus ihnen abgeleitet werden, wenn `opened_today` vorhanden ist.
-- **Geschlossene Parks & Crowd Level:** Wenn `opened_today=false`, darf ein vorhandener `crowdlevel` nicht als aktuelle Auslastung dargestellt werden. Die UI soll dann sinngemäß "Heute geschlossen" anzeigen.
-- **Geschlossene Parks & Attraktionsdaten:** Attraktionslisten sollen auch sichtbar bleiben, wenn ein Park aktuell geschlossen ist, damit Nutzerinnen/Nutzer den Attraktionskatalog sehen können. Öffnungszeiten bleiben aber maßgeblich für Live-Aussagen: Bei geschlossenem oder noch nicht geöffnetem Park dürfen Crowd-Level, offene Attraktionen, Empfehlungen und Statistiken nicht als aktuelle Auslastung bzw. echte Tagesmessung dargestellt werden.
-- **Erkennung fehlender Wartezeitdaten:** `isParkOpenWithoutWaitingTimeData` (`domain/model/ParkOpeningWindow.kt`) erkennt einen wahrscheinlichen Datenausfall der Wartezeiten-Quelle (z.B. Phantasialand-Vorfall am 2026-06-24, an dem ein laut Öffnungszeiten offener Park keine Wartezeiten lieferte): Park ist laut `opened_today` heute geöffnet, die Öffnung liegt mindestens 15 Minuten zurück, der Park hat noch nicht geschlossen, aber keine Attraktion meldet `opened`. `WaitingTimesViewModel` berechnet das Flag `isWaitingTimeDataLikelyMissing` pro Minute neu (über den ohnehin laufenden `currentLocalTime`-Flow); `WaitingTimesScreen.kt` zeigt dafür den `WaitingTimeDataGapBanner` an, der ausdrücklich auf ein Quellenproblem statt auf einen App-Fehler hinweist.
-- **Auto-Update:** Die App aktualisiert sich automatisch jede Minute (via `viewModelScope` und `delay`).
-- **Refresh Feedback:** Nur manuelle Aktualisierungen geben eine visuelle Rückmeldung via Snackbar ("Wartezeiten aktualisiert" bzw. "Parks aktualisiert"). Initiales Laden und Auto-Refresh dürfen keine Snackbar anzeigen.
-- **Zeit-Anzeige:** In den Park-Details wird sowohl die aktuelle Uhrzeit vor Ort als auch der Zeitpunkt der letzten erfolgreichen API-Aktualisierung angezeigt. Die Ortszeit wird aus API-Zeitstempeln bzw. Öffnungszeiten-Offsets abgeleitet; die Gerätezeit ist nur Fallback.
-- **Filter & Sortierung:** Parks können nach Land und Status (Nur offen) gefiltert werden. Attraktionen können nach Wartezeit (Auf/Absteigend) und Name sortiert sowie nach Status gefiltert werden. Standardmäßig werden Attraktionen nach der höchsten Wartezeit sortiert.
-- **Offen-Filter & Snapshot-Alter:** Parklisten- und Vergleichsfilter dürfen Öffnungsstatus-Snapshots nur als aktuell behandeln, wenn sie frisch sind. Der aktuelle Grenzwert liegt bei 30 Minuten; ältere Snapshots dürfen nicht mehr dazu führen, dass Parks als geöffnet gefiltert oder bewertet werden.
-- **Keine Logos:** Es werden keine Bilder oder großen Icons (z.B. Achterbahn-Logos) als Park-Logos verwendet. Flaggen werden dezent im Text-Kontext angezeigt.
-- **Flaggen:** Länderflaggen sollen robust aus ISO-Country-Codes als Regional-Indicator-Zeichen erzeugt werden. Besonders die USA muss korrekt als `US` -> 🇺🇸 gemappt werden; fehleranfällige Emoji-Literals vermeiden.
-- **Watchlist-Benachrichtigungen:** Watchlist-Alarme haben zwei Pfade. Der lokale Fallback läuft über WorkManager (`NotificationWorker`), startet bei neuen Alarmen einen schnellen Einmal-Check und prüft periodisch alle 30 Minuten. Optional nutzt die App Firebase Cloud Messaging: `PushRegistrationManager` synchronisiert FCM-Token und lokale Watchlist an den Cloudflare Worker (`/push/register`, `/push/watchlist`), der Alerts in D1 (`push_installations`, `push_watchlist_alerts`) speichert und über einen separaten `* * * * *`-Cron serverseitig minütlich prüft. Für Android müssen `FIREBASE_APPLICATION_ID`, `FIREBASE_API_KEY`, `FIREBASE_PROJECT_ID` und `FIREBASE_GCM_SENDER_ID` als Gradle-Properties gesetzt sein; für den Worker werden die Secrets `FCM_PROJECT_ID`, `FCM_CLIENT_EMAIL` und `FCM_PRIVATE_KEY` benötigt. Ohne diese Konfiguration bleibt Push deaktiviert und WorkManager übernimmt. Die Alarmtypen "Alle Änderungen" für Parks und Attraktionen vergleichen den zuletzt gesehenen Zustand und benachrichtigen erst bei einer echten Änderung; die Benachrichtigung öffnet die Parkseite.
-- **Erweiterte Alarmregeln:** Neue Watchlist-Alarme können einmalig sein, nur während der Parköffnung gelten, eine Ruhezeit von 22:00 bis 08:00 respektieren und einen Mindestabstand von 15 bis 120 Minuten nutzen. Die Regeln gelten identisch für WorkManager und Standby-Push. Einmalige Alarme werden nach erfolgreicher Zustellung pausiert; die Watchlist zeigt pausierte Alarme und den letzten tatsächlichen Auslösezeitpunkt an. Der parkweite Alarmtyp `DAILY_SUMMARY` meldet einmal täglich gegen 18 Uhr Ortszeit des Parks Öffnungsstatus, Auslastung und offene Attraktionen.
-- **Push-Diagnose & Releases:** Die Watchlist zeigt an, ob echter Standby-Push aktiv, deaktiviert oder fehlerhaft ist, und bietet eine lokale Testbenachrichtigung. Release-Builds müssen bei fehlenden Firebase-Android-Werten sowohl lokal in Gradle als auch in GitHub Actions abbrechen; ein still ohne FCM gebautes Release ist nicht zulässig. WorkManager ist nur ein verzögerbarer Fallback und keine Garantie für minutengenaue Zustellung im Doze-Modus.
-- **Lokale Firebase-Konfiguration:** Android-Builds lesen die vier Firebase-Werte vorrangig aus Gradle-Properties und ersatzweise strukturiert aus `app/google-services.json` bzw. `google-services.json` im Projektstamm. `scripts/configure-push.ps1` kopiert die geprüfte Datei automatisch nach `app/`; die Datei bleibt per `.gitignore` lokal. Die Testbenachrichtigung fordert auf Android 13+ bei fehlender Berechtigung über den Systemdialog `POST_NOTIFICATIONS` an und wird nach Zustimmung direkt angezeigt.
-- **Push-Health:** `/push/status` liefert ausschließlich die Booleans `d1Configured`, `fcmConfigured` und `pushReady`. Die App darf Standby-Push erst als aktiv melden, wenn dieser Endpunkt `pushReady=true` liefert und Token- sowie Watchlist-Synchronisierung erfolgreich waren.
-- **Watchlist-API-Fehler:** Parkstatus- und Crowd-Level-Alarme brauchen verlässliche Öffnungszeiten und werden bei unbekanntem OpeningTimes-Status übersprungen. Attraktionsalarme dürfen aber weiter anhand erfolgreicher `/v1/waitingtimes`-Daten laufen, wenn der Öffnungszeiten-Call temporär fehlt.
-- **Wartezeit-Alarm-Fallstrick (lokal vs. Worker):** `collectWaitBelowNotifications`/`collectWaitAboveNotifications` in `NotificationWorker.kt` durften bei einer attraktionsspezifischen Ziel-Attraktion (`alert.attractionId`) früher auf die park-weit günstigste/teuerste Attraktion ausweichen, wenn das eigentliche Ziel geschlossen war – der Notification-Titel nannte dabei weiter die Ziel-Attraktion, während Inhalt/Wert von einer völlig anderen Attraktion stammten. Die Kandidatenliste muss bei gesetztem `attractionId` ausschließlich diese eine Attraktion enthalten (kein Fallback auf andere Attraktionen), analog zu `evaluatePushAlert` im Cloudflare Worker (`candidates = target ? [target] : openAttractions`). Park-weite Alarme (kein `attractionId`) dürfen weiterhin über alle Attraktionen vergleichen. Die lokale Crowd-Prozentanzeige in Push-Texten (`formatPercent()`) rundet seitdem ganzzahlig statt sprachunabhängig mit deutschem Komma eine Nachkommastelle anzuzeigen, konsistent mit der restlichen App (z.B. `ParkRecommendation.kt`) und dem Worker (`Math.round`).
-- **Zentrale Statistik-Snapshots:** Der Cloudflare Worker sammelt App-Daten per Cron in versetzten 5-Minuten-Shards. Neue Attraktions-Messpunkte werden primär in Cloudflare D1 (`APP_DATA_DB`, Datenbank `wartezeiten-app-data`) gespeichert: ein Snapshot-JSON pro Park/Zeitpunkt in `attraction_history_snapshots`, Tagesmetadaten in `attraction_history_days`. Die öffentlichen Statistik-Endpunkte behalten ihren JSON-Vertrag; alte KV-Tagesdateien bleiben als Legacy-Fallback erhalten und werden mit D1-Daten zusammengeführt. `latest.json` wird im Shard-Cron nicht geschrieben. `trend-history.json` wird ebenfalls nicht mehr als eigene Datei im Shard-Cron geschrieben, sondern beim Abruf aus D1-Attraktionssnapshots plus Legacy-KV rekonstruiert; Park-Messpunkte nutzen dabei die aus Wartezeiten geschätzte Auslastung. Im Shard-Modus werden für Statistiken nur Öffnungszeiten und Wartezeiten abgefragt, nicht Crowd-Level. Globale Marker sind über `/app-data/global-markers/latest.json` abrufbar und werden aus D1 plus Legacy-KV abgeleitet. Ohne D1-Binding fällt der Worker weiterhin auf die bisherige KV-Schreiblogik zurück.
-- **D1-Statistik-Write-Fallstrick:** Cron-Läufe müssen D1-Snapshots parkweise bzw. frühzeitig schreiben. Wenn alle Snapshots erst am Ende eines langen Shards geschrieben werden, kann ein Timeout oder später API-Fehler den kompletten heutigen Statistik-/Marker-Lauf verlieren.
-- **D1-Statistik-Schema-Guard:** Worker-Updates dürfen zentrale Messpunkte nicht davon abhängig machen, dass die Remote-D1-Migration bereits manuell/CI-seitig angewendet wurde. Die Statistikpfade müssen vor Reads/Writes die Basistabellen `attraction_history_days` und `attraction_history_snapshots` sowie ihre Indizes idempotent sicherstellen (`ensureAttractionHistoryD1`). Migrationen bleiben Pflicht fuer strukturveraendernde Releases, aber der Guard verhindert, dass nach einem Deploy alle globalen Marker/Statistiken leer bleiben, nur weil das Schema noch fehlt.
-- **D1-Statistik-Cron-Subrequests:** Jeder zentrale Statistik-Cron verarbeitet nur einen kleinen Park-Shard. Mit D1 braucht ein Park mindestens zwei Upstream-Requests (`openingtimes`, `waitingtimes`) plus D1-Day- und Snapshot-Statements; zu große Shards laufen in Cloudflares "Too many subrequests"-Limit und dann bleiben globale Marker/Statistiken leer. `DEFAULT_CRON_SHARDS` und die Cron-Einträge in `wrangler.jsonc` müssen gemeinsam angepasst werden. Seit 2026-06-28 nutzt der Worker den minütlichen `* * * * *`-Cron gemeinsam für Push und Statistik; der Statistik-Shard rotiert anhand `scheduledTime % DEFAULT_CRON_SHARDS` über vier Shards. Die Parkauswahl ist indexbasiert, damit die aktuellen API-Parks gleichmäßiger verteilt sind als beim Hash-Sharding.
-- **D1-Statistik-Retention:** Die D1-Datenbank kann bei ungebremsten Attraktionssnapshots ihr Speicherlimit erreichen; dann schlagen neue Messpunkte still als D1-Write-Fehler fehl und globale Marker bleiben leer. Der Worker loescht vor Statistik-Writes alte `attraction_history_snapshots`/verwaiste `attraction_history_days` anhand `APP_DATA_D1_RETENTION_DAYS` (Default 14 Tage). Fuer Prognosen reichen die letzten sieben Vergleichstage; die Retention soll deshalb nicht ohne Kapazitaetspruefung stark erhoeht werden. `pruneAttractionHistoryD1` ist in `updateAppData` mit `try/catch` abgesichert, damit ein fehlgeschlagener Prune-Lauf nicht den gesamten Statistik-Shard abbricht.
-- **D1-Statistik-Index-Performance:** `readStatisticsIndexD1` führt zwei parallele D1-Queries aus: eine aggregierte GROUP-BY-Abfrage über alle Tage und eine JOIN-Abfrage für den neuesten Snapshot pro Park. Das Ergebnis wird als `latestByPark`-Map an `buildStatisticsIndexFromD1Rows` übergeben, sodass keine N zusätzlichen `readAttractionDayD1`-Aufrufe pro Park entstehen. Die Attraktionsdaten im Index (für Suchergebnisse) zeigen `lastValue`/`lastStatusCode` aus dem letzten Snapshot; `averageWaitMinutes` ist im Index `null` (wird nur auf der Statistik-Detailseite aus den Tages-Snapshots berechnet). Ältere `readDay`-Callbacks in `buildStatisticsIndexFromD1Rows` bleiben für Tests erhalten.
-- **D1-Messpunkt-Zeitstempel:** `captured_at_millis` in `attraction_history_snapshots` muss den tatsächlichen Worker-Erfassungszeitpunkt (`Date.now()` des Cron-Laufs) speichern. Der `datetime`/`date`-Wert aus `/v1/waitingtimes` dient nur zur Tages- und Stale-Prüfung. Wird der Upstream-`datetime` als D1-Primärschlüssel-Zeit verwendet, ersetzen mehrere Cron-Läufe mit unverändertem API-Zeitstempel denselben Snapshot und globale Statistik-Messpunkte brechen nach Releases scheinbar weg.
-- **Offene Parks & zentrale Marker:** Die Parkliste darf für den "Nur offen"-Filter nicht mehr `/app-data/latest.json` als aktuelle Quelle verwenden, weil diese Datei im Shard-Cron veralten kann. Aktuelle zentrale Parkzustände kommen aus `/app-data/global-markers/latest.json`; wenn dieser Marker-Endpunkt leer oder veraltet ist, muss die App auf den lokalen Öffnungs-/Wartezeiten-Scan zurückfallen.
-- **Parkbezogener Trendabruf:** Parkdetailseiten laden `/app-data/trend-history.json?parkKey={parkKey}`. Der Filter muss bereits in der D1-Abfrage angewendet werden; das Rekonstruieren aller Parks in einer Anfrage überschreitet bei wachsender Historie das Cloudflare-Worker-Ressourcenlimit.
-- **Statistik ohne heutige Messpunkte:** Wenn für den ausgewählten heutigen Tag noch keine zentrale Statistikdatei bzw. keine echten Öffnungs-Messpunkte existieren (z.B. morgens vor Parköffnung oder bei geschlossenem Park), soll die Statistikansicht dies ausdrücklich anzeigen und nicht automatisch so wirken, als seien Daten verloren gegangen. Heutige Parkdetail-Statistiken müssen Snapshots nach der aktuellen Parkzeit ausfiltern; Tagesdateien oder Fallbacks dürfen keine zukünftigen Messpunkte im Graphen anzeigen.
-- **Statistik-Datumswahl:** Statistikseiten dürfen initial nur dann "heute" auswählen, wenn für heute zentrale Daten im Index stehen oder ein lokaler Live-Fallback vorhanden ist. Fehlt der heutige Tag im Index, muss standardmäßig `latestDate` verwendet werden, damit bestehende Attraktionsverläufe nicht als leer erscheinen.
-- **Multi-Park-Vergleich:** Es gibt keine Park-Ratings mehr. Stattdessen nutzt `ui/compare` einen datenbasierten Vergleichsscreen für Parks. Die Kennzahlen werden aus lokal gespeicherten aktuellen Wartezeiten berechnet und bei Auswahl/Refresh per bestehendem `refreshParkDetail` aktualisiert. Der Vergleich bleibt read-only, erzeugt keine Cloudflare-KV-Writes und soll Besuchern eine schnelle Entscheidung über Wartezeitqualität, offene Attraktionen und Datenstand ermöglichen. Die Parkauswahl muss suchbar und klar geführt bleiben: ausgewählte Parks separat anzeigen, Treffer nach Parkname/Land filtern, bis zu vier Parks erlauben und bei weniger als zwei Parks einen verständlichen Leerzustand anzeigen. Vergleichskarten sind anklickbar und führen zur normalen Park-Übersicht.
-- **Offline-/Such-/Share-UX:** Die Parkliste zeigt bei Netzwerkfehlern mit vorhandenem Cache einen prominenten Offline-Banner inklusive Alter der letzten Parkdaten. Park-Suchtext und die letzten fünf bestätigten Suchen werden in `PreferencesDataSource` gespeichert; Suchhistorie wird beim Öffnen eines Park- oder Attraktionstreffers aktualisiert. Die Statistikansicht kann den aktuell sichtbaren Screen als PNG über Android Sharesheet teilen; dafür ist ein `FileProvider` mit Cache-Pfad `shared_statistics/` im Manifest registriert.
-- **Start-/Detail-UX:** Die Parkliste zeigt zuletzt angesehene Parks sowie ein Favoriten-Dashboard mit Öffnungs-/Wartezeit-Kennzahlen. Zuletzt angesehene Parks werden auch beim Öffnen einer Detailseite per Deep-Link/Notification gespeichert. Die Parksuche unterstützt lokale Aliasnamen für häufige Parks (z.B. EP/Europa Park, DLP/Disneyland). Parkdetails zeigen bei Cache-Nutzung einen Offline-Banner und eine Datenqualitätskarte; die aktuelle Parkübersicht kann als Text geteilt werden.
-- **Startbildschirm-Widget:** Das Lieblingspark-Widget nutzt Jetpack Glance (`ui/widget`) mit einer normalen Compose-Konfigurations-Activity. Die Widget-Instanz speichert `park_key` und bis zu drei Attraktions-IDs im Glance-Preferences-State sowie als Fallback pro AppWidget-ID in `ParkWidgetConfigStore`, aktualisiert beim Widget-Update per bestehendem `WartezeitenRepository.refreshParkDetail` und öffnet den Park per Deep-Link `wartezeiten://parks/{parkKey}`. Durchschnitts- und Maximalwartezeit werden nur angezeigt, wenn `isParkCurrentlyOpen` den Park aktuell als geöffnet bewertet; bei geschlossenen oder unbekannten Öffnungszeiten dürfen keine alten Werte als Live-Metriken erscheinen. Ist ein Park konfiguriert, aber noch kein Detaildatensatz verfügbar, muss das Widget einen Ladezustand anzeigen und nicht in den unkonfigurierten Zustand zurückfallen.
-- **Widget-Aktualisierung:** Das Glance-Widget darf sich nicht nur auf `android:updatePeriodMillis` verlassen. `ParkWidgetUpdateScheduler` plant zusätzlich einen WorkManager-Refresh alle 30 Minuten, und der manuelle "Neu"-Klick im Widget rendert die aktuelle Instanz sofort neu und stößt einen einmaligen Refresh für weitere Instanzen an.
-- **Parkdetail-Statistik:** Parkdetailseiten zeigen anstelle eines Auslastungs-Trend-Dashboards die zentrale Parkstatistik des aktuellen bzw. neuesten verfügbaren Tages mit durchschnittlicher Wartezeit, Min/Max, letztem Wert, offenen Attraktionen, Messpunktzahl und Wartezeiten-Graph. Die aktuelle Auslastung bleibt dort nur als einzelne Textzeile sichtbar.
-- **Parkdetail-Statistik & veraltete zentrale Daten:** Die Parkdetailseite darf ältere zentrale Statistik-Tage nicht als heutige Parkstatistik darstellen. Fehlt der heutige Tag im Statistikindex, muss die Detailkarte ausdrücklich melden, dass für heute noch keine zentralen Messpunkte verfügbar sind; vergangene Tage dürfen dort nur als Hintergrund für konservative Vergleiche genutzt werden.
-- **Jetzt-oder-später-Empfehlung:** Geöffnete Attraktionen erhalten auf der Parkdetailseite eine konservative Einordnung der aktuellen Wartezeit. Verglichen werden bis zu sieben vergangene Statistik-Tage im Zeitfenster um die lokale Parkzeit. Eine Empfehlung erscheint erst ab mindestens drei Vergleichstagen; mögliche spätere Zeitpunkte werden nur aus historischen Messwerten der kommenden zwei Stunden abgeleitet und als Schätzung formuliert.
-- **Wartezeit-Vergleichslabels:** Vergleichslabels dürfen nur aus repräsentativen historischen Messfenstern entstehen. Tage bzw. Snapshots mit zu wenigen offenen Attraktionen sind auszufiltern; wenn die aktuelle Wartezeit stark von der historischen typischen Wartezeit abweicht und keine belastbare "später besser"-Aussage möglich ist, soll kein harmloses "üblich"-Label angezeigt werden.
-- **Cache-Verwaltung:** In den Einstellungen kann der lokale API-/Statistik-Cache geleert werden. Favoriten, Watchlist-Alarme und Einstellungen bleiben erhalten; nicht favorisierte Parkstammdaten, Detaildaten und Snapshot-Historien werden gelöscht und beim nächsten Refresh neu geladen.
-- **Attraktions-Details & Notizen:** Attraktionszeilen öffnen über die bestehende Detailroute `parks/{parkKey}?attractionId={attractionId}` eine Detailkarte mit Status, heutigem Verlauf, historischer 1-3-Stunden-Prognose, Watchlist-Shortcut, Deep-Link-Share und persönlicher Notiz. Notizen liegen lokal in Room (`attraction_notes`) und dürfen bei Cache-Leerung nicht entfernt werden.
-- **Wartezeit-Prognose:** Die Prognose erweitert `AttractionWaitAdvice` um Timeline-Punkte aus den bereits geladenen D1-`AttractionHistoryDay`-Snapshots. Aussagen bleiben konservativ und erscheinen nur bei mindestens drei vergleichbaren historischen Tagen.
-- **Alias-Suche:** Wartbare Park-Aliase liegen zusätzlich in `app/src/main/assets/park_aliases.csv`. Neue Tippvarianten oder internationale Schreibweisen sollen dort ergänzt werden; die alte kleine Code-Heuristik bleibt nur Fallback.
-- **Encoding-Fallstrick:** `WaitingTimesScreen.kt` wurde im v1.1.6-Commit versehentlich doppelt encodiert gespeichert: Sonderzeichen wie `…`, `•`, `≤`, `↑`, `↓` wurden zu Mojibake (`â€¦`, `â€¢`, `â‰¤`, `â†‘`, `â†“`) und am Dateianfang erschien ein UTF-8-BOM, obwohl der zugehörige Changelog-Eintrag genau das Gegenteil ("Fixed broken umlauts...") behauptete. Vor jedem Commit, der Sonderzeichen in `.kt`-Dateien ändert, per `grep -n "â€\|Ã¤\|Ã¶\|Ã¼\|ÃŸ"` gegenprüfen, dass keine Mojibake-Bytes statt echter UTF-8-Zeichen gespeichert wurden.
-- **Heutiger-Verlauf-Fallstrick:** `buildAttractionHistorySeries` darf "heute" nicht über `historyDays.firstOrNull()` bestimmen. `refreshParkStatistics()` in `WaitingTimesViewModel` lädt `statisticDate` (heute) nur, wenn der heutige Tag bereits im Statistik-Index steht; fehlt er (z. B. morgens vor Parköffnung), ist das erste Element in `historyDays` der jüngste vergangene Tag, nicht heute. Die Funktion muss daher explizit nach `it.date == today` filtern, sonst zeigt "Heutiger Verlauf" fälschlich Daten eines vergangenen Tages. Die bis zu 8 Tagesdatei-HTTP-Requests werden parallel via `coroutineScope { datesToLoad.map { async { ... } }.awaitAll() }` geladen, um die Ladezeit von sequenziell bis zu 8× RTT auf eine einzelne RTT zu reduzieren.
-- **Mehrsprachigkeit (DE/EN/FR/NL):** Die App unterstützt vier UI-Sprachen (`PreferencesDataSource.SUPPORTED_LANGUAGES`). Neue UI-Strings werden über `de.wartezeiten.app.core.i18n.localized(language, de = ..., en = ..., fr = ..., nl = ...)` erzeugt, nicht über zweiwertige `if (language == "en")`-Ternaries. Die Wartezeiten.app-API selbst akzeptiert im `language`-Header weiterhin nur `de`/`en`; jeder direkte API-Aufruf muss daher `language.toApiLanguage()` (in `core/network/ApiLanguage.kt`) statt der rohen App-Sprache verwenden – zentral umgesetzt in `DefaultWartezeitenRepository` und im direkten API-Call in `NotificationWorker`. Eigene Backend-Endpunkte (Push-Registrierung) bekommen weiterhin die rohe App-Sprache, da der Cloudflare Worker selbst alle vier Sprachen für Push-Texte unterstützt. `ParkTrendDashboard.kt` ist totes UI (kein Aufrufer mehr) und bewusst nicht auf vier Sprachen erweitert worden.
-- **"Was ist neu"-Dialog:** `ui/whatsnew` zeigt einmalig nach einem Update einen Dialog mit den Neuerungen der aktuellen Version, gesteuert über `PreferencesDataSource.lastSeenVersionCode` vs. `BuildConfig.VERSION_CODE`. Bei jedem `versionCode`/`versionName`-Bump im Rahmen von "Prepare release" muss zusätzlich zum Changelog-Eintrag ein passender `WhatsNewRelease`-Eintrag mit derselben `versionCode` in `WhatsNewContent.kt` ergänzt werden, sonst bleibt der Dialog für die neue Version leer.
-- **Sprachauswahl in Einstellungen:** Die Sprachauswahl in `SettingsScreen.kt` zeigt jede Sprache mit Länderflagge (über das bestehende, robuste `countryToFlag` aus `ParkListScreen.kt`, keine Emoji-Literals) und dem nativen Sprachnamen ("Deutsch", "English", "Français", "Nederlands") an statt einer in die aktuell gewählte App-Sprache übersetzten Bezeichnung – so bleibt die Sprache erkennbar, auch wenn man die aktuell eingestellte Sprache nicht versteht.
-- **Push-Texte mehrsprachig:** Der serverseitige Push-Versand (`evaluatePushAlert` im Worker) baut Titel/Text jetzt über `localizedPushText(language, {de, en, fr, nl})` anhand der bei der Registrierung gespeicherten Installations-Sprache (`push_installations.language`); zuvor war der Text unabhängig von der App-Sprache immer Deutsch. Der lokale WorkManager-Fallback (`NotificationWorker.kt`) nutzt für dieselben Texte konsistent `localized()` mit der aktuellen App-Spracheinstellung. Die ID-Normalisierung (`normalizeAttractionId`) verwendet bewusst weiterhin fest "de" als Fallback-Namen, damit die generierte Attraktions-ID nicht von der UI-Sprache abhängt.
+### Öffnungszeiten & Parkstatus
+| ⚠️ Detail | Regel |
+|-----------|-------|
+| **Quelle der Wahrheit** | `opened_today` Boolean ist maßgeblich, nicht `status`-Strings |
+| **Crowd Level bei geschlossenen Parks** | Wenn `opened_today=false` → "Heute geschlossen" anzeigen, kein altes `crowd_level` |
+| **Geschlossene Parks & Attraktionen** | Attraktionslisten sichtbar (Katalog), aber Live-Aussagen (Auslastung, Empfehlungen) nur bei geöffnet |
+| **Fehlende Wartezeitdaten erkennen** | `isParkOpenWithoutWaitingTimeData` in `domain/model/ParkOpeningWindow.kt` detektiert Ausfälle; zeige `WaitingTimeDataGapBanner` |
 
-## Verifizierungs-Richtlinie (WICHTIG)
-Nach jeder Änderung am Programm **MUSS** geprüft werden, ob die Änderung erfolgreich war und wie erwartet funktioniert. 
-- Bei UI-Änderungen (z.B. Logo, Layout) muss die korrekte Anzeige visuell oder via UI-Inspektion verifiziert werden.
-- Bei Logik-Änderungen müssen betroffene Funktionen (z.B. API-Calls, Datenbank-Operationen) durch Tests oder manuelle Ausführung bestätigt werden.
-- Misserfolge oder unerwartetes Verhalten müssen dokumentiert und behoben werden.
+### UI-Verhalten
+- **Auto-Update:** Jede Minute (via `viewModelScope` + `delay`)
+- **Refresh-Feedback:** Nur manuelle Updates → Snackbar. Initiales Laden / Auto-Refresh → keine Snackbar
+- **Zeit-Anzeige:** Aktuelle Parkzeit + letzter API-Update-Zeitpunkt (aus API-Timestamp oder Gerätezeit als Fallback)
+- **Filter & Sortierung:** Parks (Land, Status), Attraktionen (Wartezeit auf/ab, Name, Status); Standard: höchste Wartezeit zuerst
+- **Offen-Filter:** Snapshots max. 30min alt; älter → nicht als geöffnet darstellen
+- **Keine Logos:** Nur Text + dezente Flaggen (ISO-Code → Regional Indicators, z.B. `US` → 🇺🇸)
 
-## Status der App
-- Alle Build-Fehler wurden behoben.
-- `android.useAndroidX=true` ist in `gradle.properties` gesetzt.
-- Die API-Integration in `WartezeitenApiService` wurde auf Header-Parameter korrigiert.
-- Release-APK-Updates müssen mit demselben Keystore signiert werden wie die zuvor installierte Version, um Paketkonflikte zu vermeiden. `app/build.gradle.kts` unterstützt eine `keystore.properties`-basierte Release-Signaturkonfiguration und bricht lokale Release-Builds ohne diese Datei bewusst ab; Debug- oder Wegwerf-Signaturen dürfen nicht als Release-Update veröffentlicht werden.
-- **Dauerhafter Release-Keystore:** GitHub-Releases verwenden ausschließlich den mit `scripts/configure-release-signing.ps1` erzeugten und als Repository-Secrets hinterlegten Keystore. Der öffentliche, kanonische Release-Zertifikatsfingerprint liegt in `config/release-signing.properties` und entspricht der installierbaren Linie der v1.1.8-APK (`22fdba79064411c314def3932f4ea499b9480fc63522a5cc8a6c89f136567659`). `RELEASE_CERT_SHA256` ist als GitHub-Secret nicht mehr erforderlich und darf nicht als Wahrheit betrachtet oder gemeinsam mit einem neuen Keystore rotiert werden: `.github/scripts/verify-release-certificate.ps1` muss die fertige APK immer gegen den Repo-Fingerprint prüfen. `scripts/configure-release-signing.ps1` bricht ebenfalls ab, wenn der lokale Keystore nicht zu diesem Fingerprint passt. Der lokale Sicherungsordner außerhalb des Repositories muss dauerhaft aufbewahrt und extern gesichert werden; ohne privaten Schlüssel sind signaturkompatible Updates nicht wiederherstellbar. Wurde versehentlich eine APK mit anderem Zertifikat veröffentlicht, muss das Release-Asset mit dem ursprünglichen Keystore neu gebaut/ersetzt werden; ein weiterer Versionsbump mit dem falschen Zertifikat behebt den Android-Paketkonflikt nicht.
+### Push-Notifications & Watchlist
+**Zwei Modi:**
+1. **WorkManager (Fallback):** `NotificationWorker` lädt bei neuen Alarmen einmalig, prüft dann alle 30min
+2. **Firebase Cloud Messaging (Premium):** `PushRegistrationManager` sync Token/Watchlist → Cloudflare Worker → D1 → minütlicher Cron
 
-## Website & Release-Deployment
+**Konfiguration erforderlich:**
+- Android: `FIREBASE_APPLICATION_ID`, `FIREBASE_API_KEY`, `FIREBASE_PROJECT_ID`, `FIREBASE_GCM_SENDER_ID` (Gradle Properties)
+- Worker: `FCM_PROJECT_ID`, `FCM_CLIENT_EMAIL`, `FCM_PRIVATE_KEY` (Secrets)
+- Ohne Konfiguration: WorkManager übernimmt, kein Push-Fehler
 
-### Release-Changelog (PFLICHT)
-Bei jedem neuen Release muss vor dem Commit ein Changelog-Eintrag geschrieben bzw. aktualisiert werden. Der Eintrag soll die wichtigsten Nutzer- und Technikänderungen der Version knapp zusammenfassen.
-Bei jedem Release muss zusätzlich geprüft werden, ob die Projekt-README neue Informationen zur Version, Installation, Website oder Release-/Download-Automation benötigt. Relevante Änderungen sind vor dem Commit einzutragen.
+**Alarm-Typen:**
+- "Alle Änderungen": Parkstatus/Attraktionen-Vergleich → nur bei echten Änderungen
+- `WAIT_TIME_BELOW`/`WAIT_TIME_ABOVE`: Bei `attraction_id` exklusiv diese Attraktion (kein Fallback auf andere!)
+- **Erweiterte Regeln:** Einmalig, während Parköffnung, Ruhezeit 22:00-08:00, Mindestabstand 15-120min
+- `DAILY_SUMMARY`: Täglich ~18:00 Parkzeit mit Status/Auslastung/offenen Attraktionen
 
-### Live Website
-- **URL:** https://wartezeiten-app.tutorialfynn.workers.dev/
-- **Hosting:** Cloudflare Workers
-- **Sync:** Website wird automatisch von GitHub `main`-Branch deployed
+**Push-Health:**
+- `/push/status` liefert `d1Configured`, `fcmConfigured`, `pushReady` (Booleans)
 
-### GitHub Release Integration
-- **Download-Automation:** `website/download-from-github.ps1` (PowerShell)
-- **Dokumentation:** `website/GITHUB-DOWNLOAD.md`
-- **Funktionalität:**
-  - Lädt neueste APK-Release von GitHub herunter
-  - Berechnet SHA-256 Hash automatisch
-  - Aktualisiert `release.json` mit Versionsinformationen
-  - Funktioniert mit öffentlichen Repositories (kein Token nötig)
-  - Unterstützt optionalen Token für private Repos (aktuell nicht nötig)
-- **Repository:** FynnJS/Wartezeiten-App (public)
-- **Status:** ✅ Seit 2026-06-01 integriert und getestet
-- **GitHub-Actions-Fallstrick:** Lange Python-/Shell-Scripte nicht inline per Heredoc in `.github/workflows/*.yml` pflegen. YAML-Einrückung kann den Heredoc-Abschlussmarker beschädigen und den Build im Metadata-Step scheitern lassen. Release-Logik deshalb in versionierte Dateien unter `.github/scripts/` auslagern und im Workflow nur aufrufen.
-- **Release-APK-Pfad:** Die Pipeline darf nicht starr nur `app/build/outputs/apk/release/app-release.apk` erwarten. Bei Änderungen an Android Gradle Plugin, Build-Varianten oder Output-Namen soll das Script die `*.apk` im Release-Output-Verzeichnis ermitteln und bei fehlenden Dateien mit einer klaren Fehlermeldung abbrechen.
-- **Pflicht-Updates & APK-Signatur:** Erkennt die App in `website/release.json` einen höheren `versionCode`, blockiert sie die Nutzung mit einem nicht wegklickbaren Update-Screen bis zur Installation der neuen APK. GitHub-Release-APKs müssen mit einem stabilen Release-Keystore signiert werden; die Pipeline erwartet `RELEASE_KEYSTORE_BASE64`, `RELEASE_STORE_PASSWORD`, `RELEASE_KEY_ALIAS` und `RELEASE_KEY_PASSWORD` und bricht bei Release-Events ohne diese Secrets ab, damit Android-Update-Konflikte durch abweichende Signaturen vermieden werden.
-- **In-App-Update-Installation:** Der Update-Screen (`UpdateBanner.kt`/`UpdateViewModel.kt`) lädt die APK seit der In-App-Download-Funktion selbst über `update/ApkDownloader.kt` herunter (OkHttp, Fortschrittsanzeige) statt nur einen Browser-Intent auf `apkUrl` zu öffnen. Ist in `release.json` ein `sha256` hinterlegt, wird die heruntergeladene Datei vor der Installation geprüft und bei Abweichung verworfen. Die Installation selbst läuft über `update/ApkInstaller.kt`: fehlt die Berechtigung `REQUEST_INSTALL_PACKAGES`/"Installation aus unbekannten Quellen", öffnet ein Tap zunächst die passende Systemeinstellung; ein erneuter Tap startet danach den eigentlichen System-Installationsdialog per `ACTION_INSTALL_PACKAGE`. Ein vollständig klickloses Auto-Update ist außerhalb des Play Store android-seitig nicht möglich – der "Release"-Button bleibt als Browser-Fallback erhalten, falls der In-App-Download fehlschlägt. `release.json` kann lokalisierte Changelogs über `releaseNotesLocalized` (`de`, `en`, `fr`, `nl`) enthalten; die App wählt daraus anhand der eingestellten Sprache und zeigt die Liste vollständig scrollbar an.
+### Statistik & D1 (Cloudflare)
+**Zentrale Snapshot-Verwaltung:**
+- Worker sammelt per Cron in **versetzten 5-Minuten-Shards** (4 Park-Shards parallel)
+- D1: `attraction_history_snapshots` (Park/Zeit/Attraktionen) + `attraction_history_days` (Metadaten)
+- Legacy-KV-Fallback für alte Tagesstatistiken
 
-### Website-Updates (2026-06-01)
-- Website synchronisiert mit Live-Version
-- Modernere HTML/CSS-Struktur
-- Verbesserte Release-Info-Anzeige
-- Copy-to-Clipboard für SHA-256 Hash
-- GitHub Actions CI/CD vorbereitet (optional)
+**⚠️ D1-Fallstricke:**
+| Fallstrick | Lösung |
+|-----------|--------|
+| **Write-Reihenfolge** | Snapshots *parkweise* früh schreiben, nicht am Ende → Timeout → leere Statistiken |
+| **Schema-Guard** | `ensureAttractionHistoryD1` idempotent vor Reads/Writes |
+| **Cron-Subrequests** | Zu große Shards → "Too many subrequests" → leere Marker; `DEFAULT_CRON_SHARDS` anpassen |
+| **Retention** | `APP_DATA_D1_RETENTION_DAYS` (Default 14), alte Snapshots vor Writes löschen |
+| **Zeitstempel** | `captured_at_millis` = Worker-Zeit (`Date.now()`), nicht API-`datetime` |
+| **Parallele Queries** | GROUP-BY + JOIN beide parallel, nicht N sequenzielle Reads pro Park |
 
-### Live-Wartezeiten auf der Website (2026-06-28)
-Die Website bietet unter `website/wartezeiten.html` (+ `app.css`, `wartezeiten.js`) eine browserbasierte Variante der App-Kernfunktionen: Parksuche, aktuelle Wartezeiten/Öffnungszeiten/Auslastung pro Attraktion und eine Statistikansicht mit Datumsauswahl und Diagramm. Es ist eine einzelne statische Seite mit Client-seitigem Hash-Routing (`#park=parkKey`), kein Build-Schritt, keine Frontend-Abhängigkeiten.
-- **Neue Worker-Endpunkte:** `GET /api/parks?lang=de|en` (Parkliste, 1h Cache) und `GET /api/parks/{parkKey}/live?lang=de|en` (Öffnungszeiten, Auslastung, Wartezeiten je Attraktion, 30s Cache) proxyen direkt die Wartezeiten.APP-API in `worker/src/index.js`. Beide brauchen weder D1 noch KV und funktionieren daher auch lokal ohne vorherigen Cron-Lauf. `collectParkSnapshot` akzeptiert dafür zusätzlich `options.language` (Default weiterhin `de`, normalisiert über `normalizeApiLanguage`); bestehende Aufrufer ohne dieses Feld sind unverändert.
-- **Sortier-Parität:** `buildLiveParkResponse` sortiert Attraktionen wie die App standardmäßig nach höchster Wartezeit zuerst (offene vor geschlossenen/wartenden), damit die Website dieselbe Reihenfolge wie `WaitingTimesScreen` zeigt.
-- **Datenqualitäts-Banner-Parität:** `wartezeiten.js` portiert `isParkOpenWithoutWaitingTimeData` (siehe `ParkOpeningWindow.kt`) client-seitig als `isLikelyMissingWaitingTimeData`, da `openFrom`/`closedFrom` als ISO-Zeitstempel mit Offset über `Date.parse` bereits korrekt absolut sind und keine zusätzliche Zeitzonenkorrektur brauchen.
-- **Statistik-Quelle:** Die Browser-Statistikansicht nutzt dieselben bestehenden Endpunkte wie die App (`/app-data/statistics/index.json`, `.../dates.json`, `.../days/{date}.json`); es gibt keine separate Web-Statistik-API. Das Auslastungsdiagramm für "Auslastung (gesamt)" berechnet pro Tages-Snapshot eine geschätzte Auslastung client-seitig nach demselben Verfahren wie `estimateCrowdLevelFromAttractions` im Worker (Mittelwert + P75 der offenen Wartezeiten), da die Tagesdaten keinen vorberechneten Crowd-Level je Messpunkt enthalten.
-- **Attraktion anklicken → Statistik:** Zeilen in `#attractionList` sind Buttons; ein Klick ruft `selectStatsAttraction(item.id)` auf, das `#attractionSelect` auf diese Attraktion umstellt und zur Statistik scrollt. Das funktioniert nur, weil `toAttractionSnapshotItem()` im Worker für Live-Snapshots und für die D1-Tagesstatistik dieselbe ID-Herleitung verwendet (`item.id || item.uuid || stableAttractionId(item.name)`) - Live-Attraktions-IDs und Tages-Statistik-IDs sind dadurch für denselben Park identisch (verifiziert: alle 39 IDs eines Testparks stimmten überein). Ist die Statistik für den aktuellen Tag noch nicht geladen, merkt sich `pendingAttractionSelection` die Anfrage und wendet sie an, sobald `loadStatisticsDay()` fertig ist; beim Parkwechsel wird das zurückgesetzt.
-- **Diagramm-Hover:** `#statsChart` hat einen `mousemove`/`mouseleave`-Handler direkt auf dem `<svg>`-Root (kein zusätzliches Hit-Rect nötig, da der Listener nicht auf einer Kindform sitzt). `renderChart()` legt den aktuellen Render-Zustand (`points`, `toX`/`toY`-Skalierungsfunktionen, `valueSuffix`, `offsetSource`) in der Modul-Variable `chartState` ab; `handleChartHover()` mappt die Maus-X-Position über `getBoundingClientRect()` zurück in viewBox-Koordinaten (funktioniert nur, weil das SVG `preserveAspectRatio="none"` nutzt, also unabhängige X/Y-Skalierung hat) und positioniert ein HTML-`#chartTooltip` relativ zu `.stats-chart-wrap`.
-- **Lokal testen:** `npm run worker:dev` startet Website+Worker unter `http://localhost:8787/`; `wartezeiten` (Live-Seite) funktioniert sofort über die echte Wartezeiten.APP-API. Für Inhalte in der Statistikansicht muss die lokale D1-Instanz erst Messpunkte enthalten - dafür den Cron mehrfach manuell antriggern (siehe `website/CLOUDFLARE-APP-DATA.md`, Abschnitt "Lokal testen").
-- **Kein Park-Dropdown:** Es gab kurzzeitig ein zusätzliches `<select>` zur direkten Parkauswahl auf der Übersichtsseite; das wurde auf expliziten Nutzerwunsch wieder entfernt. Parkauswahl läuft bewusst nur über Suche, Kartenraster und die "Zuletzt angesehen"-Chips - kein generisches Dropdown ohne erneute Rückfrage hinzufügen.
-- **Ländernamen → Flagge:** `countryToFlag` in `wartezeiten.js` ist ein direkter Port von `countryToIsoCode`/`flagEmojiForCountryCode` aus `ParkListScreen.kt` (gleiche Ländernamen-Tabelle, gleiche Regional-Indicator-Berechnung über Codepoints). Die Wartezeiten.APP-API liefert in `land` volle Ländernamen (z.B. "Großbritannien", "Vereinigte Staaten"), keine ISO-Codes - die Tabelle muss bei neuen Parkländern in beiden Codebasen synchron erweitert werden.
-- **Zuletzt angesehen:** Die Parkübersicht zeigt wie die App eine "Zuletzt angesehen"-Chip-Zeile, gespeichert in `localStorage` (`wartezeiten-recent-parks`, max. 8 Einträge, neueste zuerst). Rein client-seitig, kein Server-Write.
-- **Status-/Wartezeit-Wortlaut:** `STATUS_LABELS` in `wartezeiten.js` übernimmt exakt die Texte aus `AttractionStatus.label()` (`WaitingTimesScreen.kt`): "Geöffnet" (nicht "Offen"), "Geschlossen", "Wetter" (eigener Status für `closedweather`, getrennt von "Geschlossen"), "Wartung", "Unbekannt". Die Attraktionszeile zeigt dafür einen farbigen Status-Punkt (wie `indicatorColor()` in der App) statt eines farbigen Pill-Badges - ein Pill-Badge-Stil wurde bewusst wieder entfernt, weil die App selbst nur einen dezenten Punkt + Statustext nutzt.
-- **Datenalter-Wortlaut:** `cacheAgeLabel()` in `wartezeiten.js` portiert exakt `Long?.cacheAgeLabel()` aus `WaitingTimesScreen.kt` ("gerade eben" / "vor X Minuten" / "vor 1 Stunde" / "vor X Stunden"), eingebettet in "Datenalter: …" analog zur App.
-- **Ladezustände:** `renderLoadingStatus()` zeigt einen kleinen CSS-Spinner (`.spinner`) vor dem Lade-Text, angelehnt an die Spinner+Text-Lademuster der App (`LoadingDetailState`, `WaitingTimesLoadingCard`).
+**Live-Quelle für Park-Filter:**
+- `/app-data/global-markers/latest.json` für aktuellen Park-Status
+- Fallback: lokale Öffnungs-/Wartezeiten-Scans
 
-### queue-times.com-Fallback für Live-Anzeige, D1-Statistik und Push/Watchlist (2026-07-01)
-Wartezeiten.app-Ausfälle (beobachtet: `/v1/parks` liefert HTTP 500, während `/v1/openingtimes`/`/v1/waitingtimes`/`/v1/crowdlevel` normal funktionieren) führten zu "Serverfehler"-Anzeigen in der App und "http error 500" auf der Website. Als Ausweichquelle wird `queue-times.com` genutzt.
-- **Kuratierte Zuordnungstabelle:** `worker/src/fallbackParks.js` (`FALLBACK_PARKS`/`FALLBACK_PARK_BY_KEY`) und `app/src/main/java/de/wartezeiten/app/data/remote/fallback/QueueTimesParkMapping.kt` enthalten dieselben ca. 40 manuell verifizierten `parkKey -> queueTimesId`-Einträge (wartezeiten-Park-Slug, Name, Land aus queue-times.com-Daten). Beide Listen werden manuell parallel gepflegt, kein automatischer Sync. Parks ohne eindeutige queue-times.com-Entsprechung (z.B. `caribeaquaticpark`, `traumatica`) sind bewusst ausgelassen statt geraten; bei Disney-/Universal-Parks ist Vorsicht geboten, da naives Namens-Matching zu Fehltreffern zwischen verschiedenen Resorts führt.
-- **Worker `/api/parks`:** Schlägt der Upstream-Aufruf fehl, liefert `buildFallbackParksResponse()` statt 502 ein HTTP 200 mit der kuratierten Liste und `degraded: true`/`source: "queue-times.com"`. Response-Form (`parkKey`/`name`/`land`) bleibt identisch zum Erfolgsfall.
-- **`collectParkSnapshot()` (zentral für Live-Route, D1-Statistik-Cron `updateAppData` und Push-Watchlist-Scan `runPushWatchlistScan`):** Schlägt `/v1/waitingtimes` fehl und existiert ein Mapping-Eintrag, holt `fetchQueueTimesWaitingItems()` die Ride-Liste von `queue-times.com/parks/{id}/queue_times.json` und mappt sie in die von `deriveAttractionSnapshotTiming()`/`toAttractionSnapshotItem()`/`attractionStatusCode()` erwartete wartezeiten-ähnliche Form (Status/Wartezeit/Zeitstempel) – diese Funktionen bleiben dabei unverändert. Attraktions-IDs werden bewusst mit `qt-` präfixiert, damit sie nie mit einer echten wartezeiten-UUID kollidieren. `openFrom`/`closedFrom`/`opened_today` bleiben von der echten `/v1/openingtimes`-Antwort (falls diese erfolgreich war); nur wenn auch das fehlt, wird `openedToday` grob aus "mindestens eine Attraktion gemeldet" abgeleitet. Der zurückgegebene Snapshot trägt zusätzlich `dataSource: "queue-times.com"`. Damit profitieren D1-Statistik und Push/Watchlist automatisch von diesem Fallback, ohne eigene Änderungen an `updateAppData`/`runPushWatchlistScan` – die Route `/api/parks/{parkKey}/live` braucht dadurch selbst keinen eigenen Fallback-Zweig mehr (nur noch ein 502, falls auch der interne Fallback fehlschlägt oder kein Mapping existiert).
-- **Attraktionshistorie/D1 während eines Fallback-Zeitraums:** Da queue-times.com-Attraktions-IDs (`qt-...`) nicht mit den echten wartezeiten-UUIDs übereinstimmen, erscheinen betroffene Attraktionen in der D1-Historie/Statistikgraphen für den Ausfallzeitraum als scheinbar neue, separate Einträge statt nahtlos an die bisherige Historie anzuknüpfen. Bewusst akzeptierter Trade-off, um Datenlücken zu vermeiden.
-- **Push/Watchlist-Alarme während eines Fallback-Zeitraums:** Park-weite Alarme (offener Status, Anzahl offener Attraktionen, aus Wartezeiten geschätzter Crowd-Level) laufen normal weiter. Attraktions-spezifische Alarme (`alert.attraction_id` gesetzt) finden ihre Ziel-Attraktion in den `qt-`-IDs nicht und lösen während des Ausfalls einfach nicht aus (kein Absturz, keine Falschmeldung) – siehe nächster Punkt.
-- **Wartezeit-Alarm-Fallstrick (erweitert):** `evaluatePushAlert()`s `WAIT_TIME_BELOW`/`WAIT_TIME_ABOVE`-Zweig wich früher bei gesetzter `attraction_id` auf `openAttractions` aus, wenn die Ziel-Attraktion im aktuellen Snapshot nicht gefunden wurde (`candidates = target ? [target] : openAttractions`) – das reproduziert exakt den bereits einmal gefixten "Wartezeit-Alarm-Fallstrick" (Notification nennt eine andere Attraktion als die eigentlich beobachtete), nur ausgelöst durch fehlende statt geschlossene Ziel-Attraktion. Durch den queue-times-Fallback (andere Attraktions-IDs) tritt "Ziel nicht gefunden" jetzt systematisch auf, nicht mehr nur als Rand-Fall. Fix: `candidates = alert.attraction_id ? (target ? [target] : []) : openAttractions` – bei gesetzter `attraction_id` ohne Treffer gibt es keine Kandidaten (kein Alarm), analog zu den anderen Alarmtypen, die bereits `if (!target) return null;` nutzen.
-- **Website:** `wartezeiten.js`/`wartezeiten.html` zeigen bei `degraded`/`dataSource === "queue-times.com"` je einen eigenen Banner (`#parksDegradedBanner`, `#fallbackSourceBanner`, analog zum bestehenden `#dataGapBanner`-Muster), die beim Park-/Ansichtswechsel zurückgesetzt werden.
-- **Android Parkliste:** `DefaultWartezeitenRepository.refreshParks()` sät die kuratierte Liste nur in Room ein, wenn die lokale Parktabelle beim Fehlschlag leer ist (Neuinstallation während eines Ausfalls); der ursprüngliche Fehler wird trotzdem zurückgegeben, damit der bestehende Offline-Banner greift. Keine Room-Migration nötig.
-- **Android Wartezeiten:** `refreshParkDetail()` nutzt bei `NetworkError.Server` für `/v1/waitingtimes` und vorhandenem Mapping-Eintrag `QueueTimesApiService` (neue Retrofit-Instanz, `NetworkModule.kt`) als Ersatzquelle; `is_open`/`wait_time` werden auf die bestehende `WaitingTimeDto`/`AttractionStatus`-Parsing-Logik abgebildet (`"opened"`/`"closed"`). Welche Parks aktuell über Fallback laufen, ist rein transient im Repository (`observeFallbackWaitTimeSourceParkKeys()`, kein Room-Feld) und wird in `WaitingTimesViewModel`/`WaitingTimesScreen.kt` analog zu `isWaitingTimeDataLikelyMissing`/`WaitingTimeDataGapBanner` als eigener `FallbackWaitTimeSourceBanner` angezeigt. Der Android-Fallback ist unabhängig vom Worker-seitigen `collectParkSnapshot`-Fallback (eigener Retrofit-Call), betrifft aber ebenfalls nur die Live-Anzeige der App, nicht D1/Push (die serverseitig im Worker laufen).
+### Statistik-UI
+- **Heutige Daten:** Initial nur "heute" wenn zentrale Daten vorhanden, sonst `latestDate`
+- **Heutige Snapshots:** Keine zukünftigen Messpunkte im Graph anzeigen
+- **Ohne heutige Messpunkte:** Explizit anzeigen "Für heute noch keine zentralen Daten"
+- **Attraktions-Prognose:** 1-3h Vorhersage + bis zu 7 historische Vergleich-Tage (mind. 3 für konservative Aussagen)
+- **Trendabruf:** `/app-data/trend-history.json?parkKey={parkKey}` (Filter in D1-Query)
 
-### Website-Theming: Dark Mode als Standard, App-Farben (2026-06-28)
-Die Website ist standardmäßig im Dark Mode und umschaltbar (kein System-Theme-Follow, bewusste Nutzerentscheidung). Die Umsetzung:
-- **Default ohne JavaScript:** Die Dunkel-Werte stehen direkt auf `:root` in `website/styles.css`; ein `:root[data-theme='light']`-Block überschreibt sie. Ohne JS bleibt die Seite also korrekt dunkel (Progressive Enhancement), kein Flash von hellem Layout vor dem Theme-Umschalten.
-- **Umschalten ohne Flackern:** `website/theme.js` wird in `<head>` **vor** den Stylesheet-Links eingebunden (blockierend, absichtlich kein `defer`/`async`) und setzt `data-theme` auf `<html>` synchron aus `localStorage` (`wartezeiten-theme`), bevor irgendetwas gerendert wird. Der Button mit `id="themeToggle"` existiert auf `index.html` und `wartezeiten.html` identisch; `theme.js` verkabelt ihn erst nach `DOMContentLoaded`.
-- **Farben an die App angeglichen:** Die Tokens in `styles.css` (`--primary`, `--primary-dark`, `--primary-light`, `--on-primary`, `--bg`, `--bg-alt`, `--surface`, `--border`, `--text-primary`, `--text-secondary`) sind den exakten Hex-Werten aus `app/src/main/java/de/wartezeiten/app/ui/theme/Theme.kt` (Material3 Light-/DarkColorScheme) nachempfunden, nicht frei erfunden. `--surface` ist die Karten-Ebene (heller als `--bg` im Dark Mode für sichtbare Elevation), `--bg-alt` ist Section-Tönung; beide getrennt von `--bg` zu halten ist nötig, sonst verschwimmen Karten im Dark Mode mit dem Seitenhintergrund.
-- **Wartezeit-Farben sind bewusst theme-unabhängig:** `--wait-low`/`--wait-mid`/`--wait-high` (#4CAF50/#FFB300/#F44336) und `--status-maintenance` (#FF9800) entsprechen exakt den hartcodierten `Color(0xFF...)`-Werten in `WaitingTimesScreen.kt` (`waitTimeColor`, `indicatorColor()`) und ändern sich absichtlich NICHT zwischen Hell/Dunkel, weil die App es ebenso macht. `wartezeiten.js` (`waitColorClass`) wendet dieselben Schwellwerte (<30/<60/≥60 Minuten) auf den Wartezeit-Text an; der Status je Attraktion wird wie in der App über einen farbigen Punkt (`.status-dot`) signalisiert, nicht über ein farbiges Pill-Badge.
-- **Footer ist theme-invariant:** `.footer` nutzt feste `--footer-bg`/`--footer-text`/`--footer-link`-Tokens statt `--text-primary`, weil `--text-primary` selbst theme-abhängig ist - sonst würde der Footer im Dark Mode auf einen hellen Hintergrund mit weißer Schrift kippen (unsichtbarer Text). Banner (`.app-banner-warning`/`-error`) nutzen ebenfalls dedizierte `--warning-bg`/`--warning-text`/`--danger-bg`/`--danger-text`-Paare statt fixer Hex-Werte, damit sie in beiden Themes lesbar bleiben.
+### Multi-Park-Vergleich
+- Datenbasierter Screen in `ui/compare` (keine Park-Ratings mehr)
+- Read-only, max. 4 Parks, suchbar nach Name/Land
+- Kennzahlen aus aktuellen Wartezeiten berechnet
 
-## API-Nutzungsbedingungen & Attribution (PFLICHT)
+### Offline-/Such-/Share-UX
+- **Offline-Banner:** Netzwerkfehler + Cache → Banner mit Alter
+- **Suchhistorie:** Letzte 5 bestätigte Suchen in `PreferencesDataSource`
+- **Alias-Suche:** `app/src/main/assets/park_aliases.csv` (Code-Heuristik nur Fallback)
+- **Share:** Statistik-Screens → PNG via Android Sharesheet
+- **Zuletzt angesehen:** 8 Einträge in `PreferencesDataSource`, bei Deep-Link/Notification aktualisieren
 
-Die Nutzung der Wartezeiten.APP API setzt voraus, dass ein **sichtbarer und anklickbarer Link** zur Webseite [https://www.wartezeiten.app](https://www.wartezeiten.app) an einer **prominenten Stelle** in der App platziert wird.
+### Start-/Detail-UX
+- **Dashboard:** Zuletzt angesehene + Favoriten mit Öffnungs-/Wartezeit-Kennzahlen
+- **Parkdetails:** Offline-Banner, Datenqualitätskarte; als Text teilbar
+- **Attraktions-Details:** Route `parks/{parkKey}?attractionId={attractionId}` → Status, Verlauf, Prognose, Watchlist, Notiz
+- **Notizen:** Lokal in Room, bei Cache-Leerung erhalten bleiben
 
-### Aktuelle Implementierung
-Ein Attribution-Footer wurde in beiden Hauptscreens ergänzt:
-- `ParkListScreen.kt` – als `bottomBar` im `Scaffold`
-- `WaitingTimesScreen.kt` – als `bottomBar` im `Scaffold`
+### Homescreen-Widget (Jetpack Glance)
+- Speichert `park_key` + bis zu 3 Attraktions-IDs
+- Update via `refreshParkDetail`, öffnet Park per `wartezeiten://parks/{parkKey}`
+- Wartezeiten nur wenn Park geöffnet (`isParkCurrentlyOpen`)
+- **Update:** WorkManager alle 30min; manueller Refresh sofort + andere Instanzen
 
-Der Footer zeigt den Text **„Daten bereitgestellt von wartezeiten.app"** mit einem anklickbaren, unterstrichenen Link, der den Browser mit `https://www.wartezeiten.app` öffnet.
+### Cache-Verwaltung
+- **Löschen in Einstellungen:** API-/Statistik-Cache → Favoriten/Watchlist/Settings bleiben
 
-> **Wichtig:** Dieser Link darf **nicht entfernt** werden. Bei zukünftigen Umstrukturierungen der UI muss die Attribution weiterhin prominent sichtbar und anklickbar bleiben.
+### Mehrsprachigkeit (DE/EN/FR/NL)
+- **UI-Strings:** `localized(language, de = ..., en = ..., fr = ..., nl = ...)` (nicht if-ternaries)
+- **API-Calls:** `language.toApiLanguage()` (API nur de/en)
+- **Push-Texte:** Worker nutzt Installations-Sprache → `localizedPushText()` (4 Sprachen)
+- **Attraktions-ID:** Nutzt fest "de" (nicht UI-Sprache abhängig)
+- **Sprachauswahl-UI:** Mit Flagge + nativer Sprachname
+
+### "Was ist neu"-Dialog & Versioning
+- Einmalig nach Update, gesteuert via `lastSeenVersionCode` vs. `VERSION_CODE`
+- **Bei Release:** `WhatsNewRelease`-Eintrag in `WhatsNewContent.kt` mit derselben `versionCode`
+
+### ⚠️ Fallstricke
+| Fallstrick | Lösung |
+|-----------|--------|
+| **Encoding-Bug (v1.1.6)** | Mojibake statt UTF-8 (…→â€¦). Vor jedem Commit: `grep -n "â€"` prüfen |
+| **Heutiger Verlauf** | `buildAttractionHistorySeries` nicht `firstOrNull()` nutzen; `it.date == today` filtern |
+| **Wartezeit-Alarm-Kandidaten** | `candidates = alert.attraction_id ? (target ? [target] : []) : openAttractions` |
+| **Push-Prozent** | `formatPercent()` ganzzahlig runden |
+| **Watchlist-API-Fehler** | Park-Alarme brauchen `/v1/openingtimes`; Attraktionsalarme laufen auch ohne |
+
+## 5. Release & Signierung
+
+### Release-Keystore
+- **Permanent:** `scripts/configure-release-signing.ps1` erzeugt Keystore + Secrets
+- **Fingerprint:** Kanonisch in `config/release-signing.properties` (v1.1.8: `22fdba79064411c314def3932f4ea499b9480fc63522a5cc8a6c89f136567659`)
+- **Sicherung:** Außerhalb Repo aufbewahren, extern sichern
+- **GitHub Actions:** Secrets `RELEASE_KEYSTORE_BASE64`, `RELEASE_STORE_PASSWORD`, `RELEASE_KEY_ALIAS`, `RELEASE_KEY_PASSWORD`
+- **Verifikation:** `.github/scripts/verify-release-certificate.ps1` prüft fertige APK gegen Repo-Fingerprint
+
+### Release-Changelog & Website
+- **Changelog:** Eintrag vor Commit schreiben (wichtige Nutzer-/Tech-Änderungen)
+- **Website-Sync:** Automatisch von `main`-Branch → https://wartezeiten-app.tutorialfynn.workers.dev/
+- **In-App-Updates:** `website/release.json` mit `versionCode`, `apkUrl`, `sha256`, `releaseNotesLocalized`
+- **Download-Automation:** `website/download-from-github.ps1` lädt neueste APK + SHA-256
+- **In-App-Update-Installation:** `update/ApkDownloader.kt` + `update/ApkInstaller.kt`
+
+### GitHub-Actions-Fallstrick
+- Lange Python-/Shell-Scripte nicht inline per Heredoc in `.github/workflows/*.yml` → YAML-Einrückung beschädigt Abschlussmarker
+- Scripts stattdessen in `.github/scripts/` auslagern und aufrufen
+
+## 6. Website & Browser-Version
+
+### Live-Wartezeiten auf Website (2026-06-28)
+- **Seite:** `website/wartezeiten.html` (+ `app.css`, `wartezeiten.js`)
+- **Features:** Parksuche, aktuelle Wartezeiten/Öffnungszeiten, Statistik mit Diagramm
+- **Architektur:** Statische HTML + Client-seitiges Hash-Routing (`#park=parkKey`), keine Abhängigkeiten
+
+### Worker-API-Endpunkte
+- `GET /api/parks?lang=de|en` – Parkliste (1h Cache)
+- `GET /api/parks/{parkKey}/live?lang=de|en` – Wartezeiten/Öffnungszeiten/Auslastung (30s Cache)
+- Beide proxyen direkt wartezeiten.APP-API (keine D1/KV benötigt)
+
+### Website-Theming (Dark Mode Standard)
+- **Default ohne JS:** Dark Mode in `:root` von `styles.css`; Light Mode überschreibt via `:root[data-theme='light']`
+- **Umschalt-JS:** `website/theme.js` in `<head>` **vor** Stylesheets, setzt `data-theme` auf `<html>` sync aus `localStorage`
+- **Farben an App angeglichen:** Material3 Light-/DarkColorScheme Hex-Werte
+- **Wartezeit-Farben theme-invariant:** `--wait-low/#4CAF50`, `--wait-mid/#FFB300`, `--wait-high/#F44336` (wie App)
+- **Footer theme-invariant:** Feste `--footer-bg`/`--footer-text` statt `--text-primary`
+
+### queue-times.com-Fallback (2026-07-01)
+**Problem:** Wartezeiten.app-Ausfälle (z.B. `/v1/parks` HTTP 500)
+
+**Lösung:**
+- **Kuratierte Tabelle:** `worker/src/fallbackParks.js` + `app/.../QueueTimesParkMapping.kt` (ca. 40 Parks)
+- **Worker `/api/parks`:** `buildFallbackParksResponse()` bei Fehler → HTTP 200 + `degraded: true`, `source: "queue-times.com"`
+- **`collectParkSnapshot()`:** `fetchQueueTimesWaitingItems()` nutzt `queue-times.com/parks/{id}/queue_times.json`, mappt auf wartezeiten-Form
+- **Attraktions-IDs:** Mit `qt-` Prefix um UUID-Kollidionen zu vermeiden
+- **D1-Statistik:** `qt-` IDs erscheinen als separate Einträge (akzeptierter Trade-off)
+- **Push/Watchlist:** Park-Alarme laufen weiter; Attraktions-Alarme laden Ziel nicht → kein Alarm
+- **Website-Banner:** `#parksDegradedBanner`, `#fallbackSourceBanner` bei `degraded`/`dataSource === "queue-times.com"`
+- **Android-Fallback:** Separate `QueueTimesApiService` nur für App-Live-Anzeige
+
+## 7. Attribution & API-Nutzungsbedingungen (PFLICHT)
+
+**Wartezeiten.APP API Nutzung erfordert sichtbaren anklickbaren Link zu https://www.wartezeiten.app**
+
+### Implementierung
+- `ParkListScreen.kt` & `WaitingTimesScreen.kt` – `AttributionFooter` in `bottomBar`
+- Text: "Daten bereitgestellt von wartezeiten.app" (anklickbar, unterstrichen)
+- **DARF NICHT entfernt werden**
 
 ### Attribution & System-Navigationsleiste (Fallstrick)
-`AttributionBanner` (in `ui/components/AttributionFooter.kt`) hat selbst kein Insets-Handling und darf deshalb nur dort verwendet werden, wo Compose den Inhalt bereits über das Scaffold-`innerPadding` vor der System-Navigationsleiste schützt (z.B. als Element innerhalb des Scaffold-Inhalts/einer LazyColumn, wie in `ParkListScreen.kt` und `SettingsScreen.kt`). Wird die Attribution stattdessen direkt als `bottomBar`-Slot eines Scaffold übergeben (wie in `WaitingTimesScreen.kt` und `ParkCompareScreen.kt`), übernimmt Compose dort kein automatisches Insets-Handling – im Gegensatz zu Material3-Komponenten wie `NavigationBar`. Für `bottomBar`-Slots muss daher `AttributionFooter` (= `AttributionBanner` + `Modifier.navigationBarsPadding()`) verwendet werden, sonst wird der Footer-Text bei 3-Tasten-Navigation und teilweise bei Gestennavigation von den System-Buttons überdeckt.
+- **Als `bottomBar`-Slot:** `AttributionFooter` (= Banner + `Modifier.navigationBarsPadding()`) verwenden (nicht nur Banner)
+- **Als Inhalt:** Banner selbst ok (Scaffold-`innerPadding` schützt vor System-Buttons)
+
+## 8. Verifikations-Richtlinie
+
+Nach jeder Änderung **MUSS** geprüft werden:
+- **UI-Änderungen:** Visuell oder via UI-Inspektion
+- **Logik-Änderungen:** Tests oder manuelle Ausführung
+- **Misserfolge:** Dokumentieren und beheben
