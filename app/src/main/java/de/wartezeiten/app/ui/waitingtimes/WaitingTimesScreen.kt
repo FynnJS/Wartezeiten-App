@@ -77,6 +77,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.foundation.clickable
 import androidx.compose.ui.platform.LocalContext
@@ -128,6 +129,7 @@ fun WaitingTimesRoute(
         onAttractionClick = onAttractionClick,
         onParkStatisticsClick = onParkStatisticsClick,
         onAttractionStatisticsClick = onAttractionStatisticsClick,
+        onClearAttractionDetail = viewModel::clearAttractionDetail,
     )
 }
 
@@ -148,6 +150,7 @@ fun WaitingTimesScreen(
     onAttractionClick: (String, String) -> Unit,
     onParkStatisticsClick: (String) -> Unit,
     onAttractionStatisticsClick: (String, String) -> Unit,
+    onClearAttractionDetail: () -> Unit,
 ) {
     val context = LocalContext.current
     val snackbarHostState = remember { SnackbarHostState() }
@@ -244,7 +247,7 @@ fun WaitingTimesScreen(
                                     de = "Von Favoriten entfernen",
                                     en = "Remove from favorites",
                                     fr = "Retirer des favoris",
-                                    nl = "Verwijderen uit favorieten",
+                                    nl = "Verwijderen aus favorieten",
                                 )
                             } else {
                                 localized(
@@ -334,6 +337,7 @@ fun WaitingTimesScreen(
                 onAttractionClick = { attractionId ->
                     state.park?.let { park -> onAttractionClick(park.id, attractionId) }
                 },
+                onClearAttractionDetail = onClearAttractionDetail,
             )
         }
     }
@@ -399,6 +403,7 @@ private fun WaitingTimesContent(
     onAddWatchlistForAttraction: (String) -> Unit,
     onAttractionStatisticsClick: (String) -> Unit,
     onAttractionClick: (String) -> Unit,
+    onClearAttractionDetail: () -> Unit,
 ) {
     if (state.isLoading && (state.lastRefreshed == 0L)) {
         LoadingDetailState(language = state.language)
@@ -424,6 +429,7 @@ private fun WaitingTimesContent(
                         onSaveNote = onSaveAttractionNote,
                         onDeleteNote = onDeleteAttractionNote,
                         onAddWatchlist = { onAddWatchlistForAttraction(highlightedId) },
+                        onClearDetail = onClearAttractionDetail,
                     )
                 }
             }
@@ -591,8 +597,8 @@ private fun AttractionDetailSection(
     onSaveNote: (String) -> Unit,
     onDeleteNote: () -> Unit,
     onAddWatchlist: () -> Unit,
+    onClearDetail: () -> Unit,
 ) {
-    val context = LocalContext.current
     var draftNote by remember(item.attractionId, note) { mutableStateOf(note) }
     val noteHasChanges = draftNote.trim() != note.trim()
     OutlinedCard(
@@ -617,11 +623,17 @@ private fun AttractionDetailSection(
             }
 
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
+                val waitTimeColor = when {
+                    item.waitingTime == null -> item.status.indicatorColor()
+                    item.waitingTime < 30 -> Color(0xFF4CAF50)
+                    item.waitingTime < 60 -> Color(0xFFFFB300)
+                    else -> Color(0xFFF44336)
+                }
                 Text(
                     text = item.waitingTime?.let { "$it Min." } ?: item.status.label(language),
                     style = MaterialTheme.typography.headlineSmall,
                     fontWeight = FontWeight.Black,
-                    color = item.status.indicatorColor(),
+                    color = waitTimeColor,
                 )
             }
 
@@ -633,18 +645,25 @@ private fun AttractionDetailSection(
                     de = "Noch zu wenig vergleichbare Historie für eine Prognose.",
                     en = "Not enough comparable history for a forecast yet.",
                     fr = "Pas encore assez d'historique comparable pour une prévision.",
-                    nl = "Nog niet genoeg vergelijkbare historie voor een voorspelling.",
+                    nl = "Nog niet genoeg vergelijkbare historie voor eine voorspelling.",
+                ),
+                disclaimer = localized(
+                    language,
+                    de = "Geschätzte Vorschau (basiert auf Daten aus der Vergangenheit)",
+                    en = "Estimated preview only estimated (based on past data)",
+                    fr = "Aperçu uniquement estimé (basé sur des données passées)",
+                    nl = "Voorvertoning alleen geschat (gebaseerd op historische data)",
                 ),
             )
             WaitForecastChart(
-                title = localized(language, de = "Heutiger Verlauf", en = "Today's history", fr = "Historique du jour", nl = "Verloop van vandaag"),
+                title = localized(language, de = "Heutiger Verlauf", en = "Today's history", fr = "Historique du jour", nl = "Verloop van heute"),
                 points = history,
                 emptyText = localized(
                     language,
                     de = "Für diese Attraktion liegen heute noch keine zentralen Messpunkte vor.",
                     en = "No central measurements for this attraction today yet.",
                     fr = "Aucune mesure centrale pour cette attraction aujourd'hui pour le moment.",
-                    nl = "Nog geen centrale metingen voor deze attractie vandaag.",
+                    nl = "Nog geen centrale metingen voor diese attractie heute.",
                 ),
             )
 
@@ -683,8 +702,8 @@ private fun AttractionDetailSection(
                 TextButton(onClick = onAddWatchlist) {
                     Text(localized(language, de = "Alarm", en = "Notification", fr = "Alerte", nl = "Melding"))
                 }
-                TextButton(onClick = { park?.let { shareAttractionDetail(context, it, item, language) } }) {
-                    Text(localized(language, de = "Link teilen", en = "Share link", fr = "Partager le lien", nl = "Link delen"))
+                TextButton(onClick = onClearDetail) {
+                    Text(localized(language, de = "Entfernen", en = "Remove", fr = "Supprimer", nl = "Verwijderen"))
                 }
                 if (note.isNotBlank() || draftNote.isNotBlank()) {
                     TextButton(
@@ -724,12 +743,20 @@ private fun WaitForecastChart(
     title: String,
     points: List<AttractionWaitForecastPoint>,
     emptyText: String,
+    disclaimer: String? = null,
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
         Text(title, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
         if (points.size < 2) {
             Text(emptyText, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             return
+        }
+        if (disclaimer != null) {
+            Text(
+                text = disclaimer,
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
         }
         val sorted = remember(points) { points.sortedBy { it.localTime } }
         val maxWait = remember(sorted) {
@@ -758,6 +785,7 @@ private fun WaitForecastChart(
                 Text("${maxWait / 2}", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 Text("0", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
+            val neutralColor = MaterialTheme.colorScheme.onSurfaceVariant
             Canvas(
                 modifier = Modifier
                     .weight(1f)
@@ -785,9 +813,9 @@ private fun WaitForecastChart(
                 val y = yFor(point.expectedWaitMinutes)
                 if (index == 0) path.moveTo(x, y) else path.lineTo(x, y)
             }
-            drawPath(path, Color(0xFF2E7D32), style = Stroke(width = 3.dp.toPx()))
+            drawPath(path, neutralColor, style = Stroke(width = 3.dp.toPx(), cap = StrokeCap.Round))
             sorted.forEach { point ->
-                drawCircle(Color(0xFF2E7D32), 3.5.dp.toPx(), Offset(xFor(point), yFor(point.expectedWaitMinutes)))
+                drawCircle(neutralColor, 3.5.dp.toPx(), Offset(xFor(point), yFor(point.expectedWaitMinutes)))
             }
         }
         }
@@ -1076,7 +1104,7 @@ private fun VisitPlannerSection(
                                 de = "Aus Tagesplan entfernen",
                                 en = "Remove from day plan",
                                 fr = "Retirer du planning du jour",
-                                nl = "Verwijderen uit dagplanning",
+                                nl = "Verwijderen aus dagplanning",
                             ),
                         )
                     }
@@ -1438,7 +1466,7 @@ private fun WaitingTimeDataGapBanner(language: String) {
                         de = "Wartezeiten momentan nicht verfügbar",
                         en = "Wait times currently unavailable",
                         fr = "Temps d'attente actuellement indisponibles",
-                        nl = "Wachttijden momenteel niet beschikbaar",
+                        nl = "Wachttijden momenteel niet verfügbar",
                     ),
                     style = MaterialTheme.typography.bodySmall,
                     fontWeight = FontWeight.SemiBold,
@@ -1448,7 +1476,7 @@ private fun WaitingTimeDataGapBanner(language: String) {
                         language,
                         de = "Der Park ist laut Öffnungszeiten geöffnet, liefert aber seit der Öffnung keine Wartezeiten. Das liegt vermutlich an einer technischen Störung bei der Datenquelle, nicht an der App.",
                         en = "The park is reported as open, but no wait times have come in since opening. This is likely a temporary issue with the data source, not the app.",
-                        fr = "Le parc est annoncé comme ouvert, mais aucun temps d'attente n'a été reçu depuis l'ouverture. Il s'agit probablement d'un problème temporaire de la source de données, pas de l'application.",
+                        fr = "Le parc est annoncé comme ouvert, aber aucun temps d'attente n'a été reçu depuis l'ouverture. Il s'agit probablement d'un problème temporaire de la source de données, pas de l'application.",
                         nl = "Het park wordt als open gemeld, maar er zijn sinds de opening geen wachttijden binnengekomen. Dit is waarschijnlijk een tijdelijk probleem bij de databron, niet bij de app.",
                     ),
                     style = MaterialTheme.typography.labelSmall,
@@ -1622,43 +1650,7 @@ private fun shareParkDetail(context: Context, state: WaitingTimesUiState) {
     )
 }
 
-private fun shareAttractionDetail(context: Context, park: Park, item: WaitingTime, language: String) {
-    val text = buildString {
-        appendLine(item.name)
-        appendLine(park.name)
-        appendLine("Status: ${item.status.label(language)}")
-        item.waitingTime?.let { wait ->
-            appendLine(
-                localized(
-                    language,
-                    de = "Aktuelle Wartezeit: $wait Min.",
-                    en = "Current wait: $wait min",
-                    fr = "Temps d'attente actuel : $wait min",
-                    nl = "Huidige wachttijd: $wait min.",
-                )
-            )
-        }
-        appendLine()
-        appendLine(liveAttractionLink(park.id, item.attractionId))
-        appendLine("Web: https://wartezeiten-app.tutorialfynn.workers.dev/")
-    }
-    val intent = Intent(Intent.ACTION_SEND).apply {
-        type = "text/plain"
-        putExtra(Intent.EXTRA_SUBJECT, "${park.name} · ${item.name}")
-        putExtra(Intent.EXTRA_TEXT, text)
-    }
-    context.startActivity(
-        Intent.createChooser(
-            intent,
-            localized(language, de = "Attraktionslink teilen", en = "Share attraction link", fr = "Partager le lien de l'attraction", nl = "Attractielink delen"),
-        )
-    )
-}
-
 private fun liveParkLink(parkKey: String): String = "wartezeiten://parks/${Uri.encode(parkKey)}"
-
-private fun liveAttractionLink(parkKey: String, attractionId: String): String =
-    "wartezeiten://parks/${Uri.encode(parkKey)}?attractionId=${Uri.encode(attractionId)}"
 
 private fun Long?.cacheAgeLabel(language: String): String {
     val minutes = this ?: return localized(language, de = "unbekannt", en = "unknown", fr = "inconnu", nl = "onbekend")
@@ -1692,7 +1684,7 @@ private fun weatherInsight(weather: WeatherInfo, language: String): String {
             de = "Regenrisiko hoch - wetterbedingte Schließungen möglich",
             en = "High rain risk - weather closures possible",
             fr = "Risque de pluie élevé - fermetures possibles à cause du temps",
-            nl = "Hoog regenrisico - weergerelateerde sluitingen mogelijk",
+            nl = "Hoog regenrisico - weergerelateerde sluitingen möglich",
         )
         weather.temperature >= 30 -> localized(
             language,
@@ -1816,14 +1808,14 @@ private fun emptyAttractionMessage(state: WaitingTimesUiState): String {
             de = "Noch keine aktuellen Attraktionsdaten verfügbar.",
             en = "No current attraction data is available yet.",
             fr = "Aucune donnée d'attraction actuelle disponible pour le moment.",
-            nl = "Nog geen actuele attractiegegevens beschikbaar.",
+            nl = "Nog geen actuele attractiegegevens verfügbar.",
         )
         ParkOpeningTone.Open -> localized(
             language,
             de = "Noch keine aktuellen Attraktionsdaten verfügbar.",
             en = "No current attraction data is available yet.",
             fr = "Aucune donnée d'attraction actuelle disponible pour le moment.",
-            nl = "Nog geen actuele attractiegegevens beschikbaar.",
+            nl = "Nog geen actuele attractiegegevens verfügbar.",
         )
     }
 }

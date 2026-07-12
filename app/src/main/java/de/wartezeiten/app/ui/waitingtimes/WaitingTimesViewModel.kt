@@ -112,6 +112,7 @@ class WaitingTimesViewModel @Inject constructor(
 ) : ViewModel() {
     private val parkKey: String = checkNotNull(savedStateHandle["parkKey"])
     private val highlightedAttractionId: String? = savedStateHandle["attractionId"]
+    private val clearedAttractionDetail = MutableStateFlow(false)
     private val sort = MutableStateFlow(WaitingTimesSort.WaitDescending)
     private val filter = MutableStateFlow(AttractionFilter.All)
     private val attractionQuery = MutableStateFlow("")
@@ -172,8 +173,9 @@ class WaitingTimesViewModel @Inject constructor(
         repository.observeParkDetail(parkKey),
         filterState,
         loadState,
+        clearedAttractionDetail,
         detailAuxState,
-    ) { detail, filterState, status, aux ->
+    ) { detail, filterState, status, cleared, aux ->
         val (sort, filter, query, maxWait, plannedIds) = filterState
         val normalizedQuery = query.normalizedSearchText()
         val filtered = detail.waitingTimes
@@ -210,7 +212,7 @@ class WaitingTimesViewModel @Inject constructor(
                 currentLocalTime = status.currentTime,
                 parkStatistics = aux.parkStatistics,
                 language = status.language,
-                highlightedAttractionId = highlightedAttractionId,
+                highlightedAttractionId = if (clearedAttractionDetail.value) null else highlightedAttractionId,
                 highlightedAttractionNote = aux.note?.note.orEmpty(),
             )
         } else {
@@ -280,7 +282,7 @@ class WaitingTimesViewModel @Inject constructor(
                     waitingTime.attractionId to buildAttractionHistorySeries(waitingTime.attractionId, aux.historyDays, today)
                 },
                 language = status.language,
-                highlightedAttractionId = highlightedAttractionId,
+                highlightedAttractionId = if (clearedAttractionDetail.value) null else highlightedAttractionId,
                 highlightedAttractionNote = aux.note?.note.orEmpty(),
                 isWaitingTimeDataLikelyMissing = isWaitingTimeDataLikelyMissing,
                 usedFallbackWaitTimeSource = status.usedFallbackWaitTimeSource,
@@ -417,6 +419,10 @@ class WaitingTimesViewModel @Inject constructor(
         viewModelScope.launch {
             attractionNoteDao.deleteNote(parkKey, attractionId)
         }
+    }
+
+    fun clearAttractionDetail() {
+        clearedAttractionDetail.value = true
     }
 
     fun refresh(
