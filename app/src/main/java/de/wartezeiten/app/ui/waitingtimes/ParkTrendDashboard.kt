@@ -192,6 +192,7 @@ private fun ParkAverageWaitChart(
                 Text("${yMax / 2}", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 Text("0", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
+            val neutralColor = MaterialTheme.colorScheme.onSurfaceVariant
             Canvas(modifier = Modifier.weight(1f).fillMaxHeight()) {
                 val horizontalPadding = 4.dp.toPx()
                 val verticalPadding = 8.dp.toPx()
@@ -221,12 +222,12 @@ private fun ParkAverageWaitChart(
                 }
                 drawPath(
                     path = path,
-                    color = Color(0xFF2E7D32),
+                    color = neutralColor,
                     style = Stroke(width = 3.dp.toPx(), cap = StrokeCap.Round),
                 )
                 sortedPoints.takeLast(24).forEach { point ->
                     drawCircle(
-                        color = Color(0xFF2E7D32),
+                        color = neutralColor,
                         radius = 3.dp.toPx(),
                         center = Offset(xFor(point.capturedAtMillis), yFor(point.averageWaitMinutes)),
                     )
