@@ -3,6 +3,7 @@ package de.wartezeiten.app.ui.statistics
 import android.content.Context
 import android.content.Intent
 import android.graphics.Bitmap
+import android.net.Uri
 import android.widget.Toast
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.clickable
@@ -178,7 +179,7 @@ fun StatisticsScreen(
             LazyColumn(
                 modifier = Modifier.fillMaxSize(),
                 contentPadding = PaddingValues(16.dp),
-                verticalArrangement = Arrangement.spacedBy(14.dp),
+                verticalArrangement = Arrangement.spacedBy(16.dp),
             ) {
                 item {
                     StatisticsControlPanel(
@@ -190,25 +191,41 @@ fun StatisticsScreen(
                     )
                 }
 
-                state.errorMessage?.let { message ->
-                    item { ErrorCard(message = message, onRetry = onRefreshClick) }
-                }
-
-                if (state.isLoading && state.index.parks.isEmpty() && state.day == null) {
+                if (state.errorMessage != null) {
                     item {
-                        StatisticsLoadingCard(language = state.language)
+                        ErrorCard(
+                            message = state.errorMessage,
+                            onRetry = onRefreshClick,
+                        )
                     }
-                }
-
-                if (state.selectedAttractionId == null) {
-                    val parkStatistics = state.parkStatistics
-                    if (parkStatistics != null) {
-                        item {
-                            SelectedParkSummary(
-                                summary = parkStatistics,
-                                series = state.parkSeries,
+                } else if (state.day == null && !state.isLoading) {
+                    item {
+                        EmptyStatisticsState(
+                            parkName = state.selectedPark?.name,
+                            date = state.selectedDate,
+                            isSpecificAttraction = state.selectedAttractionId != null,
+                        )
+                    }
+                } else {
+                    item {
+                        if (state.selectedAttractionId == null) {
+                            state.parkStatistics?.let { summary ->
+                                SelectedParkSummary(summary, state.parkSeries)
+                            }
+                        } else if (state.selectedAttractionId != null && !state.isLoading && (state.day == null || state.day.snapshots.isEmpty())) {
+                            EmptyStatisticsState(
+                                parkName = state.selectedPark?.name,
+                                date = state.selectedDate,
+                                isSpecificAttraction = true,
                             )
+                        } else {
+                            state.selectedAttraction?.let { summary ->
+                                SelectedAttractionSummary(summary, state.selectedSeries)
+                            }
                         }
+                    }
+
+                    if (state.selectedAttractionId == null) {
                         item {
                             ParkAverageWaitChart(
                                 day = state.day,
@@ -216,72 +233,32 @@ fun StatisticsScreen(
                                 points = state.parkSeries,
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .height(220.dp),
+                                    .height(240.dp)
                             )
                         }
-                    } else if (!state.isLoading && (state.day != null || state.selectedDate == LocalDate.now().toString() || state.selectedDate == state.index.parks.firstOrNull { it.parkKey == state.selectedParkKey }?.latestDate)) {
+                    } else {
                         item {
-                            val parkLatest = state.index.parks.firstOrNull { it.parkKey == state.selectedParkKey }?.latestDate
-                            val treatAsToday = state.selectedDate == LocalDate.now().toString() || state.selectedDate == parkLatest
-                            EmptyStatisticsState(
-                                selectedName = state.selectedPark?.name,
+                            AttractionHistoryChart(
+                                day = state.day,
                                 selectedDate = state.selectedDate,
-                                treatAsToday = treatAsToday,
+                                points = state.selectedSeries,
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(240.dp)
                             )
                         }
                     }
-                }
 
-                val selectedAttraction = state.selectedAttraction
-                if (state.day != null && selectedAttraction != null) {
                     item {
-                        SelectedAttractionSummary(
-                            attraction = selectedAttraction,
-                            series = state.selectedSeries,
-                        )
+                        MonthOverviewSection(buckets = state.monthBuckets)
                     }
-                    item {
-                        AttractionHistoryChart(
-                            day = state.day,
-                            selectedDate = state.selectedDate,
-                            points = state.selectedSeries,
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .height(220.dp),
-                        )
-                    }
-                } else if (state.selectedAttractionId != null && !state.isLoading && (state.day == null || state.day.snapshots.isEmpty())) {
-                    item {
-                        val parkLatest = state.index.parks.firstOrNull { it.parkKey == state.selectedParkKey }?.latestDate
-                        val treatAsToday = state.selectedDate == LocalDate.now().toString() || state.selectedDate == parkLatest
-                        EmptyStatisticsState(
-                            selectedName = state.selectedAttractionName ?: state.selectedPark?.name,
-                            selectedDate = state.selectedDate,
-                            treatAsToday = treatAsToday,
-                        )
-                    }
-                }
 
-                if (state.monthBuckets.isNotEmpty()) {
-                    item {
-                        MonthOverviewSection(months = state.monthBuckets)
-                    }
-                }
-
-                state.day?.attractions?.let { attractions ->
-                    if (attractions.isNotEmpty()) {
-                        item {
-                            Text(
-                                localized(state.language, de = "Attraktionen an diesem Tag", en = "Attractions on this day", fr = "Attractions ce jour-là", nl = "Attracties op deze dag"),
-                                style = MaterialTheme.typography.titleSmall,
-                                fontWeight = FontWeight.Bold,
-                            )
-                        }
-                        items(attractions, key = { it.id }) { attraction ->
+                    if (state.selectedAttractionId == null && state.day != null) {
+                        items(state.day.attractions.sortedByDescending { it.averageWaitMinutes }) { attraction ->
                             AttractionSummaryRow(
-                                attraction = attraction,
+                                summary = attraction,
                                 selected = attraction.id == state.selectedAttractionId,
-                                onClick = { onAttractionSelected(attraction.id) },
+                                onClick = { onAttractionSelected(attraction.id) }
                             )
                         }
                     }
@@ -332,47 +309,6 @@ private fun shareStatisticsScreenshot(
 }
 
 @Composable
-private fun StatisticsLoadingCard(language: String) {
-    Surface(
-        modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(14.dp),
-        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.75f),
-        contentColor = MaterialTheme.colorScheme.onSurfaceVariant,
-    ) {
-        Row(
-            modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(12.dp),
-        ) {
-            CircularProgressIndicator(modifier = Modifier.size(22.dp), strokeWidth = 2.5.dp)
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = localized(
-                        language,
-                        de = "Statistik wird geladen",
-                        en = "Loading statistics",
-                        fr = "Chargement des statistiques",
-                        nl = "Statistieken worden geladen",
-                    ),
-                    style = MaterialTheme.typography.labelLarge,
-                    fontWeight = FontWeight.Bold,
-                )
-                Text(
-                    text = localized(
-                        language,
-                        de = "Zentrale Messpunkte und Tagesdaten werden abgeglichen.",
-                        en = "Central measurements and daily data are being checked.",
-                        fr = "Les mesures centrales et les données du jour sont vérifiées.",
-                        nl = "Centrale meetpunten en daggegevens worden gecontroleerd.",
-                    ),
-                    style = MaterialTheme.typography.bodySmall,
-                )
-            }
-        }
-    }
-}
-
-@Composable
 private fun StatisticsControlPanel(
     state: StatisticsUiState,
     onParkSelected: (String) -> Unit,
@@ -380,90 +316,61 @@ private fun StatisticsControlPanel(
     onAttractionSelected: (String) -> Unit,
     onParkStatisticsSelected: () -> Unit,
 ) {
-    OutlinedCard(
-        modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(14.dp),
-        colors = CardDefaults.outlinedCardColors(containerColor = MaterialTheme.colorScheme.surface),
-    ) {
-        Column(
-            modifier = Modifier.padding(14.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
-        ) {
-            Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxWidth()) {
-                DropdownField(
-                    label = "Park",
-                    value = state.selectedPark?.name ?: state.selectedParkKey ?: "-",
-                    modifier = Modifier.weight(1f),
-                ) { close ->
-                    val indexedParkKeys = state.index.parks.map { it.parkKey }.toSet()
-                    val indexedItems = state.index.parks.map { parkIndex ->
-                        val park = state.parks.firstOrNull { it.matchesParkKey(parkIndex.parkKey) }
-                        parkIndex.parkKey to (park?.name ?: parkIndex.parkKey)
-                    }
-                    val fallbackItems = state.parks
-                        .filter { it.id !in indexedParkKeys && it.uuid !in indexedParkKeys }
-                        .map { it.id to it.name }
-                    (indexedItems + fallbackItems).forEach { (parkKey, parkName) ->
-                        DropdownMenuItem(
-                            text = { Text(parkName) },
-                            onClick = {
-                                onParkSelected(parkKey)
-                                close()
-                            },
-                        )
-                    }
-                }
-                DropdownField(
-                    label = "Datum",
-                    value = formatDateLabel(state.selectedDate),
-                    modifier = Modifier.weight(1f),
-                ) { close ->
-                    state.availableDates.sortedDescending().forEach { date ->
-                        DropdownMenuItem(
-                            text = { Text(formatDateLabel(date)) },
-                            onClick = {
-                                onDateSelected(date)
-                                close()
-                            },
-                        )
-                    }
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            DropdownField(
+                label = localized(state.language, de = "Park", en = "Park", fr = "Parc", nl = "Park"),
+                value = state.selectedPark?.name ?: state.selectedParkKey ?: "-",
+                modifier = Modifier.weight(1.3f)
+            ) { onDismiss ->
+                state.parks.forEach { park ->
+                    DropdownMenuItem(
+                        text = { Text(park.name) },
+                        onClick = {
+                            onParkSelected(park.id)
+                            onDismiss()
+                        }
+                    )
                 }
             }
 
             DropdownField(
-                label = "Ansicht",
-                value = state.selectedAttractionName ?: "Parkstatistik",
-                modifier = Modifier.fillMaxWidth(),
-            ) { close ->
-                DropdownMenuItem(
-                    text = { Text("Parkstatistik") },
-                    onClick = {
-                        onParkStatisticsSelected()
-                        close()
-                    },
-                )
-                state.attractionOptions.forEach { attraction ->
+                label = localized(state.language, de = "Datum", en = "Date", fr = "Date", nl = "Datum"),
+                value = state.selectedDate,
+                modifier = Modifier.weight(1f)
+            ) { onDismiss ->
+                state.availableDates.reversed().forEach { date ->
                     DropdownMenuItem(
-                        text = { Text(attraction.name, maxLines = 1, overflow = TextOverflow.Ellipsis) },
+                        text = { Text(formatDateLabel(date)) },
                         onClick = {
-                            onAttractionSelected(attraction.id)
-                            close()
-                        },
+                            onDateSelected(date)
+                            onDismiss()
+                        }
                     )
                 }
             }
+        }
 
-            Row(
-                modifier = Modifier.horizontalScroll(rememberScrollState()),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                state.availableDates.sortedDescending().take(12).forEach { date ->
-                    FilterChip(
-                        selected = date == state.selectedDate,
-                        onClick = { onDateSelected(date) },
-                        label = { Text(formatShortDateLabel(date)) },
-                    )
+        DropdownField(
+            label = localized(state.language, de = "Attraktion", en = "Attraction", fr = "Attraction", nl = "Attractie"),
+            value = state.selectedAttraction?.name ?: localized(state.language, de = "Durchschnitt (Park)", en = "Average (Park)", fr = "Moyenne (Parc)", nl = "Gemiddelde (Park)"),
+            modifier = Modifier.fillMaxWidth()
+        ) { onDismiss ->
+            DropdownMenuItem(
+                text = { Text(localized(state.language, de = "Auslastung (gesamt)", en = "Total crowd", fr = "Fréquentation totale", nl = "Totale drukte")) },
+                onClick = {
+                    onParkStatisticsSelected()
+                    onDismiss()
                 }
+            )
+            state.attractionOptions.forEach { attraction ->
+                DropdownMenuItem(
+                    text = { Text(attraction.name) },
+                    onClick = {
+                        onAttractionSelected(attraction.id)
+                        onDismiss()
+                    }
+                )
             }
         }
     }
@@ -474,67 +381,61 @@ private fun DropdownField(
     label: String,
     value: String,
     modifier: Modifier = Modifier,
-    content: @Composable (() -> Unit) -> Unit,
+    content: @Composable (onDismiss: () -> Unit) -> Unit
 ) {
     var expanded by remember { mutableStateOf(false) }
     Box(modifier = modifier) {
         OutlinedCard(
-            modifier = Modifier
-                .fillMaxWidth()
-                .clickable { expanded = true },
+            onClick = { expanded = true },
             shape = RoundedCornerShape(12.dp),
+            modifier = Modifier.fillMaxWidth()
         ) {
             Row(
                 modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
                 verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                horizontalArrangement = Arrangement.spacedBy(4.dp)
             ) {
                 Column(modifier = Modifier.weight(1f)) {
                     Text(label, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     Text(value, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 }
-                Icon(Icons.Default.KeyboardArrowDown, contentDescription = null)
+                Icon(Icons.Default.KeyboardArrowDown, contentDescription = null, modifier = Modifier.size(20.dp))
             }
         }
         DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
-            Box(modifier = Modifier.width(320.dp)) {
-                Column {
-                    content { expanded = false }
-                }
-            }
+            content { expanded = false }
         }
     }
 }
 
 @Composable
 private fun SelectedAttractionSummary(
-    attraction: AttractionHistorySummary,
-    series: List<AttractionChartPoint>,
+    summary: AttractionHistorySummary,
+    points: List<AttractionChartPoint>,
 ) {
-    val openValues = series.filter { it.value >= 0 }.map { it.value }
-    val statusText = series.lastOrNull()?.value?.let(::valueLabel) ?: attraction.lastValue?.let(::valueLabel) ?: "-"
-    val averageWaitText = openValues.takeIf { it.isNotEmpty() }
-        ?.let { "${String.format(Locale.GERMAN, "%.1f", it.average())} Min." }
-        ?: "-"
-    val minWaitText = openValues.minOrNull()?.toString() ?: "-"
-    val maxWaitText = openValues.maxOrNull()?.toString() ?: "-"
-    val closedCount = series.count { it.value < 0 || it.statusCode < 0 }
     OutlinedCard(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(14.dp),
-        colors = CardDefaults.outlinedCardColors(containerColor = MaterialTheme.colorScheme.primaryContainer),
+        colors = CardDefaults.outlinedCardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
     ) {
         Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            Text(attraction.name, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-            Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxWidth()) {
-                StatTile("Ø Wartezeit", averageWaitText, Modifier.weight(1f))
-                StatTile("Min/Max", "$minWaitText / $maxWaitText", Modifier.weight(1f))
-                StatTile("Zuletzt", statusText, Modifier.weight(1f))
-            }
-            Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxWidth()) {
-                StatTile("Messpunkte", series.size.toString(), Modifier.weight(1f))
-                StatTile("Offen", openValues.size.toString(), Modifier.weight(1f))
-                StatTile("Geschlossen", closedCount.toString(), Modifier.weight(1f))
+            Text(summary.name, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                StatTile(
+                    label = "Durchschnitt",
+                    value = summary.averageWaitMinutes.minutesText(),
+                    modifier = Modifier.weight(1f)
+                )
+                StatTile(
+                    label = "Min / Max",
+                    value = "${summary.minWaitMinutes ?: "-"} / ${summary.maxWaitMinutes ?: "-"}",
+                    modifier = Modifier.weight(1f)
+                )
+                StatTile(
+                    label = "Messpunkte",
+                    value = "${summary.sampleCount ?: 0}",
+                    modifier = Modifier.weight(0.8f)
+                )
             }
         }
     }
@@ -542,43 +443,40 @@ private fun SelectedAttractionSummary(
 
 @Composable
 private fun StatTile(label: String, value: String, modifier: Modifier = Modifier) {
-    Surface(
-        modifier = modifier,
-        shape = RoundedCornerShape(10.dp),
-        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.7f),
-    ) {
-        Column(modifier = Modifier.padding(10.dp)) {
-            Text(value, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Black)
-            Text(label, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        }
+    Column(modifier = modifier) {
+        Text(value, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Black)
+        Text(label, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
     }
 }
 
 @Composable
 private fun SelectedParkSummary(
     summary: ParkStatisticsSummary,
-    series: List<ParkChartPoint>,
+    points: List<ParkChartPoint>,
 ) {
     OutlinedCard(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(14.dp),
-        colors = CardDefaults.outlinedCardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer),
+        colors = CardDefaults.outlinedCardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.3f))
     ) {
         Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            Text("Parkdurchschnitt", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-            Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxWidth()) {
-                StatTile("Ø Wartezeit", summary.averageWaitMinutes.minutesText(), Modifier.weight(1f))
+            Text("Park-Durchschnitt", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 StatTile(
-                    "Min/Max",
-                    "${summary.minAverageWaitMinutes.minutesText()} / ${summary.maxAverageWaitMinutes.minutesText()}",
-                    Modifier.weight(1f),
+                    label = "Ø Wartezeit",
+                    value = summary.averageWaitMinutes.minutesText(),
+                    modifier = Modifier.weight(1f)
                 )
-                StatTile("Zuletzt", summary.latestAverageWaitMinutes.minutesText(), Modifier.weight(1f))
-            }
-            Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxWidth()) {
-                StatTile("Messpunkte", series.size.toString(), Modifier.weight(1f))
-                StatTile("Offen zuletzt", summary.latestOpenAttractionCount.toString(), Modifier.weight(1f))
-                StatTile("Attraktionen", series.maxOfOrNull { it.openAttractionCount }?.toString() ?: "-", Modifier.weight(1f))
+                StatTile(
+                    label = "Messpunkte",
+                    value = "${summary.sampleCount}",
+                    modifier = Modifier.weight(0.8f)
+                )
+                StatTile(
+                    label = "Offen",
+                    value = "${summary.latestOpenAttractionCount}",
+                    modifier = Modifier.weight(0.8f)
+                )
             }
         }
     }
@@ -660,6 +558,7 @@ private fun AttractionHistoryChart(
                         Text("$label", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                 }
+                val neutralColor = MaterialTheme.colorScheme.onSurfaceVariant
                 Canvas(
                     modifier = Modifier
                         .weight(1f)
@@ -699,14 +598,14 @@ private fun AttractionHistoryChart(
                     }
                     drawPath(
                         path = path,
-                        color = Color(0xFF1565C0),
+                        color = neutralColor,
                         style = Stroke(width = 3.dp.toPx(), cap = StrokeCap.Round),
                     )
                     waitPoints.forEach { point ->
                         val x = xFor(point.capturedAtMillis)
                         val y = yFor(point.value.toFloat())
                         drawCircle(
-                            color = Color(0xFF1565C0),
+                            color = neutralColor,
                             radius = 3.dp.toPx(),
                             center = Offset(x, y),
                         )
@@ -834,6 +733,7 @@ private fun ParkAverageWaitChart(
                         Text("$label", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                 }
+                val neutralColor = MaterialTheme.colorScheme.onSurfaceVariant
                 Canvas(
                     modifier = Modifier
                         .weight(1f)
@@ -871,14 +771,14 @@ private fun ParkAverageWaitChart(
                     }
                     drawPath(
                         path = path,
-                        color = Color(0xFF2E7D32),
+                        color = neutralColor,
                         style = Stroke(width = 3.dp.toPx(), cap = StrokeCap.Round),
                     )
                     visiblePoints.forEach { point ->
                         val x = xFor(point.capturedAtMillis)
                         val y = yFor(point.averageWaitMinutes)
                         drawCircle(
-                            color = Color(0xFF2E7D32),
+                            color = neutralColor,
                             radius = 3.dp.toPx(),
                             center = Offset(x, y),
                         )
@@ -905,23 +805,20 @@ private fun ParkAverageWaitChart(
 }
 
 @Composable
-private fun MonthOverviewSection(months: List<StatisticsMonthBucket>) {
-    OutlinedCard(modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(14.dp)) {
-        Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            Text("Monatsübersicht", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
-            Row(
-                modifier = Modifier.horizontalScroll(rememberScrollState()),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                months.forEach { month ->
-                    Surface(
-                        shape = RoundedCornerShape(10.dp),
-                        color = MaterialTheme.colorScheme.secondaryContainer,
-                    ) {
-                        Column(modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp)) {
-                            Text(formatMonthLabel(month.month), style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold)
-                            Text("${month.dayCount} Tage", style = MaterialTheme.typography.labelSmall)
-                        }
+private fun MonthOverviewSection(buckets: List<StatisticsMonthBucket>) {
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Text("Monats-Überblick", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .horizontalScroll(rememberScrollState()),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            buckets.forEach { bucket ->
+                OutlinedCard(shape = RoundedCornerShape(12.dp)) {
+                    Column(modifier = Modifier.padding(12.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                        Text(formatMonthLabel(bucket.month), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text("${bucket.dayCount} Tage", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold)
                     }
                 }
             }
@@ -931,7 +828,7 @@ private fun MonthOverviewSection(months: List<StatisticsMonthBucket>) {
 
 @Composable
 private fun AttractionSummaryRow(
-    attraction: AttractionHistorySummary,
+    summary: AttractionHistorySummary,
     selected: Boolean,
     onClick: () -> Unit,
 ) {
@@ -941,102 +838,69 @@ private fun AttractionSummaryRow(
             .clickable(onClick = onClick),
         shape = RoundedCornerShape(12.dp),
         colors = CardDefaults.outlinedCardColors(
-            containerColor = if (selected) MaterialTheme.colorScheme.secondaryContainer else MaterialTheme.colorScheme.surface,
-        ),
+            containerColor = if (selected) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surface
+        )
     ) {
         Row(
             modifier = Modifier.padding(12.dp),
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(10.dp),
+            horizontalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             Column(modifier = Modifier.weight(1f)) {
-                Text(attraction.name, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
-                Text(
-                    "Ø ${attraction.averageWaitMinutes?.let { String.format(Locale.GERMAN, "%.1f", it) } ?: "-"} Min. · ${attraction.sampleCount} Messpunkte",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
+                Text(summary.name, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
+                Text("${summary.sampleCount} Messpunkte", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
-            Text(valueLabel(attraction.lastValue), style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold)
-            if (selected) {
-                Icon(Icons.Default.Check, contentDescription = null, modifier = Modifier.size(18.dp))
-            }
+            Text(
+                summary.averageWaitMinutes.minutesText(),
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold
+            )
         }
     }
 }
 
 @Composable
 private fun ErrorCard(message: String, onRetry: () -> Unit) {
-    Surface(
+    OutlinedCard(
         modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(12.dp),
-        color = MaterialTheme.colorScheme.errorContainer,
-        contentColor = MaterialTheme.colorScheme.onErrorContainer,
+        colors = CardDefaults.outlinedCardColors(containerColor = MaterialTheme.colorScheme.errorContainer)
     ) {
-        Row(
-            modifier = Modifier.padding(12.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(10.dp),
-        ) {
-            Text(message, modifier = Modifier.weight(1f), style = MaterialTheme.typography.bodyMedium)
-            TextButton(onClick = onRetry) { Text("Neu laden") }
+        Column(modifier = Modifier.padding(16.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Text(message, color = MaterialTheme.colorScheme.onErrorContainer, style = MaterialTheme.typography.bodyMedium)
+            TextButton(onClick = onRetry) { Text("Erneut versuchen", color = MaterialTheme.colorScheme.onErrorContainer) }
         }
     }
 }
 
 @Composable
-private fun EmptyStatisticsState(
-    selectedName: String?,
-    selectedDate: String,
-    treatAsToday: Boolean = false,
-) {
-    val isToday = treatAsToday || selectedDate == LocalDate.now().toString()
-    OutlinedCard(modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(14.dp)) {
-        Column(
-            modifier = Modifier.padding(18.dp),
-            verticalArrangement = Arrangement.spacedBy(6.dp),
-        ) {
-            Text(
-                text = selectedName ?: "Keine Attraktion ausgewählt",
-                style = MaterialTheme.typography.titleSmall,
-                fontWeight = FontWeight.Bold,
-            )
-            Text(
-                text = if (isToday) {
-                    "Für heute wurden noch keine Messpunkte gesammelt. Der Park ist möglicherweise noch nicht geöffnet oder bleibt heute geschlossen."
-                } else {
-                    "Für diese Auswahl liegen keine zentralen Tagesdaten vor. Wurde der Park an diesem Tag nicht geöffnet, gibt es keinen Verlauf."
-                },
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-        }
+private fun EmptyStatisticsState(parkName: String?, date: String, isSpecificAttraction: Boolean) {
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 40.dp),
+        contentAlignment = Alignment.Center
+    ) {
+        Text(
+            text = if (isSpecificAttraction) {
+                "Für diese Attraktion liegen an diesem Tag keine Messpunkte vor."
+            } else {
+                "Für diesen Tag liegen keine zentralen Messpunkte für ${parkName ?: "den Park"} vor."
+            },
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(horizontal = 24.dp)
+        )
     }
 }
 
-private fun valueLabel(value: Int?): String {
-    return when (value) {
-        null -> "-"
-        -1 -> "geschlossen"
-        -2 -> "Wetter"
-        -3 -> "Wartung"
-        -4 -> "unbekannt"
-        else -> "$value Min."
-    }
+private fun statusColor(statusCode: Int): Color = when (statusCode) {
+    -1 -> Color(0xFFF44336)
+    -2 -> Color(0xFF1565C0)
+    -3 -> Color(0xFFFF9800)
+    else -> Color.Gray
 }
 
-private fun statusColor(statusCode: Int): Color {
-    return when (statusCode) {
-        -3 -> Color(0xFF9E7D00)
-        -2 -> Color(0xFFEF6C00)
-        -1 -> Color(0xFFC62828)
-        else -> Color(0xFF616161)
-    }
-}
-
-private fun Float?.minutesText(): String {
-    return this?.let { "${String.format(Locale.GERMAN, "%.1f", it)} Min." } ?: "-"
-}
+private fun Float?.minutesText(): String = if (this == null) "-" else "${this.toInt()} Min"
 
 private fun calculateAxisBounds(
     timestamps: List<Long>,
@@ -1045,33 +909,18 @@ private fun calculateAxisBounds(
     firstOpenAtMillis: Long?,
     selectedDate: String,
     nowMillis: Long,
-    parkLocalToday: String? = null,
+    parkLocalToday: String,
 ): Pair<Long, Long> {
-    val firstSample = timestamps.minOrNull() ?: 0L
-    val lastSample = timestamps.maxOrNull() ?: (firstSample + 1)
-    val parkOpen = openFrom?.parseInstantMillis()
-    val parkClose = closedFrom?.parseInstantMillis()
-    val start = when {
-        parkOpen != null && firstOpenAtMillis != null -> minOf(parkOpen, firstOpenAtMillis)
-        parkOpen != null -> parkOpen
-        firstOpenAtMillis != null -> firstOpenAtMillis
-        else -> firstSample
-    }
-    val rawEnd = parkClose ?: lastSample
-    // Use provided parkLocalToday (computed with park zone) or fallback to device for "no future" cap
-    val effectiveToday = parkLocalToday ?: LocalDate.now().toString()
-    val end = if (selectedDate == effectiveToday) {
-        minOf(rawEnd, maxOf(nowMillis, lastSample))
-    } else {
-        rawEnd
-    }
-    return start.coerceAtMost(lastSample) to end.coerceAtLeast(start + 1)
+    val openAt = openFrom?.let { Instant.parse(it).toEpochMilli() }
+    val closedAt = closedFrom?.let { Instant.parse(it).toEpochMilli() }
+    
+    val min = openAt ?: firstOpenAtMillis ?: timestamps.minOrNull() ?: 0L
+    val max = closedAt ?: timestamps.maxOrNull() ?: (min + 1L)
+
+    return min to max
 }
 
-private fun String.parseInstantMillis(): Long? {
-    return runCatching { OffsetDateTime.parse(this).toInstant().toEpochMilli() }
-        .getOrElse { runCatching { Instant.parse(this).toEpochMilli() }.getOrNull() }
-}
+private fun String.parseInstantMillis(): Long? = runCatching { Instant.parse(this).toEpochMilli() }.getOrNull()
 
 private fun String?.toOffsetZoneIdOrNull(): ZoneId? {
     return this?.let { value ->
@@ -1080,56 +929,41 @@ private fun String?.toOffsetZoneIdOrNull(): ZoneId? {
 }
 
 private fun calculateNiceYAxisMax(maxValue: Int): Int {
-    val step = calculateNiceTickStep(maxValue.coerceAtLeast(1))
-    return ceil(maxValue.coerceAtLeast(step).toFloat() / step).toInt()
-        .times(step)
-        .coerceAtLeast(step * 2)
+    if (maxValue <= 0) return 60
+    return ((maxValue + 19) / 20) * 20
 }
 
-private fun calculateNiceTickStep(maxValue: Int): Int {
+private fun calculateNiceTickStep(yMax: Int): Int {
     return when {
-        maxValue <= 10 -> 5
-        maxValue <= 40 -> 10
-        maxValue <= 80 -> 20
-        maxValue <= 200 -> 50
-        else -> 100
+        yMax <= 60 -> 20
+        yMax <= 120 -> 30
+        else -> 60
     }
 }
 
-private fun formatDateLabel(value: String): String {
+private fun formatDateLabel(isoDate: String): String {
     return runCatching {
-        LocalDate.parse(value).format(DateTimeFormatter.ofPattern("dd.MM.yyyy", Locale.GERMAN))
-    }.getOrElse { value }
+        val date = LocalDate.parse(isoDate)
+        date.format(DateTimeFormatter.ofPattern("dd.MM.yyyy"))
+    }.getOrElse { isoDate }
 }
 
-private fun formatShortDateLabel(value: String): String {
+private fun formatShortDateLabel(isoDate: String): String {
     return runCatching {
-        LocalDate.parse(value).format(DateTimeFormatter.ofPattern("dd.MM.", Locale.GERMAN))
-    }.getOrElse { value }
+        val date = LocalDate.parse(isoDate)
+        date.format(DateTimeFormatter.ofPattern("dd.MM."))
+    }.getOrElse { isoDate }
 }
 
-private fun formatMonthLabel(value: String): String {
+private fun formatMonthLabel(monthKey: String): String {
     return runCatching {
-        val month = YearMonth.parse(value)
-        val name = month.month.getDisplayName(TextStyle.SHORT, Locale.GERMAN)
-        "$name ${month.year}"
-    }.getOrElse { value }
+        val ym = YearMonth.parse(monthKey)
+        ym.month.getDisplayName(TextStyle.FULL, Locale.GERMAN) + " " + ym.year
+    }.getOrElse { monthKey }
 }
 
-private fun Park.matchesParkKey(parkKey: String): Boolean {
-    val normalizedKey = parkKey.normalizedParkKey()
-    return id == parkKey ||
-            uuid == parkKey ||
-            id.normalizedParkKey() == normalizedKey ||
-            uuid.normalizedParkKey() == normalizedKey ||
-            name.normalizedParkKey() == normalizedKey
-}
-
-private fun String.normalizedParkKey(): String {
-    return lowercase()
-        .replace("ä", "ae")
-        .replace("ö", "oe")
-        .replace("ü", "ue")
-        .replace("ß", "ss")
-        .filter { it.isLetterOrDigit() }
+private fun Park.matchesParkKey(parkKey: String?): Boolean {
+    if (parkKey == null) return false
+    val normKey = parkKey.lowercase().trim()
+    return id.lowercase().trim() == normKey || uuid.lowercase().trim() == normKey
 }
