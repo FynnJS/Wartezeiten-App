@@ -39,6 +39,7 @@ data class StatisticsUiState(
     val day: AttractionHistoryDay? = null,
     val language: String = PreferencesDataSource.DEFAULT_LANGUAGE,
     val isLoading: Boolean = false,
+    val isDataFallbackToPreviousDay: Boolean = false,
     val errorMessage: String? = null,
 ) {
     val availableDates: List<String>
@@ -289,8 +290,14 @@ class StatisticsViewModel @Inject constructor(
     }
 
     fun selectDate(date: String) {
+        val deviceToday = LocalDate.now().toString()
         mutableState.update {
-            it.copy(selectedDate = date, day = null, errorMessage = null)
+            it.copy(
+                selectedDate = date,
+                day = null,
+                errorMessage = null,
+                isDataFallbackToPreviousDay = false // Reset before loading
+            )
         }
         loadSelectedDay()
     }
@@ -307,7 +314,7 @@ class StatisticsViewModel @Inject constructor(
         val parkKey = mutableState.value.selectedParkKey ?: return
         val date = mutableState.value.selectedDate
         viewModelScope.launch {
-            mutableState.update { it.copy(isLoading = true, errorMessage = null) }
+            mutableState.update { it.copy(isLoading = true, errorMessage = null, isDataFallbackToPreviousDay = false) }
             when (val result = repository.getAttractionHistoryDay(parkKey, date)) {
                 is ApiResult.Success -> {
                     mutableState.update { state ->
@@ -320,6 +327,10 @@ class StatisticsViewModel @Inject constructor(
                                 currentAttractions = currentAttractions.value,
                                 latestDate = indexedLatest,
                             )
+                        val deviceToday = LocalDate.now().toString()
+                        val isTodaySelected = date == deviceToday || date == "Heute" || date == "Today"
+                        val isFallback = day != null && day.date != deviceToday && isTodaySelected
+                        
                         state.copy(
                             day = day,
                             selectedAttractionId = selectKnownAttractionId(
@@ -330,27 +341,33 @@ class StatisticsViewModel @Inject constructor(
                                 day = day,
                             ),
                             isLoading = false,
+                            isDataFallbackToPreviousDay = isFallback,
                         )
                     }
                 }
                 is ApiResult.Error -> {
                     val currentState = mutableState.value
                     val indexedLatest = currentState.index.parks.firstOrNull { it.parkKey == parkKey }?.latestDate
+                    val deviceToday = LocalDate.now().toString()
+                    val isTodaySelected = date == deviceToday || date == "Heute" || date == "Today"
                     val isMissingToday = result.type == NetworkError.NotFound &&
-                        (date == LocalDate.now().toString() || date == indexedLatest)
+                        (date == deviceToday || date == indexedLatest || isTodaySelected)
                     val language = preferences.language.first()
                     mutableState.update { state ->
                         if (isMissingToday) {
+                            val day = buildCurrentDaySnapshot(
+                                parkKey = parkKey,
+                                date = date,
+                                parks = state.parks,
+                                currentAttractions = currentAttractions.value,
+                                latestDate = indexedLatest,
+                            )
+                            val isFallback = day != null && day.date != deviceToday && isTodaySelected
                             state.copy(
-                                day = buildCurrentDaySnapshot(
-                                    parkKey = parkKey,
-                                    date = date,
-                                    parks = state.parks,
-                                    currentAttractions = currentAttractions.value,
-                                    latestDate = indexedLatest,
-                                ),
+                                day = day,
                                 isLoading = false,
                                 errorMessage = null,
+                                isDataFallbackToPreviousDay = isFallback,
                             )
                         } else {
                             state.copy(isLoading = false, errorMessage = result.type.toUserMessage(language))
