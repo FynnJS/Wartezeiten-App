@@ -4,13 +4,38 @@
   "releaseDate": "2026-07-13",
   "releasePageUrl": "https://github.com/FynnJS/Wartezeiten-App/releases/tag/v1.2.3",
   "apkUrl": "https://github.com/FynnJS/Wartezeiten-App/releases/download/v1.2.3/wartezeiten-app-1.2.3.apk",
-  "apkSize": "4.2",
+  "apkSize": "4.16",
   "releaseNotes": [
-    "## v1.2.3 - 2026-07-13",
-    "- Refined waiting-times, park-list, and statistics screens with more consistent loading states, clearer error banners, and smoother pull-to-refresh behavior.",
-    "- Improved park-list filtering and statistics detail presentation for clearer headers and empty states.",
-    "- Hardened trend and wait-time data mapping and refresh timing to reduce UI inconsistencies.",
-    "- Bumped Android release metadata to `versionCode 10203` / `versionName 1.2.3`."
+    "Refined the waiting-times, park-list, and statistics screens with more consistent loading states, clearer error banners, and smoother pull-to-refresh behavior.",
+    "Improved park-list filtering and loading flow, plus the statistics detail view now presents headers and empty states more cleanly.",
+    "Hardened the data mapping and refresh timing for trend and wait-time data to reduce UI inconsistencies.",
+    "Bumped Android release metadata to `versionCode 10203` / `versionName 1.2.3`."
   ],
+  "releaseNotesLocalized": {
+    "de": [
+      "Refined the waiting-times, park-list, and statistics screens with more consistent loading states, clearer error banners, and smoother pull-to-refresh behavior.",
+      "Improved park-list filtering and loading flow, plus the statistics detail view now presents headers and empty states more cleanly.",
+      "Hardened the data mapping and refresh timing for trend and wait-time data to reduce UI inconsistencies.",
+      "Bumped Android release metadata to `versionCode 10203` / `versionName 1.2.3`."
+    ],
+    "en": [
+      "Refined the waiting-times, park-list, and statistics screens with more consistent loading states, clearer error banners, and smoother pull-to-refresh behavior.",
+      "Improved park-list filtering and loading flow, plus the statistics detail view now presents headers and empty states more cleanly.",
+      "Hardened the data mapping and refresh timing for trend and wait-time data to reduce UI inconsistencies.",
+      "Bumped Android release metadata to `versionCode 10203` / `versionName 1.2.3`."
+    ],
+    "fr": [
+      "Refined the waiting-times, park-list, and statistics screens with more consistent loading states, clearer error banners, and smoother pull-to-refresh behavior.",
+      "Improved park-list filtering and loading flow, plus the statistics detail view now presents headers and empty states more cleanly.",
+      "Hardened the data mapping and refresh timing for trend and wait-time data to reduce UI inconsistencies.",
+      "Bumped Android release metadata to `versionCode 10203` / `versionName 1.2.3`."
+    ],
+    "nl": [
+      "Refined the waiting-times, park-list, and statistics screens with more consistent loading states, clearer error banners, and smoother pull-to-refresh behavior.",
+      "Improved park-list filtering and loading flow, plus the statistics detail view now presents headers and empty states more cleanly.",
+      "Hardened the data mapping and refresh timing for trend and wait-time data to reduce UI inconsistencies.",
+      "Bumped Android release metadata to `versionCode 10203` / `versionName 1.2.3`."
+    ]
+  },
   "showBanner": true
 }
