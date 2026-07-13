@@ -29,6 +29,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material3.CardDefaults
@@ -189,6 +190,39 @@ fun StatisticsScreen(
                         onAttractionSelected = onAttractionSelected,
                         onParkStatisticsSelected = onParkStatisticsSelected,
                     )
+                }
+
+                val deviceToday = LocalDate.now().toString()
+                val isTodaySelected = state.selectedDate == deviceToday || state.selectedDate == "Heute" || state.selectedDate == "Today"
+                val isFallback = state.isDataFallbackToPreviousDay || (state.day != null && state.day.date != deviceToday && isTodaySelected)
+                if (isFallback) {
+                    item {
+                        Surface(
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(12.dp),
+                            color = MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.4f),
+                            contentColor = MaterialTheme.colorScheme.onTertiaryContainer,
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(12.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                            ) {
+                                Icon(Icons.Default.Info, contentDescription = null, modifier = Modifier.size(20.dp))
+                                Text(
+                                    text = localized(
+                                        state.language,
+                                        de = "Für heute liegen noch keine zentralen Messpunkte vor. Es werden die Daten vom Vortag angezeigt.",
+                                        en = "No central measurements available for today yet. Data from the previous day is shown.",
+                                        fr = "Aucune mesure centrale disponible pour aujourd'hui pour le moment. Les données de la veille sont affichées.",
+                                        nl = "Nog geen centrale metingen beschikbaar voor heute. Gegevens van de vorige dag worden weergegeven.",
+                                    ),
+                                    style = MaterialTheme.typography.bodySmall,
+                                    fontWeight = FontWeight.Medium,
+                                )
+                            }
+                        }
+                    }
                 }
 
                 if (state.errorMessage != null) {
