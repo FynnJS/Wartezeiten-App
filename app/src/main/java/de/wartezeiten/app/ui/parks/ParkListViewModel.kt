@@ -49,8 +49,8 @@ data class ParkListUiState(
     val sort: ParkSort = ParkSort.Name,
     val recommendation: ParkRecommendation? = null,
     val recommendations: List<ParkRecommendation> = emptyList(),
-    val isRecommendationLoading: Boolean = false,
-    val recommendationScanStatus: String? = null,
+    val isOpenStatusScanning: Boolean = false,
+    val openStatusScanStatus: String? = null,
     val language: String = PreferencesDataSource.DEFAULT_LANGUAGE,
     val totalParkCount: Int = 0,
     val visibleCountryCount: Int = 0,
@@ -118,8 +118,8 @@ class ParkListViewModel @Inject constructor(
     private val sort = MutableStateFlow(ParkSort.Name)
     private val isLoading = MutableStateFlow(value = false)
     private val openParkDataLoadCount = MutableStateFlow(0)
-    private val isRecommendationLoading = MutableStateFlow(value = false)
-    private val recommendationScanProgress = MutableStateFlow<ParkRecommendationScanProgress?>(null)
+    private val isOpenStatusScanning = MutableStateFlow(value = false)
+    private val openStatusScanProgress = MutableStateFlow<ParkRecommendationScanProgress?>(null)
     private val currentLanguage = MutableStateFlow(PreferencesDataSource.DEFAULT_LANGUAGE)
     private val errorMessage = MutableStateFlow<String?>(null)
     private val refreshTrigger = MutableStateFlow(0)
@@ -127,7 +127,7 @@ class ParkListViewModel @Inject constructor(
     private val isStatisticsIndexLoading = MutableStateFlow(false)
     private val parkAliases = MutableStateFlow<Map<String, List<String>>>(emptyMap())
     private var refreshJob: Job? = null
-    private var recommendationRefreshJob: Job? = null
+    private var openStatusScanJob: Job? = null
 
     private val allParks = repository.observeParks(null)
     private val currentAttractions = repository.observeCurrentAttractions()
@@ -152,9 +152,8 @@ class ParkListViewModel @Inject constructor(
         showOpenOnly,
         showFavoritesOnly,
         sort,
-        recommendations,
-        isRecommendationLoading,
-        recommendationScanProgress,
+        isOpenStatusScanning,
+        openStatusScanProgress,
         currentLanguage,
         isLoading,
         openParkDataLoadCount,
@@ -185,18 +184,17 @@ class ParkListViewModel @Inject constructor(
         val openOnly = safeCast(7, false, "openOnly")
         val favoritesOnly = safeCast(8, false, "favoritesOnly")
         val currentSort = safeCast(9, ParkSort.Name, "sort")
-        val currentRecommendations = safeCast(10, emptyList<ParkRecommendation>(), "recommendations")
-        val recommendationLoading = safeCast(11, false, "recLoading")
-        val scanProgress = safeCast<ParkRecommendationScanProgress?>(12, null, "scanProgress")
-        val language = safeCast(13, PreferencesDataSource.DEFAULT_LANGUAGE, "language")
-        val loading = safeCast(14, false, "loading")
-        val openParkDataLoading = (safeCast(15, 0, "dataLoadCount")) > 0
-        val error = safeCast<String?>(16, null, "error")
-        val trigger = safeCast(17, 0, "trigger")
-        val statsIndex = safeCast(18, StatisticsIndex(generatedAtMillis = 0L, parks = emptyList()), "statsIndex")
-        val statsLoading = safeCast(19, false, "statsLoading")
-        val aliases = safeCast(20, emptyMap<String, List<String>>(), "aliases")
-        val usingFallbackParkList = safeCast(21, false, "usingFallback")
+        val scanLoading = safeCast(10, false, "scanLoading")
+        val scanProgress = safeCast<ParkRecommendationScanProgress?>(11, null, "scanProgress")
+        val language = safeCast(12, PreferencesDataSource.DEFAULT_LANGUAGE, "language")
+        val loading = safeCast(13, false, "loading")
+        val openParkDataLoading = (safeCast(14, 0, "dataLoadCount")) > 0
+        val error = safeCast<String?>(15, null, "error")
+        val trigger = safeCast(16, 0, "trigger")
+        val statsIndex = safeCast(17, StatisticsIndex(generatedAtMillis = 0L, parks = emptyList()), "statsIndex")
+        val statsLoading = safeCast(18, false, "statsLoading")
+        val aliases = safeCast(19, emptyMap<String, List<String>>(), "aliases")
+        val usingFallbackParkList = safeCast(20, false, "usingFallback")
 
         val favorites = parks.filter { it.isFavorite }
         val recent = currentRecentParkKeys.mapNotNull { key ->
@@ -247,10 +245,8 @@ class ParkListViewModel @Inject constructor(
             showOpenOnly = openOnly,
             showFavoritesOnly = favoritesOnly,
             sort = currentSort,
-            recommendation = currentRecommendations.firstOrNull(),
-            recommendations = currentRecommendations,
-            isRecommendationLoading = recommendationLoading && currentRecommendations.isEmpty(),
-            recommendationScanStatus = scanProgress?.toStatusText(language),
+            isOpenStatusScanning = scanLoading,
+            openStatusScanStatus = scanProgress?.toStatusText(language),
             language = language,
             totalParkCount = parks.size,
             visibleCountryCount = filtered.map { it.country }.distinct().size,
@@ -318,7 +314,7 @@ class ParkListViewModel @Inject constructor(
         viewModelScope.launch {
             preferences.language.distinctUntilChanged().collect { language ->
                 currentLanguage.value = language
-                refresh(language = language, showFeedback = false, refreshRecommendations = false)
+                refresh(language = language, showFeedback = false, triggerScan = false)
             }
         }
     }
@@ -372,7 +368,7 @@ class ParkListViewModel @Inject constructor(
         val enabled = !showOpenOnly.value
         showOpenOnly.value = enabled
         if (enabled) {
-            refreshRecommendationsInBackground(currentLanguage.value)
+            scanOpenStatusInBackground(currentLanguage.value)
         }
     }
 
@@ -407,7 +403,7 @@ class ParkListViewModel @Inject constructor(
         language: String = currentLanguage.value,
         silent: Boolean = false,
         showFeedback: Boolean = !silent,
-        refreshRecommendations: Boolean = !silent,
+        triggerScan: Boolean = !silent,
     ) {
         refreshJob?.cancel()
         refreshJob = viewModelScope.launch {
@@ -417,8 +413,8 @@ class ParkListViewModel @Inject constructor(
                 is ApiResult.Success -> {
                     repository.refreshPublicAppData()
                     if (showFeedback) refreshTrigger.value += 1
-                    if (refreshRecommendations) {
-                        refreshRecommendationsInBackground(language)
+                    if (triggerScan && showOpenOnly.value) {
+                        scanOpenStatusInBackground(language)
                     }
                 }
                 is ApiResult.Error -> {
@@ -460,20 +456,20 @@ class ParkListViewModel @Inject constructor(
         }
     }
 
-    private fun refreshRecommendationsInBackground(language: String) {
-        recommendationRefreshJob?.cancel()
-        recommendationRefreshJob = viewModelScope.launch {
-            isRecommendationLoading.value = true
+    private fun scanOpenStatusInBackground(language: String) {
+        openStatusScanJob?.cancel()
+        openStatusScanJob = viewModelScope.launch {
+            isOpenStatusScanning.value = true
             beginOpenParkDataLoad()
-            recommendationScanProgress.value = null
+            openStatusScanProgress.value = null
             try {
                 repository.refreshParkRecommendationSnapshots(language) { progress ->
-                    recommendationScanProgress.value = progress.takeIf { it.totalParks > 0 }
+                    openStatusScanProgress.value = progress.takeIf { it.totalParks > 0 }
                 }
             } finally {
-                recommendationScanProgress.value = null
+                openStatusScanProgress.value = null
                 endOpenParkDataLoad()
-                isRecommendationLoading.value = false
+                isOpenStatusScanning.value = false
             }
         }
     }
@@ -487,13 +483,12 @@ class ParkListViewModel @Inject constructor(
     }
 
     private fun ParkRecommendationScanProgress.toStatusText(language: String): String {
-        val remaining = estimatedRemainingMillis.toRemainingTimeText(language)
         return localized(
             language,
-            de = "Scan läuft: $completedParks/$totalParks Parks · $remaining verbleibend",
-            en = "Scan running: $completedParks/$totalParks parks · $remaining left",
-            fr = "Analyse en cours : $completedParks/$totalParks parcs · $remaining restant",
-            nl = "Scan loopt: $completedParks/$totalParks parken · $remaining resterend",
+            de = "Parks werden gescannt.\n$completedParks/$totalParks Parks gescannt",
+            en = "Parks are being scanned.\n$completedParks/$totalParks parks scanned",
+            fr = "Les parcs sont en cours d'analyse.\n$completedParks/$totalParks parcs analysés",
+            nl = "Parken worden gescand.\n$completedParks/$totalParks parken gescand",
         )
     }
 
