@@ -265,7 +265,7 @@ fun ParkListScreen(
                     }
                 }
 
-                item {
+                item(key = "search_bar") {
                     OutlinedTextField(
                         value = state.query,
                         onValueChange = onQueryChange,

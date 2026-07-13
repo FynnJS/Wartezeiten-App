@@ -371,7 +371,9 @@ class ParkListViewModel @Inject constructor(
     fun onToggleOpenOnly() {
         val enabled = !showOpenOnly.value
         showOpenOnly.value = enabled
-        if (enabled) refreshRecommendationsInBackground(currentLanguage.value)
+        if (enabled) {
+            refreshRecommendationsInBackground(currentLanguage.value)
+        }
     }
 
     fun onToggleFavoritesOnly() {
