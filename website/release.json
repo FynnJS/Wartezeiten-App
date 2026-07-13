@@ -1,16 +1,16 @@
 {
-  "versionName": "1.2.2",
-  "versionCode": 10202,
-  "releaseDate": "2026-07-08",
-  "releasePageUrl": "https://github.com/FynnJS/Wartezeiten-App/releases/tag/v1.2.2",
-  "apkUrl": "https://github.com/FynnJS/Wartezeiten-App/releases/download/v1.2.2/wartezeiten-app-1.2.2.apk",
+  "versionName": "1.2.3",
+  "versionCode": 10203,
+  "releaseDate": "2026-07-13",
+  "releasePageUrl": "https://github.com/FynnJS/Wartezeiten-App/releases/tag/v1.2.3",
+  "apkUrl": "https://github.com/FynnJS/Wartezeiten-App/releases/download/v1.2.3/wartezeiten-app-1.2.3.apk",
   "apkSize": "4.2",
   "releaseNotes": [
-    "## v1.2.2 - 2026-07-08",
-    "- Statistics graphs and 'today' data now correctly use the park's local timezone (fixes wrong day for US/Asia parks when viewed from other timezones).",
-    "- Hardened APK downloader, push error handling, lifecycle scopes, and type safety for improved stability.",
-    "- Fixed percentile math for crowd levels and notification ID collisions.",
-    "- Bumped Android release metadata to `versionCode 10202` / `versionName 1.2.2`."
+    "## v1.2.3 - 2026-07-13",
+    "- Refined waiting-times, park-list, and statistics screens with more consistent loading states, clearer error banners, and smoother pull-to-refresh behavior.",
+    "- Improved park-list filtering and statistics detail presentation for clearer headers and empty states.",
+    "- Hardened trend and wait-time data mapping and refresh timing to reduce UI inconsistencies.",
+    "- Bumped Android release metadata to `versionCode 10203` / `versionName 1.2.3`."
   ],
   "showBanner": true
 }

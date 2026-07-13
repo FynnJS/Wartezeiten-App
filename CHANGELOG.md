@@ -1,5 +1,12 @@
 # Changelog
 
+## v1.2.3 - 2026-07-13
+
+- Refined the waiting-times, park-list, and statistics screens with more consistent loading states, clearer error banners, and smoother pull-to-refresh behavior.
+- Improved park-list filtering and loading flow, plus the statistics detail view now presents headers and empty states more cleanly.
+- Hardened the data mapping and refresh timing for trend and wait-time data to reduce UI inconsistencies.
+- Bumped Android release metadata to `versionCode 10203` / `versionName 1.2.3`.
+
 ## v1.2.2 - 2026-07-08
 
 - Fixed statistics and statistic graphs to use the park's local timezone for "today" instead of the device's timezone. Parks in the USA (or other timezones) now correctly show the current local day's data and history even when viewed late at night or early morning from Germany.

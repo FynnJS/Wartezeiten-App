@@ -25,6 +25,30 @@ data class WhatsNewRelease(
 
 val WHATS_NEW_RELEASES = listOf(
     WhatsNewRelease(
+        versionCode = 10203,
+        versionName = "1.2.3",
+        highlightsDe = listOf(
+            "Wartezeiten-, Parklisten- und Statistik-Ansichten wurden weiter verfeinert: Ladezustände, Fehlerbanner und Pull-to-refresh wirken jetzt konsistenter und verständlicher.",
+            "Die Parkliste und die Statistik-Detailansicht profitieren von saubereren Refresh- und Filter-Logiken sowie einer verbesserten Darstellung von Headern und Empty States.",
+            "Die Datenzuordnung und Aktualisierungslogik für Trends und Wartezeiten wurde robuster gemacht, damit die UI weniger inkonsistent wirkt.",
+        ),
+        highlightsEn = listOf(
+            "Waiting-times, park list, and statistics views were refined further so loading states, error banners, and pull-to-refresh feel more consistent and clearer.",
+            "The park list and statistics detail view benefit from cleaner refresh and filter logic, plus improved headers and empty-state presentation.",
+            "Trend and wait-time data mapping and refresh timing were made more robust to reduce UI inconsistencies.",
+        ),
+        highlightsFr = listOf(
+            "Les vues des temps d'attente, de la liste des parcs et des statistiques ont été affinées pour rendre les états de chargement, les bannières d'erreur et le pull-to-refresh plus cohérents et plus clairs.",
+            "La liste des parcs et la vue détaillée des statistiques profitent d'une logique de rafraîchissement et de filtre plus propre, ainsi que d'une meilleure présentation des en-têtes et des états vides.",
+            "Le mapping des données de tendance et des temps d'attente, ainsi que la logique de rafraîchissement, ont été rendus plus robustes pour limiter les incohérences de l'interface.",
+        ),
+        highlightsNl = listOf(
+            "De weergaven voor wachttijden, parkenlijst en statistieken zijn verder verfijnd, zodat laadstatussen, foutbanners en pull-to-refresh consistenter en duidelijker aanvoelen.",
+            "De parkenlijst en de detailweergave van statistieken profiteren van schonere refresh- en filterlogica, plus verbeterde headers en lege-toestanden.",
+            "De datamapping en refreshlogica voor trends en wachttijden zijn robuuster gemaakt om inconsistenties in de UI te verminderen.",
+        ),
+    ),
+    WhatsNewRelease(
         versionCode = 10202,
         versionName = "1.2.2",
         highlightsDe = listOf(
