@@ -286,19 +286,6 @@ fun WaitingTimesScreen(
                 .fillMaxSize()
                 .padding(padding)
         ) {
-            // Ladebalken unter TopAppBar
-            AnimatedVisibility(
-                visible = state.isLoading,
-                enter = expandVertically(),
-                exit = shrinkVertically()
-            ) {
-                LinearProgressIndicator(
-                    modifier = Modifier.fillMaxWidth(),
-                    color = MaterialTheme.colorScheme.primary,
-                    trackColor = MaterialTheme.colorScheme.surfaceVariant
-                )
-            }
-
             // Fehler-Banner
             AnimatedVisibility(
                 visible = state.errorMessage != null,
@@ -314,31 +301,183 @@ fun WaitingTimesScreen(
                 }
             }
 
-            WaitingTimesContent(
-                state = state,
-                onSortChange = onSortChange,
-                onFilterChange = onFilterChange,
-                onAttractionQueryChange = onAttractionQueryChange,
-                onMaxWaitChange = onMaxWaitChange,
-                onTogglePlannedAttraction = onTogglePlannedAttraction,
-                onSaveAttractionNote = onSaveAttractionNote,
-                onDeleteAttractionNote = onDeleteAttractionNote,
-                onAddWatchlist = {
-                    selectedAttractionId = null
-                    showAddWatchlistDialog = true
-                },
-                onAddWatchlistForAttraction = { attractionId ->
-                    selectedAttractionId = attractionId
-                    showAddWatchlistDialog = true
-                },
-                onAttractionStatisticsClick = { attractionId ->
-                    state.park?.let { park -> onAttractionStatisticsClick(park.id, attractionId) }
-                },
-                onAttractionClick = { attractionId ->
-                    state.park?.let { park -> onAttractionClick(park.id, attractionId) }
-                },
-                onClearAttractionDetail = onClearAttractionDetail,
-            )
+            val language = state.language
+            LazyColumn(
+                modifier = Modifier.fillMaxSize(),
+                contentPadding = PaddingValues(bottom = 16.dp),
+                verticalArrangement = Arrangement.spacedBy(16.dp)
+            ) {
+                item {
+                    // Ladebalken direkt als erstes Element in der Liste, um kein padding zu verschwenden
+                    AnimatedVisibility(
+                        visible = state.isLoading && state.waitingTimes.isEmpty(),
+                        enter = expandVertically(),
+                        exit = shrinkVertically()
+                    ) {
+                        LinearProgressIndicator(
+                            modifier = Modifier.fillMaxWidth(),
+                            color = MaterialTheme.colorScheme.primary,
+                            trackColor = MaterialTheme.colorScheme.surfaceVariant
+                        )
+                    }
+                }
+
+                state.highlightedAttractionId?.let { highlightedId ->
+                    val highlighted = state.allWaitingTimes.firstOrNull { it.attractionId == highlightedId }
+                    if (highlighted != null) {
+                        item {
+                            Box(modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 16.dp)) {
+                                AttractionDetailSection(
+                                    park = state.park,
+                                    item = highlighted,
+                                    forecast = state.forecastByAttractionId[highlightedId],
+                                    history = state.historyByAttractionId[highlightedId].orEmpty(),
+                                    note = state.highlightedAttractionNote,
+                                    language = language,
+                                    onSaveNote = onSaveAttractionNote,
+                                    onDeleteNote = onDeleteAttractionNote,
+                                    onAddWatchlist = { 
+                                        selectedAttractionId = highlightedId
+                                        showAddWatchlistDialog = true
+                                    },
+                                    onClearDetail = onClearAttractionDetail,
+                                )
+                            }
+                        }
+                    }
+                }
+
+                item {
+                    if (state.isShowingOfflineData) {
+                        Box(modifier = Modifier.padding(horizontal = 16.dp)) {
+                            OfflineDetailBanner(
+                                language = language,
+                                ageMinutes = state.offlineDataAgeMinutes,
+                            )
+                        }
+                    }
+                }
+
+                item {
+                    if (state.isWaitingTimeDataLikelyMissing) {
+                        Box(modifier = Modifier.padding(horizontal = 16.dp)) {
+                            WaitingTimeDataGapBanner(language = language)
+                        }
+                    }
+                }
+
+                item {
+                    if (state.usedFallbackWaitTimeSource) {
+                        Box(modifier = Modifier.padding(horizontal = 16.dp)) {
+                            FallbackWaitTimeSourceBanner(language = language)
+                        }
+                    }
+                }
+
+                item {
+                    Box(modifier = Modifier.padding(horizontal = 16.dp)) {
+                        ParkHeaderSection(
+                            currentTime = state.currentLocalTime,
+                            openingTimes = state.openingTimes,
+                            crowdLevel = state.crowdLevel,
+                            waitingTimes = state.allWaitingTimes,
+                            localTimeOffsetSeconds = state.localTimeOffsetSeconds,
+                            weather = state.weather,
+                            holidays = state.holidays,
+                            language = language,
+                        )
+                    }
+                }
+
+                item {
+                    Box(modifier = Modifier.padding(horizontal = 16.dp)) {
+                        DataQualityCard(state = state)
+                    }
+                }
+
+                item {
+                    Box(modifier = Modifier.padding(horizontal = 16.dp)) {
+                        ParkStatisticsDashboard(
+                            statistics = state.parkStatistics,
+                            currentCrowdLevel = state.crowdEstimate?.level,
+                            language = language,
+                        )
+                    }
+                }
+
+                // Filter & Sortierung
+                item {
+                    Box(modifier = Modifier.padding(horizontal = 16.dp)) {
+                        FilterSection(
+                            sort = state.sort,
+                            filter = state.filter,
+                            attractionQuery = state.attractionQuery,
+                            maxWaitMinutes = state.maxWaitMinutes,
+                            onSortChange = onSortChange,
+                            onFilterChange = onFilterChange,
+                            onAttractionQueryChange = onAttractionQueryChange,
+                            onMaxWaitChange = onMaxWaitChange,
+                            onAddWatchlist = {
+                                selectedAttractionId = null
+                                showAddWatchlistDialog = true
+                            },
+                            language = language,
+                        )
+                    }
+                }
+
+                if (state.plannedWaitingTimes.isNotEmpty()) {
+                    item {
+                        Box(modifier = Modifier.padding(horizontal = 16.dp)) {
+                            VisitPlannerSection(
+                                plannedWaitingTimes = state.plannedWaitingTimes,
+                                onRemove = onTogglePlannedAttraction,
+                                language = language,
+                            )
+                        }
+                    }
+                }
+
+                if (state.waitingTimes.isEmpty() && state.isLoading) {
+                    item {
+                        Box(modifier = Modifier.padding(horizontal = 16.dp)) {
+                            WaitingTimesLoadingCard(language = language)
+                        }
+                    }
+                } else if (state.waitingTimes.isEmpty()) {
+                    item {
+                        Box(modifier = Modifier.padding(horizontal = 16.dp)) {
+                            EmptyState(
+                                state = state,
+                            )
+                        }
+                    }
+                } else {
+                    items(
+                        count = state.waitingTimes.size,
+                        key = { state.waitingTimes[it].attractionId }
+                    ) { index ->
+                        Box(modifier = Modifier.padding(horizontal = 16.dp)) {
+                            WaitingTimeRow(
+                                item = state.waitingTimes[index],
+                                isPlanned = state.waitingTimes[index].attractionId in state.plannedAttractionIds,
+                                onTogglePlanned = onTogglePlannedAttraction,
+                                onAddWatchlist = { attractionId ->
+                                    selectedAttractionId = attractionId
+                                    showAddWatchlistDialog = true
+                                },
+                                onStatisticsClick = { attractionId ->
+                                    state.park?.let { park -> onAttractionStatisticsClick(park.id, attractionId) }
+                                },
+                                onOpenDetail = { attractionId ->
+                                    state.park?.let { park -> onAttractionClick(park.id, attractionId) }
+                                },
+                                language = language,
+                            )
+                        }
+                    }
+                }
+            }
         }
     }
 
@@ -623,14 +762,20 @@ private fun AttractionDetailSection(
             }
 
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
+                val isOpened = item.status == AttractionStatus.Opened
                 val waitTimeColor = when {
+                    !isOpened -> item.status.indicatorColor()
                     item.waitingTime == null -> item.status.indicatorColor()
                     item.waitingTime < 30 -> Color(0xFF4CAF50)
                     item.waitingTime < 60 -> Color(0xFFFFB300)
                     else -> Color(0xFFF44336)
                 }
                 Text(
-                    text = item.waitingTime?.let { "$it Min." } ?: item.status.label(language),
+                    text = if (isOpened) {
+                        item.waitingTime?.let { "$it Min." } ?: item.status.label(language)
+                    } else {
+                        item.status.label(language)
+                    },
                     style = MaterialTheme.typography.headlineSmall,
                     fontWeight = FontWeight.Black,
                     color = waitTimeColor,
