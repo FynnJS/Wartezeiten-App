@@ -158,7 +158,7 @@ fun ParkListScreen(
             TopAppBar(
                 title = {
                     Text(
-                        localized(state.language, de = "Freizeitparks", en = "Amusement Parks", fr = "Parcs d'attractions", nl = "Pretparken"),
+                        localized(state.language, de = "Freizeitpark Wartezeiten", en = "Amusement Park Wait Times", fr = "Temps d'attente des parcs", nl = "Pretpark wachttijden"),
                         fontWeight = FontWeight.Bold
                     )
                 },
@@ -228,7 +228,7 @@ fun ParkListScreen(
             LazyColumn(
                 modifier = Modifier.fillMaxSize(),
                 contentPadding = PaddingValues(16.dp),
-                verticalArrangement = Arrangement.spacedBy(16.dp)
+                verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
                 item {
                     if (state.isShowingOfflineData) {
@@ -301,12 +301,10 @@ fun ParkListScreen(
                     }
                 }
 
-                if (state.query.isEmpty()) {
+                if (state.query.isEmpty() && state.isOpenStatusScanning) {
                     item {
-                        BestParkRankingSection(
-                            recommendations = state.recommendations,
-                            language = state.language,
-                            onRecommendationClick = onRecommendationClick,
+                        OpenStatusScanBanner(
+                            status = state.openStatusScanStatus,
                         )
                     }
                 }
@@ -772,6 +770,36 @@ private fun AttractionSearchResultCard(
     }
 }
 
+@Composable
+private fun OpenStatusScanBanner(
+    status: String?,
+) {
+    if (status == null) return
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(12.dp),
+        color = MaterialTheme.colorScheme.primaryContainer,
+        contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            CircularProgressIndicator(
+                modifier = Modifier.size(20.dp),
+                strokeWidth = 2.dp,
+                color = MaterialTheme.colorScheme.primary,
+            )
+            Text(
+                text = status,
+                style = MaterialTheme.typography.bodySmall,
+                fontWeight = FontWeight.SemiBold,
+            )
+        }
+    }
+}
+
 private fun Int?.toWaitValueLabel(language: String): String = when {
     this == null -> "-"
     this < 0 -> when (this) {
@@ -781,97 +809,6 @@ private fun Int?.toWaitValueLabel(language: String): String = when {
         else -> "-"
     }
     else -> "$this Min"
-}
-
-@Composable
-private fun BestParkRankingSection(
-    recommendations: List<ParkRecommendation>,
-    language: String,
-    onRecommendationClick: (ParkRecommendation) -> Unit,
-) {
-    if (recommendations.isEmpty()) return
-
-    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        Text(
-            text = localized(language, de = "Aktuelle Empfehlungen", en = "Current recommendations", fr = "Recommandations actuelles", nl = "Actuele aanbevelingen"),
-            style = MaterialTheme.typography.titleSmall,
-            fontWeight = FontWeight.Bold,
-        )
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .horizontalScroll(rememberScrollState()),
-            horizontalArrangement = Arrangement.spacedBy(12.dp)
-        ) {
-            recommendations.forEach { recommendation ->
-                BestParkCard(
-                    recommendation = recommendation,
-                    language = language,
-                    onClick = { onRecommendationClick(recommendation) }
-                )
-            }
-        }
-    }
-}
-
-@Composable
-private fun BestParkCard(
-    recommendation: ParkRecommendation,
-    language: String,
-    onClick: () -> Unit
-) {
-    OutlinedCard(
-        modifier = Modifier.width(260.dp),
-        onClick = onClick,
-        shape = RoundedCornerShape(16.dp),
-        colors = CardDefaults.outlinedCardColors(
-            containerColor = MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.2f)
-        )
-    ) {
-        Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(
-                    text = recommendation.park.name,
-                    style = MaterialTheme.typography.titleSmall,
-                    fontWeight = FontWeight.Bold,
-                    maxLines = 1,
-                    overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
-                    modifier = Modifier.weight(1f)
-                )
-                Surface(
-                    shape = RoundedCornerShape(6.dp),
-                    color = MaterialTheme.colorScheme.tertiary.copy(alpha = 0.15f),
-                    contentColor = MaterialTheme.colorScheme.tertiary
-                ) {
-                    Text(
-                        text = "${recommendation.score}%",
-                        style = MaterialTheme.typography.labelSmall,
-                        fontWeight = FontWeight.Black,
-                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
-                    )
-                }
-            }
-            Text(
-                text = recommendation.localizedReason(language),
-                style = MaterialTheme.typography.bodySmall,
-                maxLines = 2,
-                overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                DashboardMetric(
-                    label = localized(language, de = "Auslastung", en = "Crowd", fr = "Monde", nl = "Drukte"),
-                    value = recommendation.crowdLevel?.let { "${it.toInt()}%" } ?: "-",
-                    modifier = Modifier.weight(1f)
-                )
-                DashboardMetric(
-                    label = localized(language, de = "Attraktionen", en = "Rides", fr = "Attractions", nl = "Attracties"),
-                    value = "${recommendation.openAttractions}/${recommendation.totalAttractions}",
-                    modifier = Modifier.weight(1f)
-                )
-            }
-        }
-    }
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -1032,19 +969,6 @@ private fun ParkSort.label(language: String) = when (this) {
     ParkSort.FavoritesFirst -> localized(language, de = "Favoriten zuerst", en = "Favorites first", fr = "Favoris en premier", nl = "Favorieten eerst")
     ParkSort.Name -> localized(language, de = "Name A-Z", en = "Name A-Z", fr = "Nom A-Z", nl = "Naam A-Z")
     ParkSort.Country -> localized(language, de = "Land", en = "Country", fr = "Pays", nl = "Land")
-}
-
-private fun ParkRecommendation.localizedReason(language: String): String {
-    val reasonText = reason ?: return ""
-    return when {
-        reasonText.contains("low wait times") || reasonText.contains("geringe Wartezeiten") ->
-            localized(language, de = "Besonders kurze Wartezeiten aktuell.", en = "Exceptionately low wait times right now.", fr = "Temps d'attente particulièrement courts.", nl = "Uitzonderlijk korte wachttijden momenteel.")
-        reasonText.contains("balanced") || reasonText.contains("ausgewogen") ->
-            localized(language, de = "Gute Mischung aus offenen Attraktionen und moderatem Andrang.", en = "Good mix of open attractions and moderate crowd.", fr = "Bon compromis entre attractions ouvertes et affluence modérée.", nl = "Goede mix van open attracties en matige drukte.")
-        reasonText.contains("many open") || reasonText.contains("viele offen") ->
-            localized(language, de = "Fast alle Attraktionen sind heute geöffnet.", en = "Almost all attractions are open today.", fr = "Presque toutes les attractions sont ouvertes aujourd'hui.", nl = "Bijna alle attracties zijn vandaag open.")
-        else -> reasonText
-    }
 }
 
 private fun Long?.cacheAgeLabel(language: String): String {
