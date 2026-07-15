@@ -134,8 +134,15 @@ data class StatisticsUiState(
 
     val monthBuckets: List<StatisticsMonthBucket>
         get() = availableDates
+            .filter { it.length >= 7 }
             .groupBy { it.take(7) }
-            .map { (month, dates) -> StatisticsMonthBucket(month = month, dayCount = dates.size) }
+            .map { (month, dates) -> 
+                StatisticsMonthBucket(
+                    month = month, 
+                    dayCount = dates.size,
+                    availableDates = dates.sortedDescending()
+                ) 
+            }
             .sortedByDescending { it.month }
 }
 
@@ -163,6 +170,7 @@ data class ParkStatisticsSummary(
 data class StatisticsMonthBucket(
     val month: String,
     val dayCount: Int,
+    val availableDates: List<String> = emptyList(),
 )
 
 data class StatisticsAttractionOption(

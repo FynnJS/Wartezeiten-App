@@ -3,7 +3,6 @@ package de.wartezeiten.app.ui.statistics
 import android.content.Context
 import android.content.Intent
 import android.graphics.Bitmap
-import android.net.Uri
 import android.widget.Toast
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.clickable
@@ -14,14 +13,20 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -38,10 +43,12 @@ import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedCard
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
@@ -49,6 +56,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
+import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -116,6 +124,8 @@ fun StatisticsScreen(
     val context = LocalContext.current
     val rootView = LocalView.current
     val scope = rememberCoroutineScope()
+    var selectedMonthBucket by remember { mutableStateOf<StatisticsMonthBucket?>(null) }
+    val sheetState = rememberModalBottomSheetState()
 
     Scaffold(
         topBar = {
@@ -215,7 +225,7 @@ fun StatisticsScreen(
                                         de = "Für heute liegen noch keine zentralen Messpunkte vor. Es werden die Daten vom Vortag angezeigt.",
                                         en = "No central measurements available for today yet. Data from the previous day is shown.",
                                         fr = "Aucune mesure centrale disponible pour aujourd'hui pour le moment. Les données de la veille sont affichées.",
-                                        nl = "Nog geen centrale metingen beschikbaar voor heute. Gegevens van de vorige dag worden weergegeven.",
+                                        nl = "Nog geen centrale metingen beschikbaar voor vandaag. Gegevens van de vorige dag worden weergegeven.",
                                     ),
                                     style = MaterialTheme.typography.bodySmall,
                                     fontWeight = FontWeight.Medium,
@@ -236,7 +246,6 @@ fun StatisticsScreen(
                     item {
                         EmptyStatisticsState(
                             parkName = state.selectedPark?.name,
-                            date = state.selectedDate,
                             isSpecificAttraction = state.selectedAttractionId != null,
                         )
                     }
@@ -246,15 +255,14 @@ fun StatisticsScreen(
                             state.parkStatistics?.let { summary ->
                                 SelectedParkSummary(summary, state.parkSeries)
                             }
-                        } else if (state.selectedAttractionId != null && !state.isLoading && (state.day == null || state.day.snapshots.isEmpty())) {
+                        } else if (!state.isLoading && (state.day == null || state.day.snapshots.isEmpty())) {
                             EmptyStatisticsState(
                                 parkName = state.selectedPark?.name,
-                                date = state.selectedDate,
                                 isSpecificAttraction = true,
                             )
                         } else {
                             state.selectedAttraction?.let { summary ->
-                                SelectedAttractionSummary(summary, state.selectedSeries)
+                                SelectedAttractionSummary(summary)
                             }
                         }
                     }
@@ -284,20 +292,40 @@ fun StatisticsScreen(
                     }
 
                     item {
-                        MonthOverviewSection(buckets = state.monthBuckets)
+                        MonthOverviewSection(
+                            buckets = state.monthBuckets,
+                            onMonthClick = { selectedMonthBucket = it }
+                        )
                     }
 
                     if (state.selectedAttractionId == null && state.day != null) {
                         items(state.day.attractions.sortedByDescending { it.averageWaitMinutes }) { attraction ->
                             AttractionSummaryRow(
                                 summary = attraction,
-                                selected = attraction.id == state.selectedAttractionId,
+                                selected = false,
                                 onClick = { onAttractionSelected(attraction.id) }
                             )
                         }
                     }
                 }
             }
+        }
+    }
+
+    if (selectedMonthBucket != null) {
+        ModalBottomSheet(
+            onDismissRequest = { selectedMonthBucket = null },
+            sheetState = sheetState,
+            containerColor = MaterialTheme.colorScheme.surface,
+        ) {
+            MonthDetailSheet(
+                bucket = selectedMonthBucket!!,
+                language = state.language,
+                onDateSelected = { date ->
+                    onDateSelected(date)
+                    selectedMonthBucket = null
+                }
+            )
         }
     }
 }
@@ -445,7 +473,6 @@ private fun DropdownField(
 @Composable
 private fun SelectedAttractionSummary(
     summary: AttractionHistorySummary,
-    points: List<AttractionChartPoint>,
 ) {
     OutlinedCard(
         modifier = Modifier.fillMaxWidth(),
@@ -467,7 +494,7 @@ private fun SelectedAttractionSummary(
                 )
                 StatTile(
                     label = "Messpunkte",
-                    value = "${summary.sampleCount ?: 0}",
+                    value = "${summary.sampleCount}",
                     modifier = Modifier.weight(0.8f)
                 )
             }
@@ -838,10 +865,19 @@ private fun ParkAverageWaitChart(
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun MonthOverviewSection(buckets: List<StatisticsMonthBucket>) {
+private fun MonthOverviewSection(
+    buckets: List<StatisticsMonthBucket>,
+    onMonthClick: (StatisticsMonthBucket) -> Unit
+) {
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        Text("Monats-Überblick", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
+        Text(
+            "Monats-Überblick",
+            style = MaterialTheme.typography.titleSmall,
+            fontWeight = FontWeight.Bold,
+            modifier = Modifier.padding(horizontal = 4.dp)
+        )
         Row(
             modifier = Modifier
                 .fillMaxWidth()
@@ -849,10 +885,96 @@ private fun MonthOverviewSection(buckets: List<StatisticsMonthBucket>) {
             horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             buckets.forEach { bucket ->
-                OutlinedCard(shape = RoundedCornerShape(12.dp)) {
-                    Column(modifier = Modifier.padding(12.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                        Text(formatMonthLabel(bucket.month), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                        Text("${bucket.dayCount} Tage", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold)
+                OutlinedCard(
+                    onClick = { onMonthClick(bucket) },
+                    shape = RoundedCornerShape(12.dp),
+                    colors = CardDefaults.outlinedCardColors(containerColor = MaterialTheme.colorScheme.surface)
+                ) {
+                    Column(
+                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        Text(
+                            formatMonthLabel(bucket.month),
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        Text(
+                            "${bucket.dayCount} Tage",
+                            style = MaterialTheme.typography.bodyMedium,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun MonthDetailSheet(
+    bucket: StatisticsMonthBucket,
+    language: String,
+    onDateSelected: (String) -> Unit
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(bottom = 24.dp)
+    ) {
+        Text(
+            text = formatMonthLabel(bucket.month),
+            style = MaterialTheme.typography.headlineSmall,
+            fontWeight = FontWeight.Bold,
+            modifier = Modifier.padding(horizontal = 24.dp, vertical = 8.dp)
+        )
+        Text(
+            text = localized(
+                language,
+                de = "Tage mit verfügbaren Messwerten",
+                en = "Days with available measurements",
+                fr = "Jours avec mesures disponibles",
+                nl = "Dagen met beschikbare metingen"
+            ),
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(start = 24.dp, end = 24.dp, bottom = 16.dp)
+        )
+
+        HorizontalDivider(modifier = Modifier.padding(horizontal = 24.dp))
+
+        LazyVerticalGrid(
+            columns = GridCells.Adaptive(minSize = 80.dp),
+            contentPadding = PaddingValues(24.dp),
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+            modifier = Modifier.height(320.dp)
+        ) {
+            items(bucket.availableDates) { date ->
+                OutlinedCard(
+                    onClick = { onDateSelected(date) },
+                    shape = RoundedCornerShape(12.dp),
+                    colors = CardDefaults.outlinedCardColors(
+                        containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f)
+                    )
+                ) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 12.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        Text(
+                            text = formatDayOfMonth(date),
+                            style = MaterialTheme.typography.titleLarge,
+                            fontWeight = FontWeight.ExtraBold
+                        )
+                        Text(
+                            text = formatShortDateLabel(date),
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
                     }
                 }
             }
@@ -907,7 +1029,7 @@ private fun ErrorCard(message: String, onRetry: () -> Unit) {
 }
 
 @Composable
-private fun EmptyStatisticsState(parkName: String?, date: String, isSpecificAttraction: Boolean) {
+private fun EmptyStatisticsState(parkName: String?, isSpecificAttraction: Boolean) {
     Box(
         modifier = Modifier
             .fillMaxWidth()
@@ -1005,6 +1127,13 @@ private fun formatMonthLabel(monthKey: String): String {
         val ym = YearMonth.parse(monthKey)
         ym.month.getDisplayName(TextStyle.FULL, Locale.GERMAN) + " " + ym.year
     }.getOrElse { monthKey }
+}
+
+private fun formatDayOfMonth(isoDate: String): String {
+    return runCatching {
+        val date = LocalDate.parse(isoDate)
+        date.dayOfMonth.toString()
+    }.getOrElse { "-" }
 }
 
 private fun Park.matchesParkKey(parkKey: String?): Boolean {
