@@ -41,6 +41,7 @@
 
 ### Qualitätsanforderungen
 ✅ **Verifikation nach jeder Änderung** (UI visuell, Logik getestet)  
+✅ **Commit-Message:** Nach Änderungen einen aussagekräftigen Commit-Message Vorschlag basierend auf den vorgenommenen Änderungen geben
 ✅ **Technisch robust, responsiv und visuell modern** (Material 3 konsistent)  
 ✅ **Projektwissen aktualisieren:** Architekturentscheidungen, Fallstricke in dieser Datei dokumentieren  
 
