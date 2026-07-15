@@ -377,7 +377,7 @@ function renderLiveStatus() {
 const STATUS_LABELS = {
   0: { label: 'Geöffnet', cls: 'status-open' },
   '-1': { label: 'Geschlossen', cls: 'status-closed' },
-  '-2': { label: 'Wetter', cls: 'status-closed' },
+  '-2': { label: 'Wetterbedingt zu', cls: 'status-closed' },
   '-3': { label: 'Wartung', cls: 'status-maintenance' },
 };
 

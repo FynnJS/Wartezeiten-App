@@ -96,7 +96,7 @@ private fun attractionWaitingTimeLabel(waitingTime: WaitingTime): String {
         }
         waitingTime.status == AttractionStatus.Opened -> "offen"
         waitingTime.status == AttractionStatus.Maintenance -> "Wartung"
-        waitingTime.status == AttractionStatus.ClosedWeather -> "Wetter"
+        waitingTime.status == AttractionStatus.ClosedWeather -> "Wetterbedingt zu"
         waitingTime.status == AttractionStatus.Closed -> "zu"
         else -> "-"
     }

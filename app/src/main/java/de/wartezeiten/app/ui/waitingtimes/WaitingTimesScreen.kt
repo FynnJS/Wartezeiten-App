@@ -308,84 +308,76 @@ fun WaitingTimesScreen(
                 verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
                 item {
-                    // Ladebalken direkt als erstes Element in der Liste, um kein padding zu verschwenden
-                    AnimatedVisibility(
-                        visible = state.isLoading && state.waitingTimes.isEmpty(),
-                        enter = expandVertically(),
-                        exit = shrinkVertically()
-                    ) {
-                        LinearProgressIndicator(
-                            modifier = Modifier.fillMaxWidth(),
-                            color = MaterialTheme.colorScheme.primary,
-                            trackColor = MaterialTheme.colorScheme.surfaceVariant
-                        )
-                    }
-                }
+                    Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                        // Ladebalken direkt als erstes Element in der Liste, um kein padding zu verschwenden
+                        AnimatedVisibility(
+                            visible = state.isLoading && state.waitingTimes.isEmpty(),
+                            enter = expandVertically(),
+                            exit = shrinkVertically()
+                        ) {
+                            LinearProgressIndicator(
+                                modifier = Modifier.fillMaxWidth(),
+                                color = MaterialTheme.colorScheme.primary,
+                                trackColor = MaterialTheme.colorScheme.surfaceVariant
+                            )
+                        }
 
-                state.highlightedAttractionId?.let { highlightedId ->
-                    val highlighted = state.allWaitingTimes.firstOrNull { it.attractionId == highlightedId }
-                    if (highlighted != null) {
-                        item {
-                            Box(modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 16.dp)) {
-                                AttractionDetailSection(
-                                    park = state.park,
-                                    item = highlighted,
-                                    forecast = state.forecastByAttractionId[highlightedId],
-                                    history = state.historyByAttractionId[highlightedId].orEmpty(),
-                                    note = state.highlightedAttractionNote,
+                        state.highlightedAttractionId?.let { highlightedId ->
+                            val highlighted = state.allWaitingTimes.firstOrNull { it.attractionId == highlightedId }
+                            if (highlighted != null) {
+                                Box(modifier = Modifier.padding(horizontal = 16.dp)) {
+                                    AttractionDetailSection(
+                                        park = state.park,
+                                        item = highlighted,
+                                        forecast = state.forecastByAttractionId[highlightedId],
+                                        history = state.historyByAttractionId[highlightedId].orEmpty(),
+                                        note = state.highlightedAttractionNote,
+                                        language = language,
+                                        onSaveNote = onSaveAttractionNote,
+                                        onDeleteNote = onDeleteAttractionNote,
+                                        onAddWatchlist = {
+                                            selectedAttractionId = highlightedId
+                                            showAddWatchlistDialog = true
+                                        },
+                                        onClearDetail = onClearAttractionDetail,
+                                    )
+                                }
+                            }
+                        }
+
+                        if (state.isShowingOfflineData) {
+                            Box(modifier = Modifier.padding(horizontal = 16.dp)) {
+                                OfflineDetailBanner(
                                     language = language,
-                                    onSaveNote = onSaveAttractionNote,
-                                    onDeleteNote = onDeleteAttractionNote,
-                                    onAddWatchlist = { 
-                                        selectedAttractionId = highlightedId
-                                        showAddWatchlistDialog = true
-                                    },
-                                    onClearDetail = onClearAttractionDetail,
+                                    ageMinutes = state.offlineDataAgeMinutes,
                                 )
                             }
                         }
-                    }
-                }
 
-                item {
-                    if (state.isShowingOfflineData) {
+                        if (state.isWaitingTimeDataLikelyMissing) {
+                            Box(modifier = Modifier.padding(horizontal = 16.dp)) {
+                                WaitingTimeDataGapBanner(language = language)
+                            }
+                        }
+
+                        if (state.usedFallbackWaitTimeSource) {
+                            Box(modifier = Modifier.padding(horizontal = 16.dp)) {
+                                FallbackWaitTimeSourceBanner(language = language)
+                            }
+                        }
+
                         Box(modifier = Modifier.padding(horizontal = 16.dp)) {
-                            OfflineDetailBanner(
+                            ParkHeaderSection(
+                                currentTime = state.currentLocalTime,
+                                openingTimes = state.openingTimes,
+                                crowdLevel = state.crowdLevel,
+                                waitingTimes = state.allWaitingTimes,
+                                localTimeOffsetSeconds = state.localTimeOffsetSeconds,
+                                weather = state.weather,
+                                holidays = state.holidays,
                                 language = language,
-                                ageMinutes = state.offlineDataAgeMinutes,
                             )
                         }
-                    }
-                }
-
-                item {
-                    if (state.isWaitingTimeDataLikelyMissing) {
-                        Box(modifier = Modifier.padding(horizontal = 16.dp)) {
-                            WaitingTimeDataGapBanner(language = language)
-                        }
-                    }
-                }
-
-                item {
-                    if (state.usedFallbackWaitTimeSource) {
-                        Box(modifier = Modifier.padding(horizontal = 16.dp)) {
-                            FallbackWaitTimeSourceBanner(language = language)
-                        }
-                    }
-                }
-
-                item {
-                    Box(modifier = Modifier.padding(horizontal = 16.dp)) {
-                        ParkHeaderSection(
-                            currentTime = state.currentLocalTime,
-                            openingTimes = state.openingTimes,
-                            crowdLevel = state.crowdLevel,
-                            waitingTimes = state.allWaitingTimes,
-                            localTimeOffsetSeconds = state.localTimeOffsetSeconds,
-                            weather = state.weather,
-                            holidays = state.holidays,
-                            language = language,
-                        )
                     }
                 }
 
@@ -1990,7 +1982,7 @@ private fun AttractionStatus.label(language: String) = when (this) {
     AttractionStatus.Opened -> localized(language, de = "Geöffnet", en = "Open", fr = "Ouvert", nl = "Open")
     AttractionStatus.Closed -> localized(language, de = "Geschlossen", en = "Closed", fr = "Fermé", nl = "Gesloten")
     AttractionStatus.Maintenance -> localized(language, de = "Wartung", en = "Maintenance", fr = "Maintenance", nl = "Onderhoud")
-    AttractionStatus.ClosedWeather -> localized(language, de = "Wetter", en = "Weather", fr = "Météo", nl = "Weer")
+    AttractionStatus.ClosedWeather -> localized(language, de = "Wetterbedingt zu", en = "Weather closure", fr = "Fermé (météo)", nl = "Gesloten (weer)")
     AttractionStatus.Unknown -> localized(language, de = "Unbekannt", en = "Unknown", fr = "Inconnu", nl = "Onbekend")
 }
 

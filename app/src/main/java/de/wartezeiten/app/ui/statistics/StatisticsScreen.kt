@@ -370,7 +370,7 @@ private fun StatisticsControlPanel(
 
             DropdownField(
                 label = localized(state.language, de = "Datum", en = "Date", fr = "Date", nl = "Datum"),
-                value = state.selectedDate,
+                value = formatDateLabel(state.selectedDate),
                 modifier = Modifier.weight(1f)
             ) { onDismiss ->
                 state.availableDates.reversed().forEach { date ->
@@ -683,7 +683,7 @@ private fun StatusLegend() {
         verticalAlignment = Alignment.CenterVertically,
     ) {
         StatusLegendItem("Geschlossen", statusColor(-1))
-        StatusLegendItem("Wetter", statusColor(-2))
+        StatusLegendItem("Wetterbedingt zu", statusColor(-2))
         StatusLegendItem("Wartung", statusColor(-3))
     }
 }

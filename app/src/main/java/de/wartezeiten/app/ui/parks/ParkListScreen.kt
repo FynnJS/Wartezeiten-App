@@ -804,8 +804,8 @@ private fun Int?.toWaitValueLabel(language: String): String = when {
     this == null -> "-"
     this < 0 -> when (this) {
         -1 -> localized(language, de = "Geschl.", en = "Closed", fr = "Fermé", nl = "Gesloten")
-        -2 -> localized(language, de = "Wetter", en = "Weather", fr = "Météo", nl = "Weer")
-        -3 -> localized(language, de = "Wartung", en = "Maint.", fr = "Maint.", nl = "Onderhoud")
+        -2 -> localized(language, de = "Wetterbed. zu", en = "Weather closed", fr = "Fermé (météo)", nl = "Gesloten (weer)")
+        -3 -> localized(language, de = "Wartung", en = "Maintenance", fr = "Maintenance", nl = "Onderhoud")
         else -> "-"
     }
     else -> "$this Min"
