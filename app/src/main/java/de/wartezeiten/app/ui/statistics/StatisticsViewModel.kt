@@ -319,14 +319,21 @@ class StatisticsViewModel @Inject constructor(
                 is ApiResult.Success -> {
                     mutableState.update { state ->
                         val indexedLatest = state.index.parks.firstOrNull { it.parkKey == parkKey }?.latestDate
-                        val day = result.data.takeIf { it.hasMeasurements() }
-                            ?: buildCurrentDaySnapshot(
-                                parkKey = parkKey,
-                                date = date,
-                                parks = state.parks,
-                                currentAttractions = currentAttractions.value,
-                                latestDate = indexedLatest,
-                            )
+                        val fetchedDay = result.data.takeIf { it.hasMeasurements() }
+                        val currentDay = buildCurrentDaySnapshot(
+                            parkKey = parkKey,
+                            date = date,
+                            parks = state.parks,
+                            currentAttractions = currentAttractions.value,
+                            latestDate = indexedLatest,
+                        )
+                        
+                        val day = when {
+                            fetchedDay != null && currentDay != null -> fetchedDay.mergeWith(currentDay)
+                            fetchedDay != null -> fetchedDay
+                            else -> currentDay
+                        }
+
                         val deviceToday = LocalDate.now().toString()
                         val isTodaySelected = date == deviceToday || date == "Heute" || date == "Today"
                         val isFallback = day != null && day.date != deviceToday && isTodaySelected
@@ -376,6 +383,18 @@ class StatisticsViewModel @Inject constructor(
                 }
             }
         }
+    }
+
+    private fun AttractionHistoryDay.mergeWith(current: AttractionHistoryDay): AttractionHistoryDay {
+        if (date != current.date) return this
+        val lastSnapshotTime = snapshots.maxOfOrNull { it.capturedAtMillis } ?: 0L
+        val newSnapshots = current.snapshots.filter { it.capturedAtMillis > lastSnapshotTime + 60_000L }
+        if (newSnapshots.isEmpty()) return this
+        
+        return copy(
+            generatedAtMillis = maxOf(generatedAtMillis, current.generatedAtMillis),
+            snapshots = (snapshots + newSnapshots).sortedBy { it.capturedAtMillis }
+        )
     }
 
     private fun selectKnownAttractionId(
@@ -457,17 +476,24 @@ private fun AttractionHistoryDay.operatingSnapshots(): List<AttractionHistorySna
     val closeAtMillis = closedFrom?.parseInstantMillis()
     if (openAtMillis == null && closeAtMillis == null) return snapshots
 
-    val firstOpenAttractionMillis = snapshots
-        .filter { snapshot -> snapshot.attractions.any { it.isOpenWaitPoint } }
-        .minOfOrNull { it.capturedAtMillis }
+    val openPoints = snapshots.filter { snapshot -> snapshot.attractions.any { it.isOpenWaitPoint } }
+    val firstOpenAttractionMillis = openPoints.minOfOrNull { it.capturedAtMillis }
+    val lastOpenAttractionMillis = openPoints.maxOfOrNull { it.capturedAtMillis }
+
     val startAtMillis = when {
         openAtMillis != null && firstOpenAttractionMillis != null -> minOf(openAtMillis, firstOpenAttractionMillis)
         openAtMillis != null -> openAtMillis
         else -> firstOpenAttractionMillis
     }
+    val endAtMillis = when {
+        closeAtMillis != null && lastOpenAttractionMillis != null -> maxOf(closeAtMillis, lastOpenAttractionMillis)
+        closeAtMillis != null -> closeAtMillis
+        else -> lastOpenAttractionMillis
+    }
+
     return snapshots.filter { snapshot ->
         (startAtMillis == null || snapshot.capturedAtMillis >= startAtMillis) &&
-                (closeAtMillis == null || snapshot.capturedAtMillis <= closeAtMillis)
+                (endAtMillis == null || snapshot.capturedAtMillis <= endAtMillis)
     }
 }
 

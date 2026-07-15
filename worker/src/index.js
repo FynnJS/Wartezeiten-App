@@ -420,7 +420,7 @@ async function collectParkSnapshot(parkKey, now, options = {}) {
       skipReason: "upstream_error",
     };
   }
-  const openedToday = opening?.opened_today === true ||
+  const openedToday = opening?.opened_today === true || openAttractions > 0 ||
     (opening == null && usedFallbackWaitingTimes && attractionItems.length > 0);
   const openAttractions = attractionItems.filter((item) => item.statusCode === 0).length;
   const totalAttractions = waitingItems.length;
@@ -1530,10 +1530,10 @@ async function readTrendHistoryD1(env, now, parkKey = null) {
   for (const row of result.results ?? []) {
     const parkKey = String(row.park_key ?? "");
     if (!parkKey) continue;
-    const attractions = parseJsonArray(row.attractions_json);
+    const openedTodayFromDb = Number(row.opened_today ?? 0) === 1;
     const openAttractions = attractions.filter((attraction) => Number(attraction.statusCode) === 0).length;
+    const openedToday = openedTodayFromDb || openAttractions > 0;
     const calculatedCrowdLevel = estimateCrowdLevelFromAttractions(attractions);
-    const openedToday = Number(row.opened_today ?? 0) === 1;
     const displayCrowdLevel = openedToday && openAttractions > 0 ? calculatedCrowdLevel : null;
     if (displayCrowdLevel == null) continue;
 
@@ -2107,20 +2107,24 @@ function filterOperatingWindowSnapshots(snapshots, openFrom, closedFrom) {
   const openAtMillis = parseDateMillis(openFrom);
   const closeAtMillis = parseDateMillis(closedFrom);
   if (openAtMillis == null && closeAtMillis == null) return snapshots;
-  const firstOpenAttractionMillis = snapshots
-    .filter((snapshot) => (snapshot.attractions ?? []).some((attraction) => Number(attraction.statusCode) === 0 && Number(attraction.value) >= 0))
-    .map((snapshot) => Number(snapshot.capturedAtMillis))
-    .filter(Number.isFinite)
-    .sort((a, b) => a - b)[0];
-  const startAtMillis = openAtMillis != null && firstOpenAttractionMillis != null
-    ? Math.min(openAtMillis, firstOpenAttractionMillis)
-    : (openAtMillis ?? firstOpenAttractionMillis);
+
+  const waitPoints = snapshots.filter((s) => (s.attractions ?? []).some((a) => Number(a.statusCode) === 0 && Number(a.value) >= 0));
+  const firstWaitMillis = waitPoints.length > 0 ? Math.min(...waitPoints.map((s) => Number(s.capturedAtMillis))) : null;
+  const lastWaitMillis = waitPoints.length > 0 ? Math.max(...waitPoints.map((s) => Number(s.capturedAtMillis))) : null;
+
+  const startAtMillis = openAtMillis != null && firstWaitMillis != null
+    ? Math.min(openAtMillis, firstWaitMillis)
+    : (openAtMillis ?? firstWaitMillis);
+
+  const endAtMillis = closeAtMillis != null && lastWaitMillis != null
+    ? Math.max(closeAtMillis, lastWaitMillis)
+    : (closeAtMillis ?? lastWaitMillis);
 
   return snapshots.filter((snapshot) => {
     const capturedAtMillis = Number(snapshot.capturedAtMillis);
     if (!Number.isFinite(capturedAtMillis)) return false;
     if (startAtMillis != null && capturedAtMillis < startAtMillis) return false;
-    if (closeAtMillis != null && capturedAtMillis > closeAtMillis) return false;
+    if (endAtMillis != null && capturedAtMillis > endAtMillis) return false;
     return true;
   });
 }

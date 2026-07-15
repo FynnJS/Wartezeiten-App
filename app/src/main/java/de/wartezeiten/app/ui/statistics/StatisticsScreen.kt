@@ -945,11 +945,22 @@ private fun calculateAxisBounds(
     nowMillis: Long,
     parkLocalToday: String,
 ): Pair<Long, Long> {
-    val openAt = openFrom?.let { Instant.parse(it).toEpochMilli() }
-    val closedAt = closedFrom?.let { Instant.parse(it).toEpochMilli() }
+    val openAt = openFrom?.parseInstantMillis()
+    val closedAt = closedFrom?.parseInstantMillis()
     
     val min = openAt ?: firstOpenAtMillis ?: timestamps.minOrNull() ?: 0L
-    val max = closedAt ?: timestamps.maxOrNull() ?: (min + 1L)
+    
+    // Default max is closing time
+    var max = closedAt ?: timestamps.maxOrNull() ?: (min + 1L)
+    
+    // If today is selected, cap the max time at "now" (plus a small buffer)
+    if (selectedDate == parkLocalToday || selectedDate == "Heute" || selectedDate == "Today") {
+        max = minOf(max, nowMillis + 5 * 60_000L) // Add 5 min buffer
+    }
+    
+    // Ensure we see all existing data points
+    val maxTimestamp = timestamps.maxOrNull() ?: 0L
+    max = maxOf(max, maxTimestamp)
 
     return min to max
 }
