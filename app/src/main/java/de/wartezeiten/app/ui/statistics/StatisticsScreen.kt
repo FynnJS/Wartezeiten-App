@@ -615,7 +615,7 @@ private fun AttractionHistoryChart(
             .filter { it.value >= 0 }
             .sortedBy { it.capturedAtMillis }
     }
-    if (allWaitPoints.size < 2) {
+    if (points.size < 2) {
         OutlinedCard(modifier = modifier, shape = RoundedCornerShape(14.dp)) {
             Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                 Text("Noch zu wenige Messpunkte", color = MaterialTheme.colorScheme.onSurfaceVariant)
