@@ -394,6 +394,7 @@ fun WaitingTimesScreen(
                             statistics = state.parkStatistics,
                             currentCrowdLevel = state.crowdEstimate?.level,
                             language = language,
+                            isLoading = state.isLoading || state.isStatisticsLoading,
                         )
                     }
                 }
@@ -610,6 +611,7 @@ private fun WaitingTimesContent(
                 statistics = state.parkStatistics,
                 currentCrowdLevel = state.crowdEstimate?.level,
                 language = state.language,
+                isLoading = state.isLoading || state.isStatisticsLoading,
             )
         }
 

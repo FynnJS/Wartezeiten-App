@@ -37,6 +37,7 @@ fun ParkStatisticsDashboard(
     currentCrowdLevel: Float?,
     language: String,
     modifier: Modifier = Modifier,
+    isLoading: Boolean = false,
 ) {
     OutlinedCard(
         modifier = modifier.fillMaxWidth(),
@@ -70,7 +71,9 @@ fun ParkStatisticsDashboard(
 
             if (statistics == null) {
                 Text(
-                    text = if (language == "en") {
+                    text = if (isLoading) {
+                        if (language == "en") "Loading data..." else "Daten werden geladen..."
+                    } else if (language == "en") {
                         "No central wait-time measurements are available for today yet."
                     } else {
                         "Für heute sind noch keine zentralen Wartezeit-Messpunkte verfügbar."

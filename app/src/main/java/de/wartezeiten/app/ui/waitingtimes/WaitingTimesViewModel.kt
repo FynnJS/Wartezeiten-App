@@ -95,6 +95,7 @@ data class WaitingTimesUiState(
     val isWaitingTimeDataLikelyMissing: Boolean = false,
     val usedFallbackWaitTimeSource: Boolean = false,
     val refreshError: String? = null,
+    val isStatisticsLoading: Boolean = false,
 )
 
 private data class DetailAuxState(
@@ -120,6 +121,7 @@ class WaitingTimesViewModel @Inject constructor(
     private val maxWaitMinutes = MutableStateFlow<Int?>(null)
     private val plannedAttractionIds = MutableStateFlow<Set<String>>(emptySet())
     private val isLoading = MutableStateFlow(false)
+    private val isStatisticsLoading = MutableStateFlow(false)
     private val errorMessage = MutableStateFlow<String?>(null)
     private val refreshError = MutableStateFlow<String?>(null)
     private val lastRefreshed = MutableStateFlow(0L)
@@ -155,27 +157,27 @@ class WaitingTimesViewModel @Inject constructor(
         Triple(currentTime, language, parkKey in fallbackKeys)
     }
 
+    private val refreshState = combine(lastRefreshed, refreshTrigger, refreshError) { r, t, re ->
+        object { val lastRefreshed = r; val refreshTrigger = t; val refreshError = re }
+    }
+
     private val loadState = combine(
-        combine(isLoading, errorMessage, refreshError, lastRefreshed, refreshTrigger) { l, e, re, r, t ->
-            object {
-                val isLoading = l
-                val errorMessage = e
-                val refreshError = re
-                val lastRefreshed = r
-                val refreshTrigger = t
-            }
-        },
+        isLoading,
+        isStatisticsLoading,
+        errorMessage,
+        refreshState,
         timeAndLanguageState
-    ) { status, timeAndLanguage ->
+    ) { l, sl, e, rs, tl ->
         object {
-            val isLoading = status.isLoading
-            val errorMessage = status.errorMessage
-            val refreshError = status.refreshError
-            val lastRefreshed = status.lastRefreshed
-            val refreshTrigger = status.refreshTrigger
-            val currentTime = timeAndLanguage.first
-            val language = timeAndLanguage.second
-            val usedFallbackWaitTimeSource = timeAndLanguage.third
+            val isLoading = l
+            val isStatisticsLoading = sl
+            val errorMessage = e
+            val refreshError = rs.refreshError
+            val lastRefreshed = rs.lastRefreshed
+            val refreshTrigger = rs.refreshTrigger
+            val currentTime = tl.first
+            val language = tl.second
+            val usedFallbackWaitTimeSource = tl.third
         }
     }
 
@@ -229,6 +231,7 @@ class WaitingTimesViewModel @Inject constructor(
                 highlightedAttractionId = if (clearedAttractionDetail.value) null else highlightedAttractionId,
                 highlightedAttractionNote = aux.note?.note.orEmpty(),
                 refreshError = status.refreshError,
+                isStatisticsLoading = status.isStatisticsLoading,
             )
         } else {
             val dataUpdatedAtMillis = detail.latestDataUpdatedAtMillis()
@@ -302,6 +305,7 @@ class WaitingTimesViewModel @Inject constructor(
                 isWaitingTimeDataLikelyMissing = isWaitingTimeDataLikelyMissing,
                 usedFallbackWaitTimeSource = status.usedFallbackWaitTimeSource,
                 refreshError = status.refreshError,
+                isStatisticsLoading = status.isStatisticsLoading,
             )
         }
     }.stateIn(
@@ -326,8 +330,12 @@ class WaitingTimesViewModel @Inject constructor(
 
     private fun refreshParkStatistics() {
         viewModelScope.launch {
+            isStatisticsLoading.value = true
             val indexResult = repository.getStatisticsIndex()
-            if (indexResult !is ApiResult.Success) return@launch
+            if (indexResult !is ApiResult.Success) {
+                isStatisticsLoading.value = false
+                return@launch
+            }
             val parks = repository.observeParks(null).first()
             val selectedPark = parks.firstOrNull { it.id == parkKey || it.uuid == parkKey }
             val candidates = listOfNotNull(parkKey, selectedPark?.id, selectedPark?.uuid, selectedPark?.name)
@@ -335,7 +343,11 @@ class WaitingTimesViewModel @Inject constructor(
                 .toSet()
             val indexedPark = indexResult.data.parks.firstOrNull {
                 it.parkKey.normalizedParkKey() in candidates
-            } ?: return@launch
+            }
+            if (indexedPark == null) {
+                isStatisticsLoading.value = false
+                return@launch
+            }
             val today = parkCurrentDateFromIndex(indexedPark.dates, indexedPark.latestDate)
             val statisticDate = today.takeIf { it in indexedPark.dates }
             val comparisonDates = indexedPark.dates.asReversed()
@@ -351,6 +363,7 @@ class WaitingTimesViewModel @Inject constructor(
                 loadedDays.firstOrNull { it.date == date }?.toParkWaitStatistics()
             }
             historyDays.value = loadedDays
+            isStatisticsLoading.value = false
         }
     }
 
