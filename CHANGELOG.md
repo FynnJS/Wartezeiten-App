@@ -1,5 +1,12 @@
 # Changelog
 
+## v1.2.4 - 2026-07-16
+
+- Adjusted the crowd level calculation to provide more realistic and precise estimates based on live wait times.
+- Fixed statistics charts: Attractions that were closed all day now correctly display their historical status data instead of an error message.
+- Improved loading states for park statistics: Added a dedicated loading state for historical data to ensure the "Loading data..." message remains visible until both live and statistical data are fully fetched, preventing a brief "No data" flicker.
+- Bumped Android release metadata to `versionCode 10204` / `versionName 1.2.4`.
+
 ## v1.2.3 - 2026-07-13
 
 - Refined the waiting-times, park-list, and statistics screens with more consistent loading states, clearer error banners, and smoother pull-to-refresh behavior.

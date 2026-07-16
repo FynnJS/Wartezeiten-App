@@ -163,6 +163,8 @@
 | **Push Percent** | `formatPercent()` round to integer |
 | **Watchlist API Error** | Park alarms need `/v1/openingtimes`; attraction alarms work without |
 | **CoroutineScope in Application/Service** | Never create anonymous Scope(SupervisorJob()) without reference (memory leak, no cancel). Always hold as property + cancel() in onTerminate/onDestroy. onTerminate is not always reliable (process kill). |
+| **Flow Combine Limit** | `combine(f1, f2, f3, f4, f5)` is the limit. For more flows, nest `combine` calls or group related states into sub-objects. |
+| **Statistics Loading Flicker** | Use a dedicated `isStatisticsLoading` state to keep "Loading data..." visible until async background statistics are fully fetched, preventing a brief "No data" flicker. |
 
 ## 5. Release & Signing
 

@@ -25,6 +25,30 @@ data class WhatsNewRelease(
 
 val WHATS_NEW_RELEASES = listOf(
     WhatsNewRelease(
+        versionCode = 10204,
+        versionName = "1.2.4",
+        highlightsDe = listOf(
+            "Die Berechnung der aktuellen Auslastung (Crowd Level) wurde angepasst, um realistischere und präzisere Schätzungen basierend auf Live-Wartezeiten zu liefern.",
+            "Die Statistikanzeige wurde korrigiert: Auch Attraktionen, die den ganzen Tag geschlossen waren, zeigen jetzt korrekt ihre historischen Status-Daten an statt einer Fehlermeldung.",
+            "Verbesserte Ladezustände in der Parkstatistik: Der Text 'Daten werden geladen...' bleibt nun flackerfrei sichtbar, bis alle Hintergrunddaten vollständig geladen sind.",
+        ),
+        highlightsEn = listOf(
+            "Adjusted the crowd level calculation to provide more realistic and precise estimates based on live wait times.",
+            "Fixed statistics charts: Attractions that were closed all day now correctly display their historical status data instead of an error message.",
+            "Improved loading states in park statistics: The 'Loading data...' message now remains visible without flickering until all background data is fully fetched.",
+        ),
+        highlightsFr = listOf(
+            "Le calcul du niveau d'affluence a été ajusté pour fournir des estimations plus réalistes et précises basées sur les temps d'attente en direct.",
+            "Correction des graphiques statistiques : les attractions fermées toute la journée affichent désormais correctement leurs données d'état historiques au lieu d'un message d'erreur.",
+            "Amélioration des états de chargement des statistiques du parc : le message 'Chargement des données...' reste désormais visible sans scintillement jusqu'à la récupération complète des données.",
+        ),
+        highlightsNl = listOf(
+            "De berekening van het drukteniveau is aangepast om realistischere en nauwkeurigere schattingen te geven op basis van live wachttijden.",
+            "Statistiekdiagrammen gerepareerd: attracties die de hele dag gesloten waren, tonen nu correct hun historische statusgegevens in plaats van een foutmelding.",
+            "Verbeterde laadstatussen in parkstatistieken: het bericht 'Gegevens laden...' blijft nu flikkervrij zichtbaar totdat alle achtergrondgegevens volledig zijn opgehaald.",
+        ),
+    ),
+    WhatsNewRelease(
         versionCode = 10203,
         versionName = "1.2.3",
         highlightsDe = listOf(
