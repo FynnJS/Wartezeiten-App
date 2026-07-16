@@ -427,7 +427,7 @@ async function collectParkSnapshot(parkKey, now, options = {}) {
   const apiCrowdLevel = parseCrowdLevel(crowdLevel?.crowd_level);
   const calculatedCrowdLevel = estimateCrowdLevelFromAttractions(attractionItems);
   const displayCrowdLevel = openedToday && openAttractions > 0
-    ? (apiCrowdLevel ?? calculatedCrowdLevel)
+    ? (calculatedCrowdLevel ?? apiCrowdLevel)
     : null;
   const errors = usedFallbackWaitingTimes
     ? []
@@ -2198,7 +2198,7 @@ function estimateCrowdLevelFromAttractions(attractions) {
   }
 
   const p75Wait = percentile(waits, 75);
-  const estimated = ((averageWait / 60) * 0.7 + (p75Wait / 90) * 0.3) * 100;
+  const estimated = ((averageWait / 40) * 0.6 + (p75Wait / 60) * 0.4) * 100;
   return roundToNearestFive(Math.max(0, Math.min(100, estimated)));
 }
 

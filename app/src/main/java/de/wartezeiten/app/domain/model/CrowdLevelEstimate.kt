@@ -36,7 +36,7 @@ fun List<WaitingTime>.estimatedCrowdLevelFromWaits(): Float? {
 
     val averageWait = waits.average()
     val p75Wait = waits[((waits.size - 1) * 0.75).toInt()]
-    val estimated = ((averageWait / 60.0) * 0.7 + (p75Wait / 90.0) * 0.3) * 100.0
+    val estimated = ((averageWait / 40.0) * 0.6 + (p75Wait / 60.0) * 0.4) * 100.0
     return estimated.toFloat().coerceIn(0f, 100f).roundedToNearestFive()
 }
 
