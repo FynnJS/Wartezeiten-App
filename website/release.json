@@ -4,37 +4,37 @@
   "releaseDate": "2026-07-16",
   "releasePageUrl": "https://github.com/FynnJS/Wartezeiten-App/releases/tag/v1.2.4",
   "apkUrl": "https://github.com/FynnJS/Wartezeiten-App/releases/download/v1.2.4/wartezeiten-app-1.2.4.apk",
-  "apkSize": "4.16",
+  "apkSize": "4.19",
   "releaseNotes": [
     "Adjusted the crowd level calculation to provide more realistic and precise estimates based on live wait times.",
     "Fixed statistics charts: Attractions that were closed all day now correctly display their historical status data instead of an error message.",
-    "Improved loading states in park statistics: The 'Loading data...' message now remains visible without flickering until all background data is fully fetched.",
+    "Improved loading states for park statistics: Added a dedicated loading state for historical data to ensure the \"Loading data...\" message remains visible until both live and statistical data are fully fetched, preventing a brief \"No data\" flicker.",
     "Bumped Android release metadata to `versionCode 10204` / `versionName 1.2.4`."
   ],
   "releaseNotesLocalized": {
     "de": [
-      "Die Berechnung der aktuellen Auslastung (Crowd Level) wurde angepasst, um realistischere und präzisere Schätzungen basierend auf Live-Wartezeiten zu liefern.",
-      "Die Statistikanzeige wurde korrigiert: Auch Attraktionen, die den ganzen Tag geschlossen waren, zeigen jetzt korrekt ihre historischen Status-Daten an statt einer Fehlermeldung.",
-      "Verbesserte Ladezustände in der Parkstatistik: Der Text 'Daten werden geladen...' bleibt nun flackerfrei sichtbar, bis alle Hintergrunddaten vollständig geladen sind.",
-      "Release-Metadaten auf `versionCode 10204` / `versionName 1.2.4` aktualisiert."
+      "Adjusted the crowd level calculation to provide more realistic and precise estimates based on live wait times.",
+      "Fixed statistics charts: Attractions that were closed all day now correctly display their historical status data instead of an error message.",
+      "Improved loading states for park statistics: Added a dedicated loading state for historical data to ensure the \"Loading data...\" message remains visible until both live and statistical data are fully fetched, preventing a brief \"No data\" flicker.",
+      "Bumped Android release metadata to `versionCode 10204` / `versionName 1.2.4`."
     ],
     "en": [
       "Adjusted the crowd level calculation to provide more realistic and precise estimates based on live wait times.",
       "Fixed statistics charts: Attractions that were closed all day now correctly display their historical status data instead of an error message.",
-      "Improved loading states in park statistics: The 'Loading data...' message now remains visible without flickering until all background data is fully fetched.",
+      "Improved loading states for park statistics: Added a dedicated loading state for historical data to ensure the \"Loading data...\" message remains visible until both live and statistical data are fully fetched, preventing a brief \"No data\" flicker.",
       "Bumped Android release metadata to `versionCode 10204` / `versionName 1.2.4`."
     ],
     "fr": [
-      "Le calcul du niveau d'affluence a été ajusté pour fournir des estimations plus réalistes et précises basées sur les temps d'attente en direct.",
-      "Correction des graphiques statistiques : les attractions fermées toute la journée affichent désormais correctement leurs données d'état historiques au lieu d'un message d'erreur.",
-      "Amélioration des états de chargement des statistiques du parc : le message 'Chargement des données...' reste désormais visible sans scintillement jusqu'à la récupération complète des données.",
-      "Métadonnées de version mises à jour vers `versionCode 10204` / `versionName 1.2.4`."
+      "Adjusted the crowd level calculation to provide more realistic and precise estimates based on live wait times.",
+      "Fixed statistics charts: Attractions that were closed all day now correctly display their historical status data instead of an error message.",
+      "Improved loading states for park statistics: Added a dedicated loading state for historical data to ensure the \"Loading data...\" message remains visible until both live and statistical data are fully fetched, preventing a brief \"No data\" flicker.",
+      "Bumped Android release metadata to `versionCode 10204` / `versionName 1.2.4`."
     ],
     "nl": [
-      "De berekening van het drukteniveau is aangepast om realistischere en nauwkeurigere schattingen te geven op basis van live wachttijden.",
-      "Statistiekdiagrammen gerepareerd: attracties die de hele dag gesloten waren, tonen nu correct hun historische statusgegevens in plaats van een foutmelding.",
-      "Verbeterde laadstatussen in parkstatistieken: het bericht 'Gegevens laden...' blijft nu flikkervrij zichtbaar totdat alle achtergrondgegevens volledig zijn opgehaald.",
-      "Release-metadata bijgewerkt naar `versionCode 10204` / `versionName 1.2.4`."
+      "Adjusted the crowd level calculation to provide more realistic and precise estimates based on live wait times.",
+      "Fixed statistics charts: Attractions that were closed all day now correctly display their historical status data instead of an error message.",
+      "Improved loading states for park statistics: Added a dedicated loading state for historical data to ensure the \"Loading data...\" message remains visible until both live and statistical data are fully fetched, preventing a brief \"No data\" flicker.",
+      "Bumped Android release metadata to `versionCode 10204` / `versionName 1.2.4`."
     ]
   },
   "showBanner": true
