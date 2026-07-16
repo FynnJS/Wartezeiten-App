@@ -64,7 +64,7 @@
 
 ### UI Behavior
 - **Auto-Update:** Every minute (via `viewModelScope` + `delay`)
-- **Refresh Feedback:** Only manual updates → Snackbar. Initial loading / Auto-refresh → no Snackbar
+- **Refresh Feedback:** Only manual updates → Snackbar. Initial loading / Auto-refresh → no Snackbar. Handled via `refreshTrigger` + `refreshError` in ViewModels to show success/failure feedback consistently.
 - **Time Display:** Current park time + last API update time (from API timestamp or device time as fallback)
 - **Filter & Sorting:** Parks (country, status), attractions (wait time asc/desc, name, status); Default: highest wait time first
 - **Open Filter:** Snapshots max 30min old; older → do not display as open

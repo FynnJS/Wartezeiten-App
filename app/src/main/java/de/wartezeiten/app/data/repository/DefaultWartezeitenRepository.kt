@@ -174,8 +174,9 @@ class DefaultWartezeitenRepository @Inject constructor(
         }.flowOn(ioDispatcher)
     }
 
-    override suspend fun refreshParks(language: String): ApiResult<Unit> = withContext(ioDispatcher) {
-        when (val result = safeApiCall { api.getParks(language.toApiLanguage()) }) {
+    override suspend fun refreshParks(language: String, forceRefresh: Boolean): ApiResult<Unit> = withContext(ioDispatcher) {
+        val cacheControl = if (forceRefresh) "no-cache" else null
+        when (val result = safeApiCall { api.getParks(language.toApiLanguage(), cacheControl) }) {
             is ApiResult.Success -> {
                 val now = System.currentTimeMillis()
                 val currentParks = parkDao.observeParks(null).first()
@@ -226,7 +227,7 @@ class DefaultWartezeitenRepository @Inject constructor(
         allowLocalFallbackScan: Boolean,
         onProgress: (ParkRecommendationScanProgress) -> Unit,
     ): ApiResult<Unit> = withContext(ioDispatcher) {
-        val publicResult = refreshPublicAppData()
+        val publicResult = refreshPublicAppData(forceRefresh = false)
         val now = System.currentTimeMillis()
         val hasFreshOpenSnapshot = parkSnapshotDao.observeLatestSnapshots()
             .first()
@@ -423,12 +424,14 @@ class DefaultWartezeitenRepository @Inject constructor(
     override suspend fun refreshParkDetail(
         parkKey: String,
         language: String,
+        forceRefresh: Boolean,
     ): ApiResult<Unit> = withContext(ioDispatcher) {
+        val cacheControl = if (forceRefresh) "no-cache" else null
         supervisorScope {
             // FIX: openingTimes now returns List<OpeningTimesDto> - matches updated API service
-            val openingTimes = async { safeApiCall { api.getOpeningTimes(parkKey) } }
-            val waitingTimes = async { safeApiCall { api.getWaitingTimes(parkKey, language.toApiLanguage()) } }
-            val crowdLevel = async { safeApiCall { api.getCrowdLevel(parkKey) } }
+            val openingTimes = async { safeApiCall { api.getOpeningTimes(parkKey, cacheControl) } }
+            val waitingTimes = async { safeApiCall { api.getWaitingTimes(parkKey, language.toApiLanguage(), cacheControl) } }
+            val crowdLevel = async { safeApiCall { api.getCrowdLevel(parkKey, cacheControl) } }
             val park = parkDao.observePark(parkKey).first()
             val (latitude, longitude) = park?.let { countryToCoordinates(it.id, it.country) } ?: Pair(48.137, 11.575)
             val weather = async {
@@ -621,8 +624,9 @@ class DefaultWartezeitenRepository @Inject constructor(
         }
     }
 
-    override suspend fun refreshPublicAppData(): ApiResult<Unit> = withContext(ioDispatcher) {
-        val markersResult = safeApiCall { publicAppDataApi.getGlobalMarkers() }
+    override suspend fun refreshPublicAppData(forceRefresh: Boolean): ApiResult<Unit> = withContext(ioDispatcher) {
+        val cacheControl = if (forceRefresh) "no-cache" else null
+        val markersResult = safeApiCall { publicAppDataApi.getGlobalMarkers(cacheControl) }
         (markersResult as? ApiResult.Success)?.let { result ->
             val snapshots = result.data.markers.mapNotNull { marker ->
                 val capturedAt = marker.capturedAtMillis.takeIf { it > 0L }
@@ -647,7 +651,7 @@ class DefaultWartezeitenRepository @Inject constructor(
             }
         }
 
-        when (val result = safeApiCall { publicAppDataApi.getLatestAppData() }) {
+        when (val result = safeApiCall { publicAppDataApi.getLatestAppData(cacheControl) }) {
             is ApiResult.Success -> {
                 val now = System.currentTimeMillis()
                 val snapshots = result.data.parks.mapNotNull { snapshot ->

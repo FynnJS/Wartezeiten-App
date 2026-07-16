@@ -157,23 +157,24 @@ fun WaitingTimesScreen(
     var showAddWatchlistDialog by remember { mutableStateOf(false) }
     var selectedAttractionId by remember { mutableStateOf<String?>(null) }
 
-    LaunchedEffect(state.refreshTrigger) {
+    LaunchedEffect(state.refreshTrigger, state.isLoading) {
         if ((state.refreshTrigger > 0) && !state.isLoading) {
-            if (state.errorMessage == null) {
+            val message = state.refreshError ?: run {
                 val updatedAt = LocalTime.now().format(DateTimeFormatter.ofPattern("HH:mm"))
                 val openCount = state.allWaitingTimes.count { it.status == AttractionStatus.Opened }
-                snackbarHostState.showSnackbar(
-                    message = localized(
-                        state.language,
-                        de = "$openCount offene Attraktionen aktualisiert um $updatedAt",
-                        en = "$openCount open attractions updated at $updatedAt",
-                        fr = "$openCount attractions ouvertes mises à jour à $updatedAt",
-                        nl = "$openCount open attracties bijgewerkt om $updatedAt",
-                    ),
-                    actionLabel = "OK",
-                    withDismissAction = true,
+                localized(
+                    state.language,
+                    de = "$openCount offene Attraktionen aktualisiert um $updatedAt Uhr",
+                    en = "$openCount open attractions updated at $updatedAt",
+                    fr = "$openCount attractions ouvertes mises à jour à $updatedAt",
+                    nl = "$openCount open attracties bijgewerkt om $updatedAt",
                 )
             }
+            snackbarHostState.showSnackbar(
+                message = message,
+                actionLabel = "OK",
+                withDismissAction = true,
+            )
         }
     }
 

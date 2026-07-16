@@ -60,6 +60,7 @@ data class ParkListUiState(
     val isOpenParkDataLoading: Boolean = false,
     val errorMessage: String? = null,
     val refreshTrigger: Int = 0,
+    val refreshError: String? = null,
     val attractionSearchResults: List<AttractionSearchResult> = emptyList(),
     val statisticsParkKeys: Map<String, String> = emptyMap(),
     val isStatisticsIndexLoading: Boolean = false,
@@ -122,6 +123,7 @@ class ParkListViewModel @Inject constructor(
     private val openStatusScanProgress = MutableStateFlow<ParkRecommendationScanProgress?>(null)
     private val currentLanguage = MutableStateFlow(PreferencesDataSource.DEFAULT_LANGUAGE)
     private val errorMessage = MutableStateFlow<String?>(null)
+    private val refreshError = MutableStateFlow<String?>(null)
     private val refreshTrigger = MutableStateFlow(0)
     private val statisticsIndex = MutableStateFlow(StatisticsIndex(generatedAtMillis = 0L, parks = emptyList()))
     private val isStatisticsIndexLoading = MutableStateFlow(false)
@@ -158,6 +160,7 @@ class ParkListViewModel @Inject constructor(
         isLoading,
         openParkDataLoadCount,
         errorMessage,
+        refreshError,
         refreshTrigger,
         statisticsIndex,
         isStatisticsIndexLoading,
@@ -190,11 +193,12 @@ class ParkListViewModel @Inject constructor(
         val loading = safeCast(13, false, "loading")
         val openParkDataLoading = (safeCast(14, 0, "dataLoadCount")) > 0
         val error = safeCast<String?>(15, null, "error")
-        val trigger = safeCast(16, 0, "trigger")
-        val statsIndex = safeCast(17, StatisticsIndex(generatedAtMillis = 0L, parks = emptyList()), "statsIndex")
-        val statsLoading = safeCast(18, false, "statsLoading")
-        val aliases = safeCast(19, emptyMap<String, List<String>>(), "aliases")
-        val usingFallbackParkList = safeCast(20, false, "usingFallback")
+        val rError = safeCast<String?>(16, null, "refreshError")
+        val trigger = safeCast(17, 0, "trigger")
+        val statsIndex = safeCast(18, StatisticsIndex(generatedAtMillis = 0L, parks = emptyList()), "statsIndex")
+        val statsLoading = safeCast(19, false, "statsLoading")
+        val aliases = safeCast(20, emptyMap<String, List<String>>(), "aliases")
+        val usingFallbackParkList = safeCast(21, false, "usingFallback")
 
         val favorites = parks.filter { it.isFavorite }
         val recent = currentRecentParkKeys.mapNotNull { key ->
@@ -256,6 +260,7 @@ class ParkListViewModel @Inject constructor(
             isOpenParkDataLoading = openParkDataLoading,
             errorMessage = error,
             refreshTrigger = trigger,
+            refreshError = rError,
             attractionSearchResults = attractionResults,
             statisticsParkKeys = statisticsParkKeys,
             isStatisticsIndexLoading = statsLoading,
@@ -409,9 +414,14 @@ class ParkListViewModel @Inject constructor(
         refreshJob = viewModelScope.launch {
             if (!silent) isLoading.value = true
             errorMessage.value = null
-            when (val result = repository.refreshParks(language)) {
+            refreshError.value = null
+            
+            val result = repository.refreshParks(language, forceRefresh = showFeedback)
+            isLoading.value = false // Set to false before trigger
+            
+            when (result) {
                 is ApiResult.Success -> {
-                    repository.refreshPublicAppData()
+                    repository.refreshPublicAppData(forceRefresh = showFeedback)
                     if (showFeedback) refreshTrigger.value += 1
                     if (triggerScan && showOpenOnly.value) {
                         scanOpenStatusInBackground(language)
@@ -421,12 +431,18 @@ class ParkListViewModel @Inject constructor(
                     val hasCachedParks = uiState.value.totalParkCount > 0
                     val canKeepShowingCachedParksWithoutError = hasCachedParks &&
                             (result.type == NetworkError.RateLimited || result.type == NetworkError.Server)
+                    val userMessage = result.type.toUserMessage(currentLanguage.value)
+                    
                     if (!canKeepShowingCachedParksWithoutError && (showFeedback || !hasCachedParks)) {
-                        errorMessage.value = result.type.toUserMessage(currentLanguage.value)
+                        errorMessage.value = userMessage
+                    }
+                    
+                    if (showFeedback) {
+                        refreshError.value = userMessage
+                        refreshTrigger.value += 1
                     }
                 }
             }
-            isLoading.value = false
         }
     }
 

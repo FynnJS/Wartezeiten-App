@@ -41,6 +41,8 @@ data class StatisticsUiState(
     val isLoading: Boolean = false,
     val isDataFallbackToPreviousDay: Boolean = false,
     val errorMessage: String? = null,
+    val refreshTrigger: Int = 0,
+    val refreshError: String? = null,
 ) {
     val availableDates: List<String>
         get() {
@@ -208,25 +210,29 @@ class StatisticsViewModel @Inject constructor(
     )
 
     init {
-        refresh()
+        refresh(isManual = false)
     }
 
-    fun refresh() {
+    fun refresh(isManual: Boolean = true) {
         viewModelScope.launch {
-            mutableState.update { it.copy(isLoading = true, errorMessage = null) }
-            repository.refreshPublicAppData()
-            when (val result = repository.getStatisticsIndex()) {
+            mutableState.update { it.copy(isLoading = true, errorMessage = null, refreshError = null) }
+            val publicResult = repository.refreshPublicAppData(forceRefresh = isManual)
+            val indexResult = repository.getStatisticsIndex()
+            
+            val language = preferences.language.first()
+            
+            when (indexResult) {
                 is ApiResult.Success -> {
                     val current = mutableState.value
                     val parkList = parks.first()
                     val selectedParkKey = current.selectedParkKey
                         ?: initialParkKey
-                        ?: result.data.parks.firstOrNull()?.parkKey
-                    val resolvedParkKey = selectedParkKey.resolveIndexedParkKey(result.data, parkList)
+                        ?: indexResult.data.parks.firstOrNull()?.parkKey
+                    val resolvedParkKey = selectedParkKey.resolveIndexedParkKey(indexResult.data, parkList)
                     val selectedDate = selectedParkKey
                         ?.let { resolvedParkKey }
                         ?.let { key ->
-                            val parkIndex = result.data.parks.firstOrNull { it.parkKey == key }
+                            val parkIndex = indexResult.data.parks.firstOrNull { it.parkKey == key }
                             chooseInitialDate(
                                 parkKey = key,
                                 parkIndexDates = parkIndex?.dates.orEmpty(),
@@ -236,39 +242,51 @@ class StatisticsViewModel @Inject constructor(
                             )
                         }
                         ?: LocalDate.now().toString()
+                    
+                    val refreshError = if (publicResult is ApiResult.Error) {
+                        publicResult.type.toUserMessage(language)
+                    } else null
+
                     if (resolvedParkKey == null) {
                         mutableState.update {
                             it.copy(
-                                index = result.data,
+                                index = indexResult.data,
                                 selectedParkKey = null,
                                 selectedDate = selectedDate,
                                 day = null,
                                 selectedAttractionId = null,
                                 isLoading = false,
+                                refreshTrigger = if (isManual) it.refreshTrigger + 1 else it.refreshTrigger,
+                                refreshError = if (isManual) refreshError else null,
                             )
                         }
                         return@launch
                     }
                     mutableState.update {
                         it.copy(
-                            index = result.data,
+                            index = indexResult.data,
                             selectedParkKey = resolvedParkKey,
                             selectedDate = selectedDate,
                             day = null,
                             selectedAttractionId = selectKnownAttractionId(
                                 parkKey = resolvedParkKey,
                                 preferredId = current.selectedAttractionId ?: initialAttractionId,
-                                index = result.data,
+                                index = indexResult.data,
                                 currentAttractions = currentAttractions.value,
                             ),
+                            refreshError = if (isManual) refreshError else null,
                         )
                     }
-                    loadSelectedDay()
+                    loadSelectedDay(isManualRefresh = isManual)
                 }
                 is ApiResult.Error -> {
-                    val language = preferences.language.first()
                     mutableState.update {
-                        it.copy(isLoading = false, errorMessage = result.type.toUserMessage(language))
+                        it.copy(
+                            isLoading = false, 
+                            errorMessage = if (it.index.parks.isEmpty()) indexResult.type.toUserMessage(language) else null,
+                            refreshError = if (isManual) indexResult.type.toUserMessage(language) else null,
+                            refreshTrigger = if (isManual) it.refreshTrigger + 1 else it.refreshTrigger,
+                        )
                     }
                 }
             }
@@ -298,7 +316,6 @@ class StatisticsViewModel @Inject constructor(
     }
 
     fun selectDate(date: String) {
-        val deviceToday = LocalDate.now().toString()
         mutableState.update {
             it.copy(
                 selectedDate = date,
@@ -318,11 +335,11 @@ class StatisticsViewModel @Inject constructor(
         mutableState.update { it.copy(selectedAttractionId = null) }
     }
 
-    private fun loadSelectedDay() {
+    private fun loadSelectedDay(isManualRefresh: Boolean = false) {
         val parkKey = mutableState.value.selectedParkKey ?: return
         val date = mutableState.value.selectedDate
         viewModelScope.launch {
-            mutableState.update { it.copy(isLoading = true, errorMessage = null, isDataFallbackToPreviousDay = false) }
+            mutableState.update { it.copy(isLoading = true, errorMessage = if (it.day == null) null else it.errorMessage) }
             when (val result = repository.getAttractionHistoryDay(parkKey, date)) {
                 is ApiResult.Success -> {
                     mutableState.update { state ->
@@ -357,12 +374,13 @@ class StatisticsViewModel @Inject constructor(
                             ),
                             isLoading = false,
                             isDataFallbackToPreviousDay = isFallback,
+                            refreshError = if (isManualRefresh) state.refreshError else null,
+                            refreshTrigger = if (isManualRefresh) state.refreshTrigger + 1 else state.refreshTrigger,
                         )
                     }
                 }
                 is ApiResult.Error -> {
-                    val currentState = mutableState.value
-                    val indexedLatest = currentState.index.parks.firstOrNull { it.parkKey == parkKey }?.latestDate
+                    val indexedLatest = mutableState.value.index.parks.firstOrNull { it.parkKey == parkKey }?.latestDate
                     val deviceToday = LocalDate.now().toString()
                     val isTodaySelected = date == deviceToday || date == "Heute" || date == "Today"
                     val isMissingToday = result.type == NetworkError.NotFound &&
@@ -383,9 +401,16 @@ class StatisticsViewModel @Inject constructor(
                                 isLoading = false,
                                 errorMessage = null,
                                 isDataFallbackToPreviousDay = isFallback,
+                                refreshError = if (isManualRefresh) result.type.toUserMessage(language) else state.refreshError,
+                                refreshTrigger = if (isManualRefresh) state.refreshTrigger + 1 else state.refreshTrigger,
                             )
                         } else {
-                            state.copy(isLoading = false, errorMessage = result.type.toUserMessage(language))
+                            state.copy(
+                                isLoading = false, 
+                                errorMessage = if (state.day == null) result.type.toUserMessage(language) else null,
+                                refreshError = if (isManualRefresh) result.type.toUserMessage(language) else state.refreshError,
+                                refreshTrigger = if (isManualRefresh) state.refreshTrigger + 1 else state.refreshTrigger,
+                            )
                         }
                     }
                 }

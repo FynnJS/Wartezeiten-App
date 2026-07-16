@@ -23,6 +23,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Search
@@ -39,12 +40,18 @@ import androidx.compose.material3.OutlinedCard
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarData
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -58,6 +65,7 @@ import de.wartezeiten.app.core.i18n.localized
 import de.wartezeiten.app.domain.model.Park
 import de.wartezeiten.app.ui.components.AttributionFooter
 import java.time.Instant
+import java.time.LocalTime
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import java.util.Locale
@@ -91,6 +99,24 @@ fun ParkCompareScreen(
     onTogglePark: (Park) -> Unit,
     onParkClick: (Park) -> Unit,
 ) {
+    val snackbarHostState = remember { SnackbarHostState() }
+
+    LaunchedEffect(state.refreshTrigger, state.isRefreshing) {
+        if (state.refreshTrigger > 0 && !state.isRefreshing) {
+            val message = state.refreshError ?: run {
+                val updatedAt = LocalTime.now().format(DateTimeFormatter.ofPattern("HH:mm"))
+                localized(
+                    state.language,
+                    de = "Vergleich aktualisiert um $updatedAt Uhr",
+                    en = "Comparison updated at $updatedAt",
+                    fr = "Comparaison mise à jour à $updatedAt",
+                    nl = "Vergelijking bijgewerkt om $updatedAt",
+                )
+            }
+            snackbarHostState.showSnackbar(message)
+        }
+    }
+
     Scaffold(
         topBar = {
             TopAppBar(
@@ -134,6 +160,11 @@ fun ParkCompareScreen(
         },
         bottomBar = {
             AttributionFooter(language = state.language)
+        },
+        snackbarHost = {
+            SnackbarHost(snackbarHostState) { data ->
+                RefreshSnackbar(data = data)
+            }
         },
     ) { padding ->
         Column(
@@ -668,4 +699,37 @@ private fun ParkCompareItem.lastUpdatedText(language: String): String {
     val formatter = DateTimeFormatter.ofPattern("HH:mm", Locale.GERMAN)
     val time = Instant.ofEpochMilli(updated).atZone(ZoneId.systemDefault()).format(formatter)
     return localized(language, de = "Stand $time Uhr", en = "Updated $time", fr = "Mis à jour à $time", nl = "Bijgewerkt om $time")
+}
+
+@Composable
+private fun RefreshSnackbar(data: SnackbarData) {
+    Surface(
+        modifier = Modifier.padding(12.dp),
+        shape = RoundedCornerShape(12.dp),
+        color = MaterialTheme.colorScheme.inverseSurface,
+        tonalElevation = 6.dp,
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            Icon(
+                imageVector = Icons.Default.CheckCircle,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.inversePrimary,
+            )
+            Text(
+                text = data.visuals.message,
+                modifier = Modifier.weight(1f),
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.inverseOnSurface,
+            )
+            data.visuals.actionLabel?.let { action ->
+                TextButton(onClick = { data.performAction() }) {
+                    Text(action)
+                }
+            }
+        }
+    }
 }

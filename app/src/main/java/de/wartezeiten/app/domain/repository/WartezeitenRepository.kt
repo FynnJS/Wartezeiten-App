@@ -24,16 +24,16 @@ interface WartezeitenRepository {
     fun observeUsingFallbackParkList(): Flow<Boolean>
     fun observeBestParkRecommendation(): Flow<ParkRecommendation?>
     fun observeParkRecommendations(limit: Int = 5): Flow<List<ParkRecommendation>>
-    suspend fun refreshParks(language: String): ApiResult<Unit>
+    suspend fun refreshParks(language: String, forceRefresh: Boolean = false): ApiResult<Unit>
     suspend fun refreshParkRecommendationSnapshots(
         language: String,
         allowLocalFallbackScan: Boolean = true,
         onProgress: (ParkRecommendationScanProgress) -> Unit = {},
     ): ApiResult<Unit>
-    suspend fun refreshPublicAppData(): ApiResult<Unit>
+    suspend fun refreshPublicAppData(forceRefresh: Boolean = false): ApiResult<Unit>
 
     fun observeParkDetail(parkKey: String): Flow<ParkDetail>
-    suspend fun refreshParkDetail(parkKey: String, language: String): ApiResult<Unit>
+    suspend fun refreshParkDetail(parkKey: String, language: String, forceRefresh: Boolean = false): ApiResult<Unit>
     
     fun getParkTrendSummary(parkKey: String): Flow<ParkTrendSummary>
     suspend fun refreshPublicTrendHistory(parkKey: String): ApiResult<Unit>

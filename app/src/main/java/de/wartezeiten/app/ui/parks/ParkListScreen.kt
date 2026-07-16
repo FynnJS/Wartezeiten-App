@@ -150,10 +150,32 @@ fun ParkListScreen(
     onParkStatisticsClick: (String) -> Unit,
     onAttractionClick: (String, String) -> Unit,
 ) {
+    val snackbarHostState = remember { SnackbarHostState() }
     var showAddWatchlistDialog by remember { mutableStateOf(false) }
     var selectedParkForWatchlist by remember { mutableStateOf<Park?>(null) }
 
+    LaunchedEffect(state.refreshTrigger, state.isLoading) {
+        if (state.refreshTrigger > 0 && !state.isLoading) {
+            val message = state.refreshError ?: run {
+                val updatedAt = LocalTime.now().format(DateTimeFormatter.ofPattern("HH:mm"))
+                localized(
+                    state.language,
+                    de = "Parks aktualisiert um $updatedAt Uhr",
+                    en = "Parks updated at $updatedAt",
+                    fr = "Parcs mis à jour à $updatedAt",
+                    nl = "Parken bijgewerkt om $updatedAt",
+                )
+            }
+            snackbarHostState.showSnackbar(message)
+        }
+    }
+
     Scaffold(
+        snackbarHost = {
+            SnackbarHost(snackbarHostState) { data ->
+                RefreshSnackbar(data = data)
+            }
+        },
         topBar = {
             TopAppBar(
                 title = {

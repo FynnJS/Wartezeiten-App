@@ -44,6 +44,8 @@ data class ParkCompareUiState(
     val isRefreshing: Boolean = false,
     val isInitialLoading: Boolean = false,
     val errorMessage: String? = null,
+    val refreshTrigger: Int = 0,
+    val refreshError: String? = null,
 )
 
 data class ParkCompareItem(
@@ -83,13 +85,20 @@ class ParkCompareViewModel @Inject constructor(
     private val currentLanguage = MutableStateFlow(PreferencesDataSource.DEFAULT_LANGUAGE)
     private val isRefreshing = MutableStateFlow(false)
     private val errorMessage = MutableStateFlow<String?>(null)
+    private val refreshError = MutableStateFlow<String?>(null)
+    private val refreshTrigger = MutableStateFlow(0)
 
     private val controls = combine(selectedParkIds, parkSearchQuery, sort, currentLanguage) { ids, query, sort, language ->
         CompareControls(ids, query, sort, language)
     }
 
-    private val loadState = combine(isRefreshing, errorMessage) { refreshing, error ->
-        CompareLoadState(refreshing, error)
+    private val loadState = combine(isRefreshing, errorMessage, refreshError, refreshTrigger) { refreshing, error, rError, trigger ->
+        object {
+            val isRefreshing = refreshing
+            val errorMessage = error
+            val refreshError = rError
+            val refreshTrigger = trigger
+        }
     }
 
     private val openParkSnapshotCutoff = flow {
@@ -148,6 +157,8 @@ class ParkCompareViewModel @Inject constructor(
             isRefreshing = load.isRefreshing,
             isInitialLoading = load.isRefreshing && parks.isEmpty(),
             errorMessage = load.errorMessage,
+            refreshTrigger = load.refreshTrigger,
+            refreshError = load.refreshError,
         )
     }.stateIn(
         scope = viewModelScope,
@@ -183,16 +194,21 @@ class ParkCompareViewModel @Inject constructor(
         viewModelScope.launch {
             isRefreshing.value = true
             errorMessage.value = null
+            refreshError.value = null
             val language = currentLanguage.value
-            val firstError = selectedParkIds.value
-                .map { parkKey -> async { repository.refreshParkDetail(parkKey, language) } }
+            val results = selectedParkIds.value
+                .map { parkKey -> async { repository.refreshParkDetail(parkKey, language, forceRefresh = true) } }
                 .awaitAll()
-                .filterIsInstance<ApiResult.Error>()
-                .firstOrNull()
+            
+            isRefreshing.value = false // Set to false before trigger
+            
+            val firstError = results.filterIsInstance<ApiResult.Error>().firstOrNull()
             if (firstError != null) {
-                errorMessage.value = firstError.type.toUserMessage(language)
+                val userMessage = firstError.type.toUserMessage(language)
+                errorMessage.value = userMessage
+                refreshError.value = userMessage
             }
-            isRefreshing.value = false
+            refreshTrigger.value += 1
         }
     }
 

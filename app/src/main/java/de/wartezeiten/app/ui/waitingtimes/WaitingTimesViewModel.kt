@@ -94,6 +94,7 @@ data class WaitingTimesUiState(
     val highlightedAttractionNote: String = "",
     val isWaitingTimeDataLikelyMissing: Boolean = false,
     val usedFallbackWaitTimeSource: Boolean = false,
+    val refreshError: String? = null,
 )
 
 private data class DetailAuxState(
@@ -120,6 +121,7 @@ class WaitingTimesViewModel @Inject constructor(
     private val plannedAttractionIds = MutableStateFlow<Set<String>>(emptySet())
     private val isLoading = MutableStateFlow(false)
     private val errorMessage = MutableStateFlow<String?>(null)
+    private val refreshError = MutableStateFlow<String?>(null)
     private val lastRefreshed = MutableStateFlow(0L)
     private val refreshTrigger = MutableStateFlow(0)
     private val currentLanguage = MutableStateFlow(PreferencesDataSource.DEFAULT_LANGUAGE)
@@ -153,12 +155,24 @@ class WaitingTimesViewModel @Inject constructor(
         Triple(currentTime, language, parkKey in fallbackKeys)
     }
 
-    private val loadState = combine(isLoading, errorMessage, lastRefreshed, refreshTrigger, timeAndLanguageState) { l, e, r, t, timeAndLanguage ->
+    private val loadState = combine(
+        combine(isLoading, errorMessage, refreshError, lastRefreshed, refreshTrigger) { l, e, re, r, t ->
+            object {
+                val isLoading = l
+                val errorMessage = e
+                val refreshError = re
+                val lastRefreshed = r
+                val refreshTrigger = t
+            }
+        },
+        timeAndLanguageState
+    ) { status, timeAndLanguage ->
         object {
-            val isLoading = l
-            val errorMessage = e
-            val lastRefreshed = r
-            val refreshTrigger = t
+            val isLoading = status.isLoading
+            val errorMessage = status.errorMessage
+            val refreshError = status.refreshError
+            val lastRefreshed = status.lastRefreshed
+            val refreshTrigger = status.refreshTrigger
             val currentTime = timeAndLanguage.first
             val language = timeAndLanguage.second
             val usedFallbackWaitTimeSource = timeAndLanguage.third
@@ -214,6 +228,7 @@ class WaitingTimesViewModel @Inject constructor(
                 language = status.language,
                 highlightedAttractionId = if (clearedAttractionDetail.value) null else highlightedAttractionId,
                 highlightedAttractionNote = aux.note?.note.orEmpty(),
+                refreshError = status.refreshError,
             )
         } else {
             val dataUpdatedAtMillis = detail.latestDataUpdatedAtMillis()
@@ -286,6 +301,7 @@ class WaitingTimesViewModel @Inject constructor(
                 highlightedAttractionNote = aux.note?.note.orEmpty(),
                 isWaitingTimeDataLikelyMissing = isWaitingTimeDataLikelyMissing,
                 usedFallbackWaitTimeSource = status.usedFallbackWaitTimeSource,
+                refreshError = status.refreshError,
             )
         }
     }.stateIn(
@@ -434,21 +450,34 @@ class WaitingTimesViewModel @Inject constructor(
         refreshJob = viewModelScope.launch {
             if (!silent) isLoading.value = true
             errorMessage.value = null
-            when (val result = refreshParkDetail(parkKey, language)) {
+            refreshError.value = null
+            
+            val result = refreshParkDetail(parkKey, language, forceRefresh = showFeedback)
+            isLoading.value = false // Set to false before trigger
+            
+            when (result) {
                 is ApiResult.Success -> {
                     lastRefreshed.value = System.currentTimeMillis()
-                    if (showFeedback) refreshTrigger.value += 1
+                    if (showFeedback) {
+                        refreshTrigger.value += 1
+                    }
                     if (!silent) refreshParkStatistics()
                 }
                 is ApiResult.Error -> {
                     val currentState = uiState.value
                     val hasFallbackWaitTimes = currentState.usedFallbackWaitTimeSource && currentState.allWaitingTimes.isNotEmpty()
+                    val userMessage = result.type.toUserMessage(currentLanguage.value)
+                    
                     if (!hasFallbackWaitTimes && (!silent || currentState.allWaitingTimes.isEmpty())) {
-                        errorMessage.value = result.type.toUserMessage(currentLanguage.value)
+                        errorMessage.value = userMessage
+                    }
+                    
+                    if (showFeedback) {
+                        refreshError.value = userMessage
+                        refreshTrigger.value += 1
                     }
                 }
             }
-            isLoading.value = false
         }
     }
 

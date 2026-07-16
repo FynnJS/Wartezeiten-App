@@ -13,7 +13,6 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
@@ -34,6 +33,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Share
@@ -51,6 +51,9 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedCard
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarData
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -58,6 +61,7 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -85,6 +89,7 @@ import kotlinx.coroutines.launch
 import java.io.File
 import java.time.Instant
 import java.time.LocalDate
+import java.time.LocalTime
 import java.time.OffsetDateTime
 import java.time.YearMonth
 import java.time.ZoneId
@@ -126,8 +131,30 @@ fun StatisticsScreen(
     val scope = rememberCoroutineScope()
     var selectedMonthBucket by remember { mutableStateOf<StatisticsMonthBucket?>(null) }
     val sheetState = rememberModalBottomSheetState()
+    val snackbarHostState = remember { SnackbarHostState() }
+
+    LaunchedEffect(state.refreshTrigger, state.isLoading) {
+        if (state.refreshTrigger > 0 && !state.isLoading) {
+            val message = state.refreshError ?: run {
+                val updatedAt = LocalTime.now().format(DateTimeFormatter.ofPattern("HH:mm"))
+                localized(
+                    state.language,
+                    de = "Statistiken aktualisiert um $updatedAt Uhr",
+                    en = "Statistics updated at $updatedAt",
+                    fr = "Statistiques mises à jour à $updatedAt",
+                    nl = "Statistieken bijgewerkt om $updatedAt",
+                )
+            }
+            snackbarHostState.showSnackbar(message)
+        }
+    }
 
     Scaffold(
+        snackbarHost = {
+            SnackbarHost(snackbarHostState) { data ->
+                RefreshSnackbar(data = data)
+            }
+        },
         topBar = {
             TopAppBar(
                 title = {
@@ -326,6 +353,39 @@ fun StatisticsScreen(
                     selectedMonthBucket = null
                 }
             )
+        }
+    }
+}
+
+@Composable
+private fun RefreshSnackbar(data: SnackbarData) {
+    Surface(
+        modifier = Modifier.padding(12.dp),
+        shape = RoundedCornerShape(12.dp),
+        color = MaterialTheme.colorScheme.inverseSurface,
+        tonalElevation = 6.dp,
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            Icon(
+                imageVector = Icons.Default.CheckCircle,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.inversePrimary,
+            )
+            Text(
+                text = data.visuals.message,
+                modifier = Modifier.weight(1f),
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.inverseOnSurface,
+            )
+            data.visuals.actionLabel?.let { action ->
+                TextButton(onClick = { data.performAction() }) {
+                    Text(action)
+                }
+            }
         }
     }
 }
@@ -1134,10 +1194,4 @@ private fun formatDayOfMonth(isoDate: String): String {
         val date = LocalDate.parse(isoDate)
         date.dayOfMonth.toString()
     }.getOrElse { "-" }
-}
-
-private fun Park.matchesParkKey(parkKey: String?): Boolean {
-    if (parkKey == null) return false
-    val normKey = parkKey.lowercase().trim()
-    return id.lowercase().trim() == normKey || uuid.lowercase().trim() == normKey
 }

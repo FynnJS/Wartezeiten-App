@@ -12,6 +12,7 @@ interface WartezeitenApiService {
     @GET("/v1/parks")
     suspend fun getParks(
         @Header("language") language: String,
+        @Header("Cache-Control") cacheControl: String? = null,
     ): Response<List<ParkDto>>
 
     /**
@@ -22,16 +23,19 @@ interface WartezeitenApiService {
     @GET("/v1/openingtimes")
     suspend fun getOpeningTimes(
         @Header("park") park: String,
+        @Header("Cache-Control") cacheControl: String? = null,
     ): Response<List<OpeningTimesDto>>
 
     @GET("/v1/waitingtimes")
     suspend fun getWaitingTimes(
         @Header("park") park: String,
         @Header("language") language: String,
+        @Header("Cache-Control") cacheControl: String? = null,
     ): Response<List<WaitingTimeDto>>
 
     @GET("/v1/crowdlevel")
     suspend fun getCrowdLevel(
         @Header("park") park: String,
+        @Header("Cache-Control") cacheControl: String? = null,
     ): Response<CrowdLevelDto>
 }
