@@ -4,31 +4,26 @@
   "releaseDate": "2026-07-18",
   "releasePageUrl": "https://github.com/FynnJS/Wartezeiten-App/releases/tag/v1.2.5",
   "apkUrl": "https://github.com/FynnJS/Wartezeiten-App/releases/download/v1.2.5/wartezeiten-app-1.2.5.apk",
-  "apkSize": "4.20",
+  "apkSize": "4.19",
   "releaseNotes": [
-    "Fixed navigation parameter processing: Resolved a potential crash when opening park details and statistics.",
-    "General stability improvements and preparations for upcoming features.",
+    "Fixed a potential `ClassCastException` when reading navigation arguments from `SavedStateHandle` in `StatisticsViewModel` and `WaitingTimesViewModel`.",
     "Bumped Android release metadata to `versionCode 10205` / `versionName 1.2.5`."
   ],
   "releaseNotesLocalized": {
     "de": [
-      "Fehlerbehebung bei der Verarbeitung von Navigationsparametern: Ein potenzieller Absturz beim Öffnen von Park-Details und Statistiken wurde behoben.",
-      "Allgemeine Stabilitätsverbesserungen und Vorbereitungen für kommende Funktionen.",
+      "Fixed a potential `ClassCastException` when reading navigation arguments from `SavedStateHandle` in `StatisticsViewModel` and `WaitingTimesViewModel`.",
       "Bumped Android release metadata to `versionCode 10205` / `versionName 1.2.5`."
     ],
     "en": [
-      "Fixed navigation parameter processing: Resolved a potential crash when opening park details and statistics.",
-      "General stability improvements and preparations for upcoming features.",
+      "Fixed a potential `ClassCastException` when reading navigation arguments from `SavedStateHandle` in `StatisticsViewModel` and `WaitingTimesViewModel`.",
       "Bumped Android release metadata to `versionCode 10205` / `versionName 1.2.5`."
     ],
     "fr": [
-      "Correction du traitement des paramètres de navigation : résolution d'un crash potentiel lors de l'ouverture des détails du parc et des statistiques.",
-      "Améliorations générales de la stabilité et préparations pour les fonctionnalités à venir.",
+      "Fixed a potential `ClassCastException` when reading navigation arguments from `SavedStateHandle` in `StatisticsViewModel` and `WaitingTimesViewModel`.",
       "Bumped Android release metadata to `versionCode 10205` / `versionName 1.2.5`."
     ],
     "nl": [
-      "Navigatieparameterverwerking gerepareerd: een mogelijke crash opgelost bij het openen van parkdetails en statistieken.",
-      "Algemene stabiliteitsverbeteringen en voorbereidingen voor aankomende functies.",
+      "Fixed a potential `ClassCastException` when reading navigation arguments from `SavedStateHandle` in `StatisticsViewModel` and `WaitingTimesViewModel`.",
       "Bumped Android release metadata to `versionCode 10205` / `versionName 1.2.5`."
     ]
   },
