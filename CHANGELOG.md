@@ -1,5 +1,10 @@
 # Changelog
 
+## v1.2.5 - 2026-07-18
+
+- Fixed a potential `ClassCastException` when reading navigation arguments from `SavedStateHandle` in `StatisticsViewModel` and `WaitingTimesViewModel`.
+- Bumped Android release metadata to `versionCode 10205` / `versionName 1.2.5`.
+
 ## v1.2.4 - 2026-07-16
 
 - Adjusted the crowd level calculation to provide more realistic and precise estimates based on live wait times.

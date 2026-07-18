@@ -68,8 +68,8 @@ android {
         applicationId = "de.wartezeiten.app"
         minSdk = 26
         targetSdk = 35
-        versionCode = 10204
-        versionName = "1.2.4"
+        versionCode = 10205
+        versionName = "1.2.5"
         buildConfigField("String", "UPDATE_BASE_URL", "\"https://wartezeiten-app.tutorialfynn.workers.dev/\"")
         buildConfigField("String", "PUSH_API_BASE_URL", "\"https://wartezeiten-app.tutorialfynn.workers.dev/\"")
         buildConfigField("String", "FIREBASE_APPLICATION_ID", optionalStringBuildConfig("FIREBASE_APPLICATION_ID"))

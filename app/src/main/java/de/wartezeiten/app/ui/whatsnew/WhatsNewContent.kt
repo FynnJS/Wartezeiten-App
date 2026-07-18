@@ -25,6 +25,26 @@ data class WhatsNewRelease(
 
 val WHATS_NEW_RELEASES = listOf(
     WhatsNewRelease(
+        versionCode = 10205,
+        versionName = "1.2.5",
+        highlightsDe = listOf(
+            "Fehlerbehebung bei der Verarbeitung von Navigationsparametern: Ein potenzieller Absturz beim Öffnen von Park-Details und Statistiken wurde behoben.",
+            "Allgemeine Stabilitätsverbesserungen und Vorbereitungen für kommende Funktionen.",
+        ),
+        highlightsEn = listOf(
+            "Fixed navigation parameter processing: Resolved a potential crash when opening park details and statistics.",
+            "General stability improvements and preparations for upcoming features.",
+        ),
+        highlightsFr = listOf(
+            "Correction du traitement des paramètres de navigation : résolution d'un crash potentiel lors de l'ouverture des détails du parc et des statistiques.",
+            "Améliorations générales de la stabilité et préparations pour les fonctionnalités à venir.",
+        ),
+        highlightsNl = listOf(
+            "Navigatieparameterverwerking gerepareerd: een mogelijke crash opgelost bij het openen van parkdetails en statistieken.",
+            "Algemene stabiliteitsverbeteringen en voorbereidingen voor aankomende functies.",
+        ),
+    ),
+    WhatsNewRelease(
         versionCode = 10204,
         versionName = "1.2.4",
         highlightsDe = listOf(
