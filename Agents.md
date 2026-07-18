@@ -42,6 +42,7 @@
 ### Quality Requirements
 ✅ **Verification after every change** (UI visual; logic tested; build runs to catch errors)  
 ✅ **Commit Message:** After changes, provide a meaningful but short and concise commit message suggestion based on the changes made (in English)
+✅ **Commit Message Format:** Suggested messages should follow the pattern `fix: ...` for bug fixes, `feat: ...` for new features, and `chore: ...` for maintenance or documentation updates
 ✅ **Technically robust, responsive and visually modern** (Material 3 consistent)  
 ✅ **Update project knowledge:** Document architectural decisions and pitfalls in this file  
 
