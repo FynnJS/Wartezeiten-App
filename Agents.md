@@ -174,8 +174,7 @@
 - **Fingerprint:** Canonical in `config/release-signing.properties` (currently: `272e40a90d94e756d6b940aa410d88a0c42617d11c81fe42af7fe5680be5660e`). On keystore rotation, take the hash from a successful (or failed verify) build and update here + in the properties. See also workflow troubleshooting in history.
 - **Backup:** Store outside repo, secure externally
 - **GitHub Actions:** Secrets `RELEASE_KEYSTORE_BASE64`, `RELEASE_STORE_PASSWORD`, `RELEASE_KEY_ALIAS`, `RELEASE_KEY_PASSWORD`
-- **Verification:** `.github/scripts/verify-release-certificate.ps1` checks finished APK against repo fingerprint
-
+- **Verification:** `.github/scripts/verify-release-certificate.ps1` checks finished APK against repo fingerprint- **Package Conflict / Update Compatibility:** If a new release is signed with a different keystore or certificate than the currently installed app, Android may report a package conflict and block the update. Unsigned APKs are also incompatible with signed installs and can break updates. For seamless APK updates, preserve the original signing lineage and only rotate the keystore intentionally with a matching fingerprint update.
 ### Release Changelog & Website
 - **Changelog:** Write entry before commit (important user/tech changes)
 - **Website Sync:** Automatic from `main` branch → https://wartezeiten-app.tutorialfynn.workers.dev/
