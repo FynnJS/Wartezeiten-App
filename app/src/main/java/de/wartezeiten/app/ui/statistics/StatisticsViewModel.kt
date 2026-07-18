@@ -186,8 +186,8 @@ class StatisticsViewModel @Inject constructor(
     private val preferences: PreferencesDataSource,
     savedStateHandle: SavedStateHandle,
 ) : ViewModel() {
-    private val initialParkKey: String? = savedStateHandle["parkKey"]
-    private val initialAttractionId: String? = savedStateHandle["attractionId"]
+    private val initialParkKey: String? = savedStateHandle.get<String>("parkKey")?.toString()
+    private val initialAttractionId: String? = savedStateHandle.get<String>("attractionId")?.toString()
     private val parks = repository.observeParks(null)
     private val currentAttractions = repository.observeCurrentAttractions()
         .stateIn(

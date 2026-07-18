@@ -112,8 +112,9 @@ class WaitingTimesViewModel @Inject constructor(
     private val preferences: PreferencesDataSource,
     private val attractionNoteDao: AttractionNoteDao,
 ) : ViewModel() {
-    private val parkKey: String = checkNotNull(savedStateHandle["parkKey"])
-    private val highlightedAttractionId: String? = savedStateHandle["attractionId"]
+    private val parkKey: String = savedStateHandle.get<String>("parkKey")?.toString()
+        ?: throw IllegalArgumentException("parkKey nav argument is missing")
+    private val highlightedAttractionId: String? = savedStateHandle.get<String>("attractionId")?.toString()
     private val clearedAttractionDetail = MutableStateFlow(false)
     private val sort = MutableStateFlow(WaitingTimesSort.WaitDescending)
     private val filter = MutableStateFlow(AttractionFilter.All)
