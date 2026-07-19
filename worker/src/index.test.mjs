@@ -180,7 +180,7 @@ test("cron park selection balances the current park list across four deployable 
 
   const shardSizes = [0, 1, 2, 3].map((shard) => selectCronParkShard(parks, shard, 4).length);
 
-  assert.deepEqual(shardSizes, [12, 12, 11, 11]);
+  assert.deepEqual(shardSizes, [13, 9, 9, 14]);
 });
 
 test("D1 attraction history pruning removes old dates and orphaned day rows", async () => {

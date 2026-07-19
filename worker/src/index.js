@@ -247,6 +247,7 @@ async function updateAppData(env, options = {}) {
   const errors = [];
   const skippedHistory = [];
   const attractionDayUpdates = [];
+  const d1SnapshotRows = [];
 
   if (hasD1(env)) {
     try {
@@ -292,7 +293,7 @@ async function updateAppData(env, options = {}) {
 
       if (snapshot.historyEligible && snapshot.attractions.length > 0) {
         if (hasD1(env)) {
-          await writeAttractionSnapshotsD1(env, [toAttractionSnapshotRow(snapshot, now)]);
+          d1SnapshotRows.push(toAttractionSnapshotRow(snapshot, now));
         } else {
           attractionDayUpdates.push(await buildUpdatedAttractionHistory(env, snapshot, now));
         }
@@ -321,6 +322,7 @@ async function updateAppData(env, options = {}) {
     parks,
     recommendations,
     errors,
+    skippedHistory,
   };
   const trendHistory = {
     generatedAtMillis: now,
@@ -334,6 +336,13 @@ async function updateAppData(env, options = {}) {
   }
   if (options.writeTrend !== false) {
     await env.APP_DATA.put(TREND_KEY, JSON.stringify(trendHistory));
+  }
+  if (d1SnapshotRows.length > 0) {
+    try {
+      await writeAttractionSnapshotsD1(env, d1SnapshotRows);
+    } catch (error) {
+      errors.push({ parkKey: "D1_BATCH", message: `Batch write failed: ${error.message}` });
+    }
   }
   if (attractionDayUpdates.length > 0) {
     await writeAttractionHistoryBatch(env, attractionDayUpdates, now);
@@ -356,7 +365,8 @@ async function resolveParkKeys(env) {
   const configured = parseParkKeys(env.APP_DATA_PARK_KEYS);
   const maxParks = parsePositiveInt(env.APP_DATA_MAX_PARKS);
   if (configured.length > 0) {
-    return maxParks == null ? configured : configured.slice(0, maxParks);
+    const keys = maxParks == null ? configured : configured.slice(0, maxParks);
+    return keys.sort();
   }
 
   try {
@@ -366,7 +376,7 @@ async function resolveParkKeys(env) {
         .map((park) => park.id || park.uuid || stableAttractionId(park.name))
         .filter(Boolean)
       : [];
-    const unique = [...new Set(discovered)];
+    const unique = [...new Set(discovered)].sort();
     if (unique.length > 0) {
       return maxParks == null ? unique : unique.slice(0, maxParks);
     }
@@ -374,7 +384,8 @@ async function resolveParkKeys(env) {
     console.warn("Could not discover park keys", error);
   }
 
-  return maxParks == null ? DEFAULT_PARK_KEYS : DEFAULT_PARK_KEYS.slice(0, maxParks);
+  const defaultKeys = maxParks == null ? DEFAULT_PARK_KEYS : DEFAULT_PARK_KEYS.slice(0, maxParks);
+  return defaultKeys.sort();
 }
 
 async function collectParkSnapshot(parkKey, now, options = {}) {
@@ -419,9 +430,9 @@ async function collectParkSnapshot(parkKey, now, options = {}) {
       skipReason: "upstream_error",
     };
   }
+  const openAttractions = attractionItems.filter((item) => item.statusCode === 0).length;
   const openedToday = opening?.opened_today === true || openAttractions > 0 ||
     (opening == null && usedFallbackWaitingTimes && attractionItems.length > 0);
-  const openAttractions = attractionItems.filter((item) => item.statusCode === 0).length;
   const totalAttractions = waitingItems.length;
   const apiCrowdLevel = parseCrowdLevel(crowdLevel?.crowd_level);
   const calculatedCrowdLevel = estimateCrowdLevelFromAttractions(attractionItems);
@@ -2545,7 +2556,9 @@ function cronParkShard(parkKey, shardCount) {
 function selectCronParkShard(parkKeys, shardIndex, shardCount) {
   const count = parsePositiveInt(shardCount) ?? DEFAULT_CRON_SHARDS;
   const index = Number.isInteger(shardIndex) ? shardIndex : 0;
-  return (parkKeys ?? []).filter((parkKey, parkIndex) => parkKey && (parkIndex % count) === index);
+  // Use hashing instead of list index to ensure parks stay in the same shard
+  // regardless of additions/removals or API response order.
+  return (parkKeys ?? []).filter((parkKey) => parkKey && (hashString(parkKey) % count) === index);
 }
 
 function scheduledShardIndex(cron, shardCount, scheduledTimeMillis = Date.now()) {
