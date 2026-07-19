@@ -1,5 +1,7 @@
 package de.wartezeiten.app.ui.parks
 
+import de.wartezeiten.app.core.utils.countryToFlag
+
 import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
 import org.junit.Test

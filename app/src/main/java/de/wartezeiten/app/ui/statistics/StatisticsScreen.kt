@@ -83,6 +83,11 @@ import androidx.core.content.FileProvider
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import de.wartezeiten.app.core.i18n.localized
+import androidx.compose.material.icons.filled.Clear
+import androidx.compose.material.icons.filled.Search
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedTextFieldDefaults
+import de.wartezeiten.app.core.utils.countryToFlag
 import de.wartezeiten.app.domain.model.AttractionHistorySummary
 import de.wartezeiten.app.domain.model.Park
 import kotlinx.coroutines.launch
@@ -112,6 +117,7 @@ fun StatisticsRoute(
         onDateSelected = viewModel::selectDate,
         onAttractionSelected = viewModel::selectAttraction,
         onParkStatisticsSelected = viewModel::selectParkStatistics,
+        onAttractionListQueryChange = viewModel::updateAttractionListQuery,
     )
 }
 
@@ -125,12 +131,12 @@ fun StatisticsScreen(
     onDateSelected: (String) -> Unit,
     onAttractionSelected: (String) -> Unit,
     onParkStatisticsSelected: () -> Unit,
+    onAttractionListQueryChange: (String) -> Unit,
 ) {
     val context = LocalContext.current
     val rootView = LocalView.current
     val scope = rememberCoroutineScope()
     var selectedMonthBucket by remember { mutableStateOf<StatisticsMonthBucket?>(null) }
-    val sheetState = rememberModalBottomSheetState()
     val snackbarHostState = remember { SnackbarHostState() }
 
     LaunchedEffect(state.refreshTrigger, state.isLoading) {
@@ -274,22 +280,24 @@ fun StatisticsScreen(
                         EmptyStatisticsState(
                             parkName = state.selectedPark?.name,
                             isSpecificAttraction = state.selectedAttractionId != null,
+                            language = state.language,
                         )
                     }
                 } else {
                     item {
                         if (state.selectedAttractionId == null) {
                             state.parkStatistics?.let { summary ->
-                                SelectedParkSummary(summary, state.parkSeries)
+                                SelectedParkSummary(summary, state.language)
                             }
                         } else if (!state.isLoading && (state.day == null || state.day.snapshots.isEmpty())) {
                             EmptyStatisticsState(
                                 parkName = state.selectedPark?.name,
                                 isSpecificAttraction = true,
+                                language = state.language
                             )
                         } else {
                             state.selectedAttraction?.let { summary ->
-                                SelectedAttractionSummary(summary)
+                                SelectedAttractionSummary(summary, state.language)
                             }
                         }
                     }
@@ -300,6 +308,7 @@ fun StatisticsScreen(
                                 day = state.day,
                                 selectedDate = state.selectedDate,
                                 points = state.parkSeries,
+                                language = state.language,
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .height(240.dp)
@@ -311,6 +320,7 @@ fun StatisticsScreen(
                                 day = state.day,
                                 selectedDate = state.selectedDate,
                                 points = state.selectedSeries,
+                                language = state.language,
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .height(240.dp)
@@ -318,15 +328,43 @@ fun StatisticsScreen(
                         }
                     }
 
+
                     item {
                         MonthOverviewSection(
-                            buckets = state.monthBuckets,
-                            onMonthClick = { selectedMonthBucket = it }
-                        )
+                        buckets = state.monthBuckets,
+                        language = state.language,
+                        onMonthClick = { selectedMonthBucket = it }
+                    )
                     }
 
                     if (state.selectedAttractionId == null && state.day != null) {
-                        items(state.day.attractions.sortedByDescending { it.averageWaitMinutes }) { attraction ->
+                        item {
+                            OutlinedTextField(
+                                value = state.attractionListQuery,
+                                onValueChange = onAttractionListQueryChange,
+                                modifier = Modifier.fillMaxWidth(),
+                                placeholder = { Text(localized(state.language, de = "Attraktion suchen...", en = "Search attraction...", fr = "Rechercher une attraction...", nl = "Attractie zoeken...")) },
+                                leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
+                                trailingIcon = if (state.attractionListQuery.isNotEmpty()) {
+                                    {
+                                        IconButton(onClick = { onAttractionListQueryChange("") }) {
+                                            Icon(Icons.Default.Clear, contentDescription = null)
+                                        }
+                                    }
+                                } else null,
+                                singleLine = true,
+                                shape = RoundedCornerShape(12.dp),
+                                colors = OutlinedTextFieldDefaults.colors(
+                                    unfocusedBorderColor = MaterialTheme.colorScheme.outline.copy(alpha = 0.4f),
+                                )
+                            )
+                        }
+
+                        val filteredAttractions = state.day.attractions
+                            .filter { it.name.contains(state.attractionListQuery, ignoreCase = true) }
+                            .sortedByDescending { it.averageWaitMinutes }
+
+                        items(filteredAttractions, key = { it.id }) { attraction ->
                             AttractionSummaryRow(
                                 summary = attraction,
                                 selected = false,
@@ -340,20 +378,16 @@ fun StatisticsScreen(
     }
 
     if (selectedMonthBucket != null) {
-        ModalBottomSheet(
-            onDismissRequest = { selectedMonthBucket = null },
-            sheetState = sheetState,
-            containerColor = MaterialTheme.colorScheme.surface,
-        ) {
-            MonthDetailSheet(
-                bucket = selectedMonthBucket!!,
-                language = state.language,
-                onDateSelected = { date ->
-                    onDateSelected(date)
-                    selectedMonthBucket = null
-                }
-            )
-        }
+        DateSelectorSheet(
+            title = formatMonthLabel(selectedMonthBucket!!.month, state.language),
+            buckets = listOf(selectedMonthBucket!!),
+            language = state.language,
+            onDateSelected = { date ->
+                onDateSelected(date)
+                selectedMonthBucket = null
+            },
+            onDismiss = { selectedMonthBucket = null }
+        )
     }
 }
 
@@ -438,94 +472,108 @@ private fun StatisticsControlPanel(
     onAttractionSelected: (String) -> Unit,
     onParkStatisticsSelected: () -> Unit,
 ) {
+    var showParkSelector by remember { mutableStateOf(false) }
+    var showDateSelector by remember { mutableStateOf(false) }
+    var showAttractionSelector by remember { mutableStateOf(false) }
+
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            DropdownField(
+            SelectorField(
                 label = localized(state.language, de = "Park", en = "Park", fr = "Parc", nl = "Park"),
-                value = state.selectedPark?.name ?: state.selectedParkKey ?: "-",
+                value = state.selectedPark?.let { "${countryToFlag(it.country)} ${it.name}" } ?: state.selectedParkKey ?: "-",
+                onClick = { showParkSelector = true },
                 modifier = Modifier.weight(1.3f)
-            ) { onDismiss ->
-                state.parks.forEach { park ->
-                    DropdownMenuItem(
-                        text = { Text(park.name) },
-                        onClick = {
-                            onParkSelected(park.id)
-                            onDismiss()
-                        }
-                    )
-                }
-            }
+            )
 
-            DropdownField(
+            SelectorField(
                 label = localized(state.language, de = "Datum", en = "Date", fr = "Date", nl = "Datum"),
                 value = formatDateLabel(state.selectedDate),
+                onClick = { showDateSelector = true },
                 modifier = Modifier.weight(1f)
-            ) { onDismiss ->
-                state.availableDates.reversed().forEach { date ->
-                    DropdownMenuItem(
-                        text = { Text(formatDateLabel(date)) },
-                        onClick = {
-                            onDateSelected(date)
-                            onDismiss()
-                        }
-                    )
-                }
-            }
+            )
         }
 
-        DropdownField(
+        SelectorField(
             label = localized(state.language, de = "Attraktion", en = "Attraction", fr = "Attraction", nl = "Attractie"),
             value = state.selectedAttraction?.name ?: localized(state.language, de = "Durchschnitt (Park)", en = "Average (Park)", fr = "Moyenne (Parc)", nl = "Gemiddelde (Park)"),
+            onClick = { showAttractionSelector = true },
             modifier = Modifier.fillMaxWidth()
-        ) { onDismiss ->
-            DropdownMenuItem(
-                text = { Text(localized(state.language, de = "Auslastung (gesamt)", en = "Total crowd", fr = "Fréquentation totale", nl = "Totale drukte")) },
-                onClick = {
-                    onParkStatisticsSelected()
-                    onDismiss()
-                }
+        )
+    }
+
+    if (showParkSelector) {
+        SearchableSelectorSheet(
+            title = localized(state.language, de = "Park auswählen", en = "Select park", fr = "Choisir un parc", nl = "Park selecteren"),
+            items = state.parks.map { SelectorItem(it.id, it.name, countryToFlag(it.country)) },
+            language = state.language,
+            onItemSelected = { item ->
+                onParkSelected(item.id)
+                showParkSelector = false
+            },
+            onDismiss = { showParkSelector = false }
+        )
+    }
+
+    if (showDateSelector) {
+        DateSelectorSheet(
+            title = localized(state.language, de = "Datum auswählen", en = "Select date", fr = "Choisir une date", nl = "Datum selecteren"),
+            buckets = state.monthBuckets,
+            language = state.language,
+            onDateSelected = { date ->
+                onDateSelected(date)
+                showDateSelector = false
+            },
+            onDismiss = { showDateSelector = false }
+        )
+    }
+
+    if (showAttractionSelector) {
+        val attractionItems = mutableListOf<SelectorItem>()
+        attractionItems.add(
+            SelectorItem(
+                id = "average",
+                name = localized(state.language, de = "Auslastung (gesamt)", en = "Total crowd", fr = "Fréquentation totale", nl = "Totale drukte"),
+                icon = "📊"
             )
-            state.attractionOptions.forEach { attraction ->
-                DropdownMenuItem(
-                    text = { Text(attraction.name) },
-                    onClick = {
-                        onAttractionSelected(attraction.id)
-                        onDismiss()
-                    }
-                )
-            }
-        }
+        )
+        attractionItems.addAll(state.attractionOptions.map { SelectorItem(it.id, it.name) })
+
+        SearchableSelectorSheet(
+            title = localized(state.language, de = "Attraktion auswählen", en = "Select attraction", fr = "Choisir une attraction", nl = "Attractie selecteren"),
+            items = attractionItems,
+            language = state.language,
+            onItemSelected = {
+                if (it.id == "average") onParkStatisticsSelected()
+                else onAttractionSelected(it.id)
+                showAttractionSelector = false
+            },
+            onDismiss = { showAttractionSelector = false }
+        )
     }
 }
 
 @Composable
-private fun DropdownField(
+private fun SelectorField(
     label: String,
     value: String,
+    onClick: () -> Unit,
     modifier: Modifier = Modifier,
-    content: @Composable (onDismiss: () -> Unit) -> Unit
 ) {
-    var expanded by remember { mutableStateOf(false) }
-    Box(modifier = modifier) {
-        OutlinedCard(
-            onClick = { expanded = true },
-            shape = RoundedCornerShape(12.dp),
-            modifier = Modifier.fillMaxWidth()
+    OutlinedCard(
+        onClick = onClick,
+        shape = RoundedCornerShape(12.dp),
+        modifier = modifier
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(4.dp)
         ) {
-            Row(
-                modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(4.dp)
-            ) {
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(label, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    Text(value, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                }
-                Icon(Icons.Default.KeyboardArrowDown, contentDescription = null, modifier = Modifier.size(20.dp))
+            Column(modifier = Modifier.weight(1f)) {
+                Text(label, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(value, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
             }
-        }
-        DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
-            content { expanded = false }
+            Icon(Icons.Default.KeyboardArrowDown, contentDescription = null, modifier = Modifier.size(20.dp))
         }
     }
 }
@@ -533,6 +581,7 @@ private fun DropdownField(
 @Composable
 private fun SelectedAttractionSummary(
     summary: AttractionHistorySummary,
+    language: String,
 ) {
     OutlinedCard(
         modifier = Modifier.fillMaxWidth(),
@@ -543,7 +592,7 @@ private fun SelectedAttractionSummary(
             Text(summary.name, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
             Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 StatTile(
-                    label = "Durchschnitt",
+                    label = localized(language, de = "Durchschnitt", en = "Average", fr = "Moyenne", nl = "Gemiddelde"),
                     value = summary.averageWaitMinutes.minutesText(),
                     modifier = Modifier.weight(1f)
                 )
@@ -553,7 +602,7 @@ private fun SelectedAttractionSummary(
                     modifier = Modifier.weight(1f)
                 )
                 StatTile(
-                    label = "Messpunkte",
+                    label = localized(language, de = "Messpunkte", en = "Samples", fr = "Échantillons", nl = "Meetpunten"),
                     value = "${summary.sampleCount}",
                     modifier = Modifier.weight(0.8f)
                 )
@@ -573,7 +622,7 @@ private fun StatTile(label: String, value: String, modifier: Modifier = Modifier
 @Composable
 private fun SelectedParkSummary(
     summary: ParkStatisticsSummary,
-    points: List<ParkChartPoint>,
+    language: String,
 ) {
     OutlinedCard(
         modifier = Modifier.fillMaxWidth(),
@@ -581,20 +630,20 @@ private fun SelectedParkSummary(
         colors = CardDefaults.outlinedCardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.3f))
     ) {
         Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            Text("Park-Durchschnitt", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+            Text(localized(language, de = "Park-Durchschnitt", en = "Park average", fr = "Moyenne du parc", nl = "Parkgemiddelde"), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
             Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 StatTile(
-                    label = "Ø Wartezeit",
+                    label = localized(language, de = "Ø Wartezeit", en = "Ø Wait time", fr = "Ø Temps d'attente", nl = "Ø Wachttijd"),
                     value = summary.averageWaitMinutes.minutesText(),
                     modifier = Modifier.weight(1f)
                 )
                 StatTile(
-                    label = "Messpunkte",
+                    label = localized(language, de = "Messpunkte", en = "Samples", fr = "Échantillons", nl = "Meetpunten"),
                     value = "${summary.sampleCount}",
                     modifier = Modifier.weight(0.8f)
                 )
                 StatTile(
-                    label = "Offen",
+                    label = localized(language, de = "Offen", en = "Open", fr = "Ouvert", nl = "Open"),
                     value = "${summary.latestOpenAttractionCount}",
                     modifier = Modifier.weight(0.8f)
                 )
@@ -608,6 +657,7 @@ private fun AttractionHistoryChart(
     day: de.wartezeiten.app.domain.model.AttractionHistoryDay?,
     selectedDate: String,
     points: List<AttractionChartPoint>,
+    language: String,
     modifier: Modifier = Modifier,
 ) {
     val allWaitPoints = remember(points) {
@@ -618,7 +668,10 @@ private fun AttractionHistoryChart(
     if (points.size < 2) {
         OutlinedCard(modifier = modifier, shape = RoundedCornerShape(14.dp)) {
             Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                Text("Noch zu wenige Messpunkte", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(
+                    localized(language, de = "Noch zu wenige Messpunkte", en = "Too few measurements yet", fr = "Encore trop peu de mesures", nl = "Nog te weinig meetpunten"),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
             }
         }
         return
@@ -753,25 +806,28 @@ private fun AttractionHistoryChart(
                     .padding(start = 34.dp),
                 horizontalArrangement = Arrangement.SpaceBetween,
             ) {
-                Text("${timeFormatter.format(Instant.ofEpochMilli(minTime))} Uhr", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                Text("${timeFormatter.format(Instant.ofEpochMilli(midTime))} Uhr", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                Text("${timeFormatter.format(Instant.ofEpochMilli(maxTime))} Uhr", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                val minT = timeFormatter.format(Instant.ofEpochMilli(minTime))
+                val midT = timeFormatter.format(Instant.ofEpochMilli(midTime))
+                val maxT = timeFormatter.format(Instant.ofEpochMilli(maxTime))
+                Text(localized(language, de = "$minT Uhr", en = minT, fr = minT, nl = minT), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(localized(language, de = "$midT Uhr", en = midT, fr = midT, nl = midT), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(localized(language, de = "$maxT Uhr", en = maxT, fr = maxT, nl = maxT), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
-            StatusLegend()
+            StatusLegend(language)
         }
     }
 }
 
 @Composable
-private fun StatusLegend() {
+private fun StatusLegend(language: String) {
     Row(
         modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.spacedBy(10.dp),
+        horizontalArrangement = Arrangement.spacedBy(10.dp, Alignment.CenterHorizontally),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        StatusLegendItem("Geschlossen", statusColor(-1))
-        StatusLegendItem("Wetterbedingt zu", statusColor(-2))
-        StatusLegendItem("Wartung", statusColor(-3))
+        StatusLegendItem(localized(language, de = "Geschlossen", en = "Closed", fr = "Fermé", nl = "Gesloten"), statusColor(-1))
+        StatusLegendItem(localized(language, de = "Wetterbedingt zu", en = "Weather-related", fr = "Lié à la météo", nl = "Weersafhankelijk"), statusColor(-2))
+        StatusLegendItem(localized(language, de = "Wartung", en = "Maintenance", fr = "Entretien", nl = "Onderhoud"), statusColor(-3))
     }
 }
 
@@ -791,12 +847,16 @@ private fun ParkAverageWaitChart(
     day: de.wartezeiten.app.domain.model.AttractionHistoryDay?,
     selectedDate: String,
     points: List<ParkChartPoint>,
+    language: String,
     modifier: Modifier = Modifier,
 ) {
     if (points.size < 2) {
         OutlinedCard(modifier = modifier, shape = RoundedCornerShape(14.dp)) {
             Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                Text("Noch zu wenige Messpunkte", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(
+                    localized(language, de = "Noch zu wenige Messpunkte", en = "Too few measurements yet", fr = "Encore trop peu de mesures", nl = "Nog te weinig meetpunten"),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
             }
         }
         return
@@ -912,12 +972,15 @@ private fun ParkAverageWaitChart(
                     .padding(start = 34.dp),
                 horizontalArrangement = Arrangement.SpaceBetween,
             ) {
-                Text("${timeFormatter.format(Instant.ofEpochMilli(minTime))} Uhr", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                Text("${timeFormatter.format(Instant.ofEpochMilli(midTime))} Uhr", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                Text("${timeFormatter.format(Instant.ofEpochMilli(maxTime))} Uhr", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                val minT = timeFormatter.format(Instant.ofEpochMilli(minTime))
+                val midT = timeFormatter.format(Instant.ofEpochMilli(midTime))
+                val maxT = timeFormatter.format(Instant.ofEpochMilli(maxTime))
+                Text(localized(language, de = "$minT Uhr", en = minT, fr = minT, nl = minT), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(localized(language, de = "$midT Uhr", en = midT, fr = midT, nl = midT), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(localized(language, de = "$maxT Uhr", en = maxT, fr = maxT, nl = maxT), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
             Text(
-                "Durchschnittliche Wartezeit aller geöffneten Attraktionen",
+                localized(language, de = "Durchschnittliche Wartezeit aller geöffneten Attraktionen", en = "Average wait time of all open attractions", fr = "Temps d'attente moyen de toutes les attractions ouvertes", nl = "Gemiddelde wachttijd van alle geopende attracties"),
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -929,11 +992,12 @@ private fun ParkAverageWaitChart(
 @Composable
 private fun MonthOverviewSection(
     buckets: List<StatisticsMonthBucket>,
+    language: String,
     onMonthClick: (StatisticsMonthBucket) -> Unit
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Text(
-            "Monats-Überblick",
+            localized(language, de = "Monats-Überblick", en = "Monthly overview", fr = "Aperçu mensuel", nl = "Maandoverzicht"),
             style = MaterialTheme.typography.titleSmall,
             fontWeight = FontWeight.Bold,
             modifier = Modifier.padding(horizontal = 4.dp)
@@ -955,12 +1019,13 @@ private fun MonthOverviewSection(
                         horizontalAlignment = Alignment.CenterHorizontally
                     ) {
                         Text(
-                            formatMonthLabel(bucket.month),
+                            formatMonthLabel(bucket.month, language),
                             style = MaterialTheme.typography.labelMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
+                        val daysLabel = localized(language, de = "Tage", en = "Days", fr = "Jours", nl = "Dagen")
                         Text(
-                            "${bucket.dayCount} Tage",
+                            "${bucket.dayCount} $daysLabel",
                             style = MaterialTheme.typography.bodyMedium,
                             fontWeight = FontWeight.Bold
                         )
@@ -973,69 +1038,110 @@ private fun MonthOverviewSection(
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun MonthDetailSheet(
-    bucket: StatisticsMonthBucket,
+private fun DateSelectorSheet(
+    title: String,
+    buckets: List<StatisticsMonthBucket>,
     language: String,
-    onDateSelected: (String) -> Unit
+    onDateSelected: (String) -> Unit,
+    onDismiss: () -> Unit,
 ) {
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(bottom = 24.dp)
+    val sheetState = rememberModalBottomSheetState()
+    var selectedBucket by remember { 
+        mutableStateOf(buckets.firstOrNull()) 
+    }
+
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        sheetState = sheetState,
+        containerColor = MaterialTheme.colorScheme.surface,
     ) {
-        Text(
-            text = formatMonthLabel(bucket.month),
-            style = MaterialTheme.typography.headlineSmall,
-            fontWeight = FontWeight.Bold,
-            modifier = Modifier.padding(horizontal = 24.dp, vertical = 8.dp)
-        )
-        Text(
-            text = localized(
-                language,
-                de = "Tage mit verfügbaren Messwerten",
-                en = "Days with available measurements",
-                fr = "Jours avec mesures disponibles",
-                nl = "Dagen met beschikbare metingen"
-            ),
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.padding(start = 24.dp, end = 24.dp, bottom = 16.dp)
-        )
-
-        HorizontalDivider(modifier = Modifier.padding(horizontal = 24.dp))
-
-        LazyVerticalGrid(
-            columns = GridCells.Adaptive(minSize = 80.dp),
-            contentPadding = PaddingValues(24.dp),
-            horizontalArrangement = Arrangement.spacedBy(12.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
-            modifier = Modifier.height(320.dp)
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .fillMaxHeight(0.85f)
+                .padding(bottom = 16.dp)
         ) {
-            items(bucket.availableDates) { date ->
-                OutlinedCard(
-                    onClick = { onDateSelected(date) },
-                    shape = RoundedCornerShape(12.dp),
-                    colors = CardDefaults.outlinedCardColors(
-                        containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f)
+            Text(
+                text = title,
+                style = MaterialTheme.typography.titleLarge,
+                fontWeight = FontWeight.Bold,
+                modifier = Modifier.padding(16.dp)
+            )
+
+            // Month selection row
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .horizontalScroll(rememberScrollState())
+                    .padding(horizontal = 16.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                buckets.forEach { bucket ->
+                    FilterChip(
+                        selected = selectedBucket == bucket,
+                        onClick = { selectedBucket = bucket },
+                        label = { Text(formatMonthLabel(bucket.month, language)) }
                     )
+                }
+            }
+
+            Spacer(Modifier.height(16.dp))
+
+            if (selectedBucket != null) {
+                Text(
+                    text = localized(
+                        language,
+                        de = "Wähle einen Tag",
+                        en = "Select a day",
+                        fr = "Choisir un jour",
+                        nl = "Kies een dag"
+                    ),
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(horizontal = 24.dp, vertical = 8.dp)
+                )
+
+                LazyVerticalGrid(
+                    columns = GridCells.Adaptive(minSize = 80.dp),
+                    contentPadding = PaddingValues(24.dp),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp),
+                    modifier = Modifier.weight(1f)
                 ) {
-                    Column(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(vertical = 12.dp),
-                        horizontalAlignment = Alignment.CenterHorizontally
-                    ) {
-                        Text(
-                            text = formatDayOfMonth(date),
-                            style = MaterialTheme.typography.titleLarge,
-                            fontWeight = FontWeight.ExtraBold
-                        )
-                        Text(
-                            text = formatShortDateLabel(date),
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
+                    items(selectedBucket!!.availableDates.reversed()) { date ->
+                        OutlinedCard(
+                            onClick = { onDateSelected(date) },
+                            shape = RoundedCornerShape(12.dp),
+                            colors = CardDefaults.outlinedCardColors(
+                                containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f)
+                            )
+                        ) {
+                            Column(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(vertical = 12.dp),
+                                horizontalAlignment = Alignment.CenterHorizontally
+                            ) {
+                                Text(
+                                    text = formatDayOfMonth(date),
+                                    style = MaterialTheme.typography.titleLarge,
+                                    fontWeight = FontWeight.ExtraBold
+                                )
+                                Text(
+                                    text = formatShortDateLabel(date),
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        }
                     }
+                }
+            } else {
+                Box(modifier = Modifier.weight(1f), contentAlignment = Alignment.Center) {
+                    Text(
+                        localized(language, de = "Keine Daten verfügbar", en = "No data available", fr = "Aucune donnée disponible", nl = "Geen gegevens beschikbaar"),
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
                 }
             }
         }
@@ -1089,7 +1195,7 @@ private fun ErrorCard(message: String, onRetry: () -> Unit) {
 }
 
 @Composable
-private fun EmptyStatisticsState(parkName: String?, isSpecificAttraction: Boolean) {
+private fun EmptyStatisticsState(parkName: String?, isSpecificAttraction: Boolean, language: String) {
     Box(
         modifier = Modifier
             .fillMaxWidth()
@@ -1098,9 +1204,21 @@ private fun EmptyStatisticsState(parkName: String?, isSpecificAttraction: Boolea
     ) {
         Text(
             text = if (isSpecificAttraction) {
-                "Für diese Attraktion liegen an diesem Tag keine Messpunkte vor."
+                localized(
+                    language,
+                    de = "Für diese Attraktion liegen an diesem Tag keine Messpunkte vor.",
+                    en = "No measurements available for this attraction on this day.",
+                    fr = "Aucune mesure disponible pour cette attraction ce jour-là.",
+                    nl = "Geen metingen beschikbaar voor deze attractie op deze dag."
+                )
             } else {
-                "Für diesen Tag liegen keine zentralen Messpunkte für ${parkName ?: "den Park"} vor."
+                localized(
+                    language,
+                    de = "Für diesen Tag liegen keine zentralen Messpunkte für ${parkName ?: "den Park"} vor.",
+                    en = "No central measurements available for ${parkName ?: "the park"} on this day.",
+                    fr = "Aucune mesure centrale disponible pour ${parkName ?: "le parc"} ce jour-là.",
+                    nl = "Geen centrale metingen beschikbaar voor ${parkName ?: "het park"} op deze dag."
+                )
             },
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -1182,10 +1300,11 @@ private fun formatShortDateLabel(isoDate: String): String {
     }.getOrElse { isoDate }
 }
 
-private fun formatMonthLabel(monthKey: String): String {
+private fun formatMonthLabel(monthKey: String, language: String): String {
     return runCatching {
         val ym = YearMonth.parse(monthKey)
-        ym.month.getDisplayName(TextStyle.FULL, Locale.GERMAN) + " " + ym.year
+        val locale = Locale.forLanguageTag(language)
+        ym.month.getDisplayName(TextStyle.FULL, locale) + " " + ym.year
     }.getOrElse { monthKey }
 }
 
@@ -1195,3 +1314,88 @@ private fun formatDayOfMonth(isoDate: String): String {
         date.dayOfMonth.toString()
     }.getOrElse { "-" }
 }
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun SearchableSelectorSheet(
+    title: String,
+    items: List<SelectorItem>,
+    language: String,
+    onItemSelected: (SelectorItem) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    val sheetState = rememberModalBottomSheetState()
+    var query by remember { mutableStateOf("") }
+    val filteredItems = remember(query, items) {
+        items.filter { it.name.contains(query, ignoreCase = true) }
+    }
+
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        sheetState = sheetState,
+        containerColor = MaterialTheme.colorScheme.surface,
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .fillMaxHeight(0.85f)
+                .padding(bottom = 16.dp)
+        ) {
+            Text(
+                text = title,
+                style = MaterialTheme.typography.titleLarge,
+                fontWeight = FontWeight.Bold,
+                modifier = Modifier.padding(16.dp)
+            )
+
+            OutlinedTextField(
+                value = query,
+                onValueChange = { query = it },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp),
+                placeholder = { Text(localized(language, de = "Suchen...", en = "Search...", fr = "Rechercher...", nl = "Zoeken...")) },
+                leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
+                trailingIcon = if (query.isNotEmpty()) {
+                    {
+                        IconButton(onClick = { query = "" }) {
+                            Icon(Icons.Default.Clear, contentDescription = localized(language, de = "Suche leeren", en = "Clear search", fr = "Effacer la recherche", nl = "Zoekopdracht wissen"))
+                        }
+                    }
+                } else null,
+                singleLine = true,
+                shape = RoundedCornerShape(12.dp)
+            )
+
+            Spacer(Modifier.height(8.dp))
+
+            LazyColumn(modifier = Modifier.weight(1f)) {
+                items(filteredItems, key = { it.id }) { item ->
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { onItemSelected(item) }
+                            .padding(16.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        if (item.icon != null) {
+                            Text(item.icon, style = MaterialTheme.typography.titleLarge)
+                        }
+                        Text(
+                            text = item.name,
+                            style = MaterialTheme.typography.bodyLarge,
+                            modifier = Modifier.weight(1f)
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+private data class SelectorItem(
+    val id: String,
+    val name: String,
+    val icon: String? = null,
+)

@@ -2,7 +2,7 @@
 
 import android.content.Context
 import android.content.Intent
-import androidx.compose.animation.AnimatedContent
+import de.wartezeiten.app.core.utils.countryToFlag
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.expandVertically
@@ -1174,40 +1174,4 @@ private fun CompactParkActionButton(
     }
 }
 
-internal fun countryToFlag(country: String): String {
-    return flagEmojiForCountryCode(countryToIsoCode(country) ?: "")
-}
 
-private fun countryToIsoCode(country: String): String? {
-    return when (country.lowercase().trim()) {
-        "deutschland", "germany", "de" -> "DE"
-        "\u00f6sterreich", "austria", "at" -> "AT"
-        "schweiz", "switzerland", "ch" -> "CH"
-        "frankreich", "france", "fr" -> "FR"
-        "niederlande", "netherlands", "nl" -> "NL"
-        "belgien", "belgium", "be" -> "BE"
-        "vereinigtes k\u00f6nigreich", "united kingdom", "uk", "gb", "great britain", "gro\u00dfbritannien" -> "GB"
-        "usa", "us", "u.s.a.", "united states", "united states of america", "vereinigte staaten", "vereinigte staaten von amerika" -> "US"
-        "spanien", "spain", "es" -> "ES"
-        "italien", "italy", "it" -> "IT"
-        "d\u00e4nemark", "denmark", "dk" -> "DK"
-        "schweden", "sweden", "se" -> "SE"
-        "norwegen", "norway", "no" -> "NO"
-        "finnland", "finland", "fi" -> "FI"
-        "japan", "jp" -> "JP"
-        "tschechien", "czech republic", "cz" -> "CZ"
-        "polen", "poland", "pl" -> "PL"
-        "portugal", "pt" -> "PT"
-        "luxemburg", "luxembourg", "lu" -> "LU"
-        else -> null
-    }
-}
-
-private fun flagEmojiForCountryCode(countryCode: String): String {
-    if (countryCode.length != 2) return ""
-    val firstLetter = Character.codePointAt(countryCode, 0) - 0x41 + 0x1F1E6
-    val secondLetter = Character.codePointAt(countryCode, 1) - 0x41 + 0x1F1E6
-    return String(Character.toChars(firstLetter)) + String(Character.toChars(secondLetter))
-}
-
-private const val REGIONAL_INDICATOR_OFFSET = 0x1F1E6 - 0x41

@@ -43,6 +43,7 @@ data class StatisticsUiState(
     val errorMessage: String? = null,
     val refreshTrigger: Int = 0,
     val refreshError: String? = null,
+    val attractionListQuery: String = "",
 ) {
     val availableDates: List<String>
         get() {
@@ -333,6 +334,10 @@ class StatisticsViewModel @Inject constructor(
 
     fun selectParkStatistics() {
         mutableState.update { it.copy(selectedAttractionId = null) }
+    }
+
+    fun updateAttractionListQuery(query: String) {
+        mutableState.update { it.copy(attractionListQuery = query) }
     }
 
     private fun loadSelectedDay(isManualRefresh: Boolean = false) {

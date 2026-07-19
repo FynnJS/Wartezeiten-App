@@ -50,7 +50,7 @@ class ParkOpeningDisplayStateTest {
         )
 
         assertEquals(ParkOpeningTone.Open, state.tone)
-        assertEquals("Auslastung: ca. 25% (Wenig los)", state.crowdText)
+        assertEquals("Auslastung: ca. 40% (Normal)", state.crowdText)
     }
 
     @Test
@@ -109,7 +109,7 @@ class ParkOpeningDisplayStateTest {
 
         assertEquals(ParkOpeningTone.Open, state.tone)
         assertEquals("Heute ge\u00f6ffnet von 10:00 Uhr bis 18:00 Uhr", state.statusText)
-        assertEquals("Auslastung: ca. 15% (Wenig los)", state.crowdText)
+        assertEquals("Auslastung: ca. 20% (Wenig los)", state.crowdText)
     }
 
     @Test

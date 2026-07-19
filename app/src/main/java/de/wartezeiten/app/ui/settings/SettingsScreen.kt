@@ -37,7 +37,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import de.wartezeiten.app.core.i18n.localized
 import de.wartezeiten.app.data.local.PreferencesDataSource
 import de.wartezeiten.app.ui.components.AttributionBanner
-import de.wartezeiten.app.ui.parks.countryToFlag
+import de.wartezeiten.app.core.utils.countryToFlag
 
 @Composable
 fun SettingsRoute(
