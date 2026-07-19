@@ -67,7 +67,7 @@ Der Cron läuft in drei versetzten Shards alle fünf Minuten. Neue Statistik-Sna
    Wertbeispiel:
 
    ```text
-   europapark,phantasialand,heidepark,hansapark,legoland-de,disneyland-paris,efteling
+   europapark,phantasialand,heidepark,legoland-de,disneyland-paris,efteling
    ```
 
 7. Optional Statistik-Schreibverhalten anpassen:

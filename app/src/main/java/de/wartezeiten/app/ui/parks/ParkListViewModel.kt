@@ -747,7 +747,6 @@ private fun Park.searchAliases(): List<String> {
         if ("europapark" in listOf(normalizedId, normalizedName)) addAll(listOf("ep", "europa park", "europapark"))
         if ("phantasialand" in listOf(normalizedId, normalizedName)) addAll(listOf("pl", "phantasia land"))
         if ("heidepark" in listOf(normalizedId, normalizedName)) addAll(listOf("heide park", "hp"))
-        if ("hansapark" in listOf(normalizedId, normalizedName)) addAll(listOf("hansa park"))
         if ("legoland" in normalizedId || "legoland" in normalizedName) addAll(listOf("lego land", "lego"))
         if ("disney" in normalizedId || "disney" in normalizedName) addAll(listOf("dlp", "disney", "disneyland"))
         if ("efteling" in normalizedId || "efteling" in normalizedName) add("eft")

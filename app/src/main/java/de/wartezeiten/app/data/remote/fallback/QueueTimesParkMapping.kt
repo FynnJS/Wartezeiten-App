@@ -49,7 +49,6 @@ object QueueTimesParkMapping {
         FallbackParkInfo("legoland", "Legoland Deutschland", "Deutschland", 278),
         FallbackParkInfo("legolandcalifornia", "Legoland California", "USA", 279),
         FallbackParkInfo("legolandflorida", "Legoland Florida", "USA", 280),
-        FallbackParkInfo("hansapark", "Hansa Park", "Deutschland", 286),
         FallbackParkInfo("djurssommerland", "Djurs Sommerland", "Dänemark", 290),
         FallbackParkInfo("futuroscope", "Futuroscope", "Frankreich", 291),
         FallbackParkInfo("legolandnewyork", "Legoland New York", "USA", 299),

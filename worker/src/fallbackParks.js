@@ -37,7 +37,6 @@ export const FALLBACK_PARKS = [
   { parkKey: "legoland", name: "Legoland Deutschland", land: "Deutschland", queueTimesId: 278 },
   { parkKey: "legolandcalifornia", name: "Legoland California", land: "USA", queueTimesId: 279 },
   { parkKey: "legolandflorida", name: "Legoland Florida", land: "USA", queueTimesId: 280 },
-  { parkKey: "hansapark", name: "Hansa Park", land: "Deutschland", queueTimesId: 286 },
   { parkKey: "djurssommerland", name: "Djurs Sommerland", land: "Dänemark", queueTimesId: 290 },
   { parkKey: "futuroscope", name: "Futuroscope", land: "Frankreich", queueTimesId: 291 },
   { parkKey: "legolandnewyork", name: "Legoland New York", land: "USA", queueTimesId: 299 },

@@ -150,7 +150,6 @@ test("cron park selection balances the current park list across four deployable 
     "ferrariland",
     "futuroscope",
     "gardaland",
-    "hansapark",
     "heidepark",
     "legoland",
     "legolandbillund",

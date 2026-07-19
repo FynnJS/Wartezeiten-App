@@ -43,6 +43,7 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.supervisorScope
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
@@ -57,6 +58,8 @@ private const val RECOMMENDATION_ESTIMATED_PARK_SCAN_MILLIS = 4_500L
 private const val OPTIONAL_DETAIL_TIMEOUT_MILLIS = 3_000L
 private const val LOCAL_PARK_SNAPSHOT_RETENTION_MILLIS = 7 * 24 * 60 * 60 * 1000L
 
+private val BlacklistedParkKeys = setOf("hansapark")
+
 @Singleton
 class DefaultWartezeitenRepository @Inject constructor(
     private val api: WartezeitenApiService,
@@ -70,6 +73,13 @@ class DefaultWartezeitenRepository @Inject constructor(
     private val preferences: PreferencesDataSource,
     @param:IoDispatcher private val ioDispatcher: CoroutineDispatcher,
 ) : WartezeitenRepository {
+
+    init {
+        // Clean up blacklisted parks from local cache
+        kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.SupervisorJob() + ioDispatcher).launch {
+            BlacklistedParkKeys.forEach { parkDao.deletePark(it) }
+        }
+    }
 
     // Rein transient: welche Parks aktuell Wartezeiten ueber die queue-times.com-Ausweichquelle
     // beziehen, weil /v1/waitingtimes fuer sie fehlschlaegt. Bewusst nicht in Room persistiert, da es
@@ -88,13 +98,21 @@ class DefaultWartezeitenRepository @Inject constructor(
 
     override fun observeParks(query: String?): Flow<List<Park>> {
         return parkDao.observeParks(query.takeUnless { it.isNullOrBlank() })
-            .map { parks -> parks.map { it.toDomain() } }
+            .map { parks ->
+                parks
+                    .filter { it.id !in BlacklistedParkKeys && it.uuid !in BlacklistedParkKeys }
+                    .map { it.toDomain() }
+            }
             .flowOn(ioDispatcher)
     }
 
     override fun observeCurrentAttractions() =
         parkDetailDao.observeAllWaitingTimes()
-            .map { attractions -> attractions.map { it.toCurrentAttractionSearchEntry() } }
+            .map { attractions ->
+                attractions
+                    .filter { it.parkKey !in BlacklistedParkKeys }
+                    .map { it.toCurrentAttractionSearchEntry() }
+            }
             .flowOn(ioDispatcher)
 
     override fun observeLatestOpenParkKeys(capturedAfterMillis: Long): Flow<Set<String>> {
@@ -103,6 +121,7 @@ class DefaultWartezeitenRepository @Inject constructor(
                 val now = System.currentTimeMillis()
                 snapshots
                     .asSequence()
+                    .filter { it.parkKey !in BlacklistedParkKeys }
                     .filter { it.capturedAtMillis >= capturedAfterMillis }
                     .filter {
                         isParkCurrentlyOpen(
@@ -131,11 +150,13 @@ class DefaultWartezeitenRepository @Inject constructor(
         ) { parks, snapshots ->
             val now = System.currentTimeMillis()
             val parksByKey = parks
+                .filter { it.id !in BlacklistedParkKeys && it.uuid !in BlacklistedParkKeys }
                 .flatMap { park -> listOf(park.id to park, park.uuid to park) }
                 .toMap()
 
             snapshots
                 .asSequence()
+                .filter { it.parkKey !in BlacklistedParkKeys }
                 .filter { now - it.capturedAtMillis <= RECOMMENDATION_CURRENT_MAX_AGE_MILLIS }
                 .filter {
                     it.openAttractions > 0 && isParkCurrentlyOpen(
@@ -182,9 +203,11 @@ class DefaultWartezeitenRepository @Inject constructor(
                 val currentParks = parkDao.observeParks(null).first()
                 val favoritesMap = currentParks.associateBy({ it.id }, { it.isFavorite })
 
-                val entities = result.data.map { dto ->
-                    dto.toEntity(now).copy(isFavorite = favoritesMap[dto.id] ?: false)
-                }
+                val entities = result.data
+                    .filter { it.id !in BlacklistedParkKeys && it.uuid !in BlacklistedParkKeys }
+                    .map { dto ->
+                        dto.toEntity(now).copy(isFavorite = favoritesMap[dto.id] ?: false)
+                    }
                 parkDao.upsertParks(entities)
                 usingFallbackParkList.value = false
                 ApiResult.Success(Unit)
@@ -200,16 +223,18 @@ class DefaultWartezeitenRepository @Inject constructor(
                 val currentParks = parkDao.observeParks(null).first()
                 if (currentParks.isEmpty()) {
                     val now = System.currentTimeMillis()
-                    val fallbackEntities = QueueTimesParkMapping.ENTRIES.map { info ->
-                        ParkEntity(
-                            id = info.parkKey,
-                            uuid = info.parkKey,
-                            name = info.name,
-                            country = info.country,
-                            isFavorite = false,
-                            updatedAtMillis = now,
-                        )
-                    }
+                    val fallbackEntities = QueueTimesParkMapping.ENTRIES
+                        .filter { it.parkKey !in BlacklistedParkKeys }
+                        .map { info ->
+                            ParkEntity(
+                                id = info.parkKey,
+                                uuid = info.parkKey,
+                                name = info.name,
+                                country = info.country,
+                                isFavorite = false,
+                                updatedAtMillis = now,
+                            )
+                        }
                     parkDao.upsertParks(fallbackEntities)
                     usingFallbackParkList.value = true
                     ApiResult.Success(Unit)
@@ -308,6 +333,7 @@ class DefaultWartezeitenRepository @Inject constructor(
         parkKey: String,
         language: String,
     ): ApiResult<Unit> {
+        if (parkKey in BlacklistedParkKeys) return ApiResult.Success(Unit)
         val now = System.currentTimeMillis()
         val openingResult = safeApiCall { api.getOpeningTimes(parkKey) }
         val openedToday = (openingResult as? ApiResult.Success)
@@ -397,6 +423,7 @@ class DefaultWartezeitenRepository @Inject constructor(
     }
 
     override fun observeParkDetail(parkKey: String): Flow<ParkDetail> {
+        if (parkKey in BlacklistedParkKeys) return kotlinx.coroutines.flow.flowOf(ParkDetail(null, null, null, emptyList(), null, emptyList()))
         val parkFlow = parkDao.observePark(parkKey)
         val openingFlow = parkDetailDao.observeOpeningTimes(parkKey)
         val crowdFlow = parkDetailDao.observeCrowdLevel(parkKey)
@@ -426,6 +453,7 @@ class DefaultWartezeitenRepository @Inject constructor(
         language: String,
         forceRefresh: Boolean,
     ): ApiResult<Unit> = withContext(ioDispatcher) {
+        if (parkKey in BlacklistedParkKeys) return@withContext ApiResult.Error(NetworkError.NotFound)
         val cacheControl = if (forceRefresh) "no-cache" else null
         supervisorScope {
             // FIX: openingTimes now returns List<OpeningTimesDto> - matches updated API service
@@ -628,8 +656,10 @@ class DefaultWartezeitenRepository @Inject constructor(
         val cacheControl = if (forceRefresh) "no-cache" else null
         val markersResult = safeApiCall { publicAppDataApi.getGlobalMarkers(cacheControl) }
         (markersResult as? ApiResult.Success)?.let { result ->
-            val snapshots = result.data.markers.mapNotNull { marker ->
-                val capturedAt = marker.capturedAtMillis.takeIf { it > 0L }
+            val snapshots = result.data.markers
+                .filter { it.parkKey !in BlacklistedParkKeys }
+                .mapNotNull { marker ->
+                    val capturedAt = marker.capturedAtMillis.takeIf { it > 0L }
                     ?: result.data.generatedAtMillis
                     ?: return@mapNotNull null
                 ParkSnapshotEntity(
@@ -654,8 +684,10 @@ class DefaultWartezeitenRepository @Inject constructor(
         when (val result = safeApiCall { publicAppDataApi.getLatestAppData(cacheControl) }) {
             is ApiResult.Success -> {
                 val now = System.currentTimeMillis()
-                val snapshots = result.data.parks.mapNotNull { snapshot ->
-                    val capturedAt = snapshot.capturedAtMillis.takeIf { it > 0L }
+                val snapshots = result.data.parks
+                    .filter { it.parkKey !in BlacklistedParkKeys }
+                    .mapNotNull { snapshot ->
+                        val capturedAt = snapshot.capturedAtMillis.takeIf { it > 0L }
                         ?: result.data.generatedAtMillis
                         ?: return@mapNotNull null
                     val currentlyOpen = isParkCurrentlyOpen(
@@ -683,8 +715,10 @@ class DefaultWartezeitenRepository @Inject constructor(
                 if (snapshots.isNotEmpty()) {
                     parkSnapshotDao.insertAll(snapshots)
                 }
-                result.data.parks.forEach { snapshot ->
-                    val capturedAt = snapshot.capturedAtMillis.takeIf { it > 0L }
+                result.data.parks
+                    .filter { it.parkKey !in BlacklistedParkKeys }
+                    .forEach { snapshot ->
+                        val capturedAt = snapshot.capturedAtMillis.takeIf { it > 0L }
                         ?: result.data.generatedAtMillis
                         ?: 0L
                     val canUseAttractions = snapshot.attractions.isNotEmpty() &&
@@ -752,7 +786,6 @@ class DefaultWartezeitenRepository @Inject constructor(
             "europapark" -> 48.2673 to 7.7224
             "phantasialand" -> 50.7999 to 6.8778
             "heidepark" -> 53.0185 to 9.8785
-            "hansapark" -> 54.0769 to 10.7936
             "legoland-de" -> 48.4233 to 10.2979
             "disneyland-paris" -> 48.8674 to 2.7836
             "efteling" -> 51.6482 to 5.0449
@@ -894,7 +927,12 @@ class DefaultWartezeitenRepository @Inject constructor(
 
     override suspend fun getStatisticsIndex(): ApiResult<de.wartezeiten.app.domain.model.StatisticsIndex> = withContext(ioDispatcher) {
         when (val result = safeApiCall { publicAppDataApi.getStatisticsIndex() }) {
-            is ApiResult.Success -> ApiResult.Success(result.data.toDomain())
+            is ApiResult.Success -> {
+                val filtered = result.data.copy(
+                    parks = result.data.parks.filter { it.parkKey !in BlacklistedParkKeys }
+                )
+                ApiResult.Success(filtered.toDomain())
+            }
             is ApiResult.Error -> result
         }
     }
@@ -903,6 +941,7 @@ class DefaultWartezeitenRepository @Inject constructor(
         parkKey: String,
         date: String,
     ): ApiResult<de.wartezeiten.app.domain.model.AttractionHistoryDay> = withContext(ioDispatcher) {
+        if (parkKey in BlacklistedParkKeys) return@withContext ApiResult.Error(NetworkError.NotFound)
         when (val result = safeApiCall { publicAppDataApi.getAttractionHistoryDay(parkKey, date) }) {
             is ApiResult.Success -> ApiResult.Success(result.data.toDomain())
             is ApiResult.Error -> result

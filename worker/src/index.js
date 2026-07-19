@@ -26,7 +26,6 @@ const DEFAULT_PARK_KEYS = [
   "europapark",
   "phantasialand",
   "heidepark",
-  "hansapark",
   "legoland-de",
   "disneyland-paris",
   "efteling",
