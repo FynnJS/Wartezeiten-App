@@ -778,7 +778,7 @@ class NotificationWorker @AssistedInject constructor(
     }
 
     private fun WaitingTimeDto.safeName(language: String): String {
-        return (name as String?).orEmpty().ifBlank {
+        return name.orEmpty().ifBlank {
             localized(
                 language,
                 de = "Eine Attraktion",
@@ -790,7 +790,7 @@ class NotificationWorker @AssistedInject constructor(
     }
 
     private fun WaitingTimeDto.safeStatus(): String {
-        return (status as String?).orEmpty()
+        return status.orEmpty()
     }
 
     private fun WaitingTimeDto.normalizedStatus(): String {

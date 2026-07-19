@@ -69,13 +69,14 @@ fun OpeningTimesEntity.toDomain(): OpeningTimes {
 }
 
 fun WaitingTimeDto.toEntity(parkKey: String, updatedAtMillis: Long): WaitingTimeEntity {
-    val stableId = id ?: name.trim().lowercase().replace(Regex("[^a-z0-9]+"), "-")
+    val fallbackName = name ?: "Unbekannte Attraktion"
+    val stableId = id ?: code ?: fallbackName.trim().lowercase().replace(Regex("[^a-z0-9]+"), "-")
     return WaitingTimeEntity(
         parkKey = parkKey,
         attractionId = stableId,
-        name = name,
+        name = fallbackName,
         waitingTime = waitingTime,
-        status = status,
+        status = status ?: "unknown",
         updatedAtMillis = updatedAtMillis,
     )
 }

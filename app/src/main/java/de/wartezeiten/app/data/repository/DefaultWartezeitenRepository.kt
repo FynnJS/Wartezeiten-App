@@ -631,6 +631,7 @@ class DefaultWartezeitenRepository @Inject constructor(
                         WaitingTimeDto(
                             id = ride.id.toString(),
                             name = ride.name,
+                            code = null,
                             waitingTime = ride.wait_time,
                             status = if (ride.is_open) "opened" else "closed",
                         )
