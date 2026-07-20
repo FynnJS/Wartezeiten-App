@@ -1963,7 +1963,7 @@ private fun emptyAttractionMessage(state: WaitingTimesUiState): String {
 private fun WaitingTimesSort.label(language: String) = when (this) {
     WaitingTimesSort.WaitAscending -> localized(language, de = "Wartezeit ↑", en = "Wait time ↑", fr = "Temps d'attente ↑", nl = "Wachttijd ↑")
     WaitingTimesSort.WaitDescending -> localized(language, de = "Wartezeit ↓", en = "Wait time ↓", fr = "Temps d'attente ↓", nl = "Wachttijd ↓")
-    WaitingTimesSort.Name -> "Name A-Z"
+    WaitingTimesSort.Name -> localized(language, de = "Name A-Z", en = "Name A-Z", fr = "Nom A-Z", nl = "Naam A-Z")
 }
 
 private fun AttractionFilter.label(language: String) = when (this) {

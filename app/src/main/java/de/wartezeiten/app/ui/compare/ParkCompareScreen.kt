@@ -679,7 +679,7 @@ private fun ParkCompareSort.label(language: String): String {
         ParkCompareSort.BestNow -> localized(language, de = "Gesamt", en = "Overall", fr = "Global", nl = "Algemeen")
         ParkCompareSort.LowestAverageWait -> localized(language, de = "Wartezeit", en = "Wait time", fr = "Temps d'attente", nl = "Wachttijd")
         ParkCompareSort.MostOpenAttractions -> localized(language, de = "Offene Attraktionen", en = "Open attractions", fr = "Attractions ouvertes", nl = "Open attracties")
-        ParkCompareSort.Name -> "Name A-Z"
+        ParkCompareSort.Name -> localized(language, de = "Name A-Z", en = "Name A-Z", fr = "Nom A-Z", nl = "Naam A-Z")
     }
 }
 
