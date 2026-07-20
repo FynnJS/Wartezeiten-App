@@ -37,12 +37,17 @@ fun isParkCurrentlyOpen(
     now: Instant = Instant.now(),
 ): Boolean {
     if (openedToday != true) return false
-    val window = parkOpeningWindow(openFrom, closedFrom, ZoneId.systemDefault())
+    val zoneId = openFrom?.extractZoneId() ?: closedFrom?.extractZoneId() ?: ZoneId.systemDefault()
+    val window = parkOpeningWindow(openFrom, closedFrom, zoneId)
     val opensAt = window.opensAt?.toInstant()
     val closesAt = window.closesAt?.toInstant()
     if (opensAt != null && now.isBefore(opensAt)) return false
     if (closesAt != null && !now.isBefore(closesAt)) return false
     return true
+}
+
+private fun String.extractZoneId(): ZoneId? {
+    return runCatching { OffsetDateTime.parse(this).offset }.getOrNull()
 }
 
 /**

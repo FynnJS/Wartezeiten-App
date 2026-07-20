@@ -72,6 +72,15 @@ fun buildParkTrendSummary(
 ): ParkTrendSummary {
     val sortedSnapshots = snapshots.sortedBy { it.capturedAtMillis }
     val latest = sortedSnapshots.lastOrNull() ?: return ParkTrendSummary.Empty
+    
+    val zoneId = latest.openFrom?.toOffsetZoneId() ?: latest.closedFrom?.toOffsetZoneId() ?: ZoneId.systemDefault()
+    val latestDate = Instant.ofEpochMilli(latest.capturedAtMillis).atZone(zoneId).toLocalDate()
+    val today = Instant.ofEpochMilli(nowMillis).atZone(zoneId).toLocalDate()
+
+    if (latestDate < today && isParkCurrentlyOpen(latest.openedToday, latest.openFrom, latest.closedFrom, Instant.ofEpochMilli(nowMillis))) {
+        return ParkTrendSummary.Empty
+    }
+
     if (latest.openedToday == false || latest.displayCrowdLevel == null) {
         return ParkTrendSummary.Empty
     }

@@ -254,18 +254,15 @@ class DefaultWartezeitenRepository @Inject constructor(
     ): ApiResult<Unit> = withContext(ioDispatcher) {
         val publicResult = refreshPublicAppData(forceRefresh = false)
         val now = System.currentTimeMillis()
-        val hasFreshOpenSnapshot = parkSnapshotDao.observeLatestSnapshots()
-            .first()
-            .any { snapshot ->
-                now - snapshot.capturedAtMillis <= RECOMMENDATION_CURRENT_MAX_AGE_MILLIS &&
-                    isParkCurrentlyOpen(
-                        openedToday = snapshot.openedToday,
-                        openFrom = snapshot.openFrom,
-                        closedFrom = snapshot.closedFrom,
-                        now = Instant.ofEpochMilli(now),
-                    )
-            }
-        if (publicResult is ApiResult.Success && hasFreshOpenSnapshot) {
+        val latestSnapshots = parkSnapshotDao.observeLatestSnapshots().first()
+        val freshSnapshots = latestSnapshots.filter { now - it.capturedAtMillis <= RECOMMENDATION_CURRENT_MAX_AGE_MILLIS }
+        
+        // We only skip the local scan if we have a significant number of fresh snapshots from the public API.
+        // If we only have a few (e.g. less than 5 or less than 10% of total), we still want to scan the rest locally.
+        val parks = parkDao.observeParks(null).first()
+        val isPublicDataSufficient = freshSnapshots.size >= (parks.size * 0.1).coerceAtLeast(5.0)
+
+        if (publicResult is ApiResult.Success && isPublicDataSufficient) {
             onProgress(ParkRecommendationScanProgress(completedParks = 0, totalParks = 0, estimatedRemainingMillis = 0L))
             return@withContext publicResult
         }
@@ -275,7 +272,6 @@ class DefaultWartezeitenRepository @Inject constructor(
         }
 
         pruneOldLocalParkSnapshots()
-        val parks = parkDao.observeParks(null).first()
         if (parks.isEmpty()) return@withContext ApiResult.Success(Unit)
         val freshParkKeys = parkSnapshotDao.observeLatestSnapshots()
             .first()
