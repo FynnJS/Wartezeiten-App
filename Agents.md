@@ -101,7 +101,8 @@
 |-----------|--------|
 | **Write Order** | Write snapshots *per park* early, not at the end → Timeout → empty statistics |
 | **Schema Guard** | `ensureAttractionHistoryD1` idempotent before reads/writes |
-| **Cron Subrequests** | Shards too large → "Too many subrequests" → empty markers; adjust `DEFAULT_CRON_SHARDS` |
+| **Cron Subrequests** | Shards too large → "Too many subrequests"; use hashing for stable distribution and adjust `DEFAULT_CRON_SHARDS` |
+| **D1 Batching** | Batch D1 writes (e.g. 50-100 items per statement) to significantly improve write performance and avoid timeouts |
 | **Retention** | `APP_DATA_D1_RETENTION_DAYS` (Default 14), delete old snapshots before writes |
 | **Timestamp** | `captured_at_millis` = Worker time (`Date.now()`), not API `datetime` |
 | **Parallel Queries** | GROUP-BY + JOIN both parallel, not N sequential reads per park |
@@ -166,6 +167,8 @@
 | **CoroutineScope in Application/Service** | Never create anonymous Scope(SupervisorJob()) without reference (memory leak, no cancel). Always hold as property + cancel() in onTerminate/onDestroy. onTerminate is not always reliable (process kill). |
 | **Flow Combine Limit** | `combine(f1, f2, f3, f4, f5)` is the limit. For more flows, nest `combine` calls or group related states into sub-objects. |
 | **Statistics Loading Flicker** | Use a dedicated `isStatisticsLoading` state to keep "Loading data..." visible until async background statistics are fully fetched, preventing a brief "No data" flicker. |
+| **Missing Attraction Names** | API might return `null` for `name`; use fallback string in mappers and derive stable IDs from it to prevent sorting/search crashes. |
+| **Stale Stats on Opening** | When a park opens, statistics might show stale data from the previous day; trigger an explicit refresh on park-opening detection. |
 
 ## 5. Release & Signing
 

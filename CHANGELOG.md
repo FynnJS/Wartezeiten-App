@@ -1,5 +1,15 @@
 # Changelog
 
+## v1.2.6 - 2026-07-20
+
+- Optimized date selection in statistics with a new month-based grid selector.
+- Localized "Name" sort labels in WaitingTimes and ParkCompare screens.
+- Fixed a crash when opening Alton Towers due to null attraction names in the API.
+- Improved park scan reliability and fixed stale statistics data on park opening.
+- Stabilized worker sharding with hashing and batch D1 writes to prevent timeouts and subrequest limits.
+- Removed HANSA-Park from the app and worker.
+- Bumped Android release metadata to `versionCode 10206` / `versionName 1.2.6`.
+
 ## v1.2.5 - 2026-07-18
 
 - Fixed a potential `ClassCastException` when reading navigation arguments from `SavedStateHandle` in `StatisticsViewModel` and `WaitingTimesViewModel`.

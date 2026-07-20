@@ -25,6 +25,38 @@ data class WhatsNewRelease(
 
 val WHATS_NEW_RELEASES = listOf(
     WhatsNewRelease(
+        versionCode = 10206,
+        versionName = "1.2.6",
+        highlightsDe = listOf(
+            "Optimierte Datumsauswahl in der Statistik durch einen neuen Monats-Grid-Selektor.",
+            "Lokalisierte 'Name'-Sortierlabels in der Wartezeit-Liste und im Parkvergleich.",
+            "Fehlerbehebung: Ein Absturz beim Öffnen von Alton Towers aufgrund fehlerhafter API-Daten wurde behoben.",
+            "Verbesserte Zuverlässigkeit der Park-Scans und Fix für veraltete Statistikdaten bei Parköffnung.",
+            "HANSA-Park wurde aus der App entfernt.",
+        ),
+        highlightsEn = listOf(
+            "Optimized date selection in statistics with a new month-based grid selector.",
+            "Localized 'Name' sort labels in WaitingTimes and ParkCompare screens.",
+            "Bug fix: Resolved a crash when opening Alton Towers due to invalid API data.",
+            "Improved park scan reliability and fixed stale statistics data on park opening.",
+            "Removed HANSA-Park from the app.",
+        ),
+        highlightsFr = listOf(
+            "Sélection de date optimisée dans les statistiques avec un nouveau sélecteur de grille mensuel.",
+            "Labels de tri par 'Nom' localisés dans les écrans WaitingTimes et ParkCompare.",
+            "Correction de bug : résolution d'un crash lors de l'ouverture d'Alton Towers dû à des données API invalides.",
+            "Amélioration de la fiabilité des scans de parcs et correction des données statistiques obsolètes à l'ouverture des parcs.",
+            "HANSA-Park a été retiré de l'application.",
+        ),
+        highlightsNl = listOf(
+            "Geoptimaliseerde datumselectie in statistieken met een nieuwe maandgebaseerde rasterselector.",
+            "Gelokaliseerde 'Naam' sorteerlabels in de WaitingTimes en ParkCompare schermen.",
+            "Bugfix: Een crash opgelost bij het openen van Alton Towers als gevolg van ongeldige API-gegevens.",
+            "Verbeterde betrouwbaarheid van parkscans en oplossing voor verouderde statistiekgegevens bij parkopening.",
+            "HANSA-Park is verwijderd uit de app.",
+        ),
+    ),
+    WhatsNewRelease(
         versionCode = 10205,
         versionName = "1.2.5",
         highlightsDe = listOf(
