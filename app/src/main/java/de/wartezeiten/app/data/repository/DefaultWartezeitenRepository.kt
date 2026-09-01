@@ -15,14 +15,18 @@ import de.wartezeiten.app.data.local.entity.ParkSnapshotEntity
 import de.wartezeiten.app.data.local.entity.WaitingTimeEntity
 import de.wartezeiten.app.data.local.entity.WeatherEntity
 import de.wartezeiten.app.data.local.entity.WeatherForecastEntity
+import de.wartezeiten.app.data.mapper.fallbackAttractionId
 import de.wartezeiten.app.data.mapper.toDomain
 import de.wartezeiten.app.data.mapper.toCurrentAttractionSearchEntry
 import de.wartezeiten.app.data.mapper.toEntity
 import de.wartezeiten.app.data.remote.HolidayApiService
+import de.wartezeiten.app.data.remote.HolidayDto
 import de.wartezeiten.app.data.remote.PublicAppDataApiService
 import de.wartezeiten.app.data.remote.QueueTimesApiService
+import de.wartezeiten.app.data.remote.QueueTimesResponseDto
 import de.wartezeiten.app.data.remote.WartezeitenApiService
 import de.wartezeiten.app.data.remote.WeatherApiService
+import de.wartezeiten.app.data.remote.WeatherResponse
 import de.wartezeiten.app.data.remote.dto.WaitingTimeDto
 import de.wartezeiten.app.data.remote.dto.toDomain
 import de.wartezeiten.app.data.remote.fallback.QueueTimesParkMapping
@@ -205,8 +209,8 @@ class DefaultWartezeitenRepository @Inject constructor(
 
                 val entities = result.data
                     .filter { it.id !in BlacklistedParkKeys && it.uuid !in BlacklistedParkKeys }
-                    .map { dto ->
-                        dto.toEntity(now).copy(isFavorite = favoritesMap[dto.id] ?: false)
+                    .mapNotNull { dto ->
+                        dto.toEntity(now)?.copy(isFavorite = favoritesMap[dto.id] ?: false)
                     }
                 parkDao.upsertParks(entities)
                 usingFallbackParkList.value = false
@@ -511,7 +515,8 @@ class DefaultWartezeitenRepository @Inject constructor(
             (effectiveWaitingResult as? ApiResult.Success)?.let {
                 parkDetailDao.replaceWaitingTimes(
                     parkKey = parkKey,
-                    waitingTimes = it.data.map { dto -> dto.toEntity(parkKey, now) },
+                    waitingTimes = it.data.mapIndexed { index, dto -> dto.toEntity(parkKey, now, index) }
+                        .distinctBy { entity -> entity.attractionId },
                 )
             }
             (crowdResult as? ApiResult.Success)?.let {
@@ -549,57 +554,24 @@ class DefaultWartezeitenRepository @Inject constructor(
                 )
             }
             
-            (weatherResult as? ApiResult.Success)?.data?.let { response ->
-                val temperature = response.current_weather?.temperature ?: response.hourly.temperature_2m.firstOrNull() ?: 0.0
-                val precipitationProbability = response.hourly.precipitation_probability.firstOrNull() ?: 0
-                val weatherCode = response.current_weather?.weathercode ?: response.hourly.weather_code.firstOrNull() ?: 0
-
-                parkDetailDao.upsertWeather(
-                    WeatherEntity(
-                        parkKey = parkKey,
-                        temperature = temperature,
-                        precipitationProbability = precipitationProbability,
-                        weatherCode = weatherCode,
-                        updatedAtMillis = now
-                    )
-                )
-
-                response.daily?.let { daily ->
-                    val forecast = daily.time.indices
-                        .take(7)
-                        .mapNotNull { index ->
-                            val date = daily.time.getOrNull(index)
-                            val minTemp = daily.temperature_2m_min.getOrNull(index)
-                            val maxTemp = daily.temperature_2m_max.getOrNull(index)
-                            val precip = daily.precipitation_probability_max.getOrNull(index)
-                            val code = daily.weathercode.getOrNull(index)
-                            if (date != null && minTemp != null && maxTemp != null && precip != null && code != null) {
-                                WeatherForecastEntity(
-                                    parkKey = parkKey,
-                                    date = date,
-                                    minTemperature = minTemp,
-                                    maxTemperature = maxTemp,
-                                    precipitationProbability = precip,
-                                    weatherCode = code,
-                                    updatedAtMillis = now
-                                )
-                            } else null
-                        }
-                    parkDetailDao.replaceWeatherForecast(parkKey, forecast)
+            // Wetter & Feiertage sind optionale Zusatzquellen: Fehler oder unvollstaendige Payloads
+            // duerfen den Park-Detail-Refresh nie crashen lassen (Gson ignoriert Kotlin-Nullability).
+            runCatching {
+                (weatherResult as? ApiResult.Success)?.data?.let { response ->
+                    response.toWeatherEntities(parkKey, now)?.let { (weatherEntity, forecastEntities) ->
+                        parkDetailDao.upsertWeather(weatherEntity)
+                        parkDetailDao.replaceWeatherForecast(parkKey, forecastEntities)
+                    }
                 }
             }
 
-            (holidayResult as? ApiResult.Success)?.data?.let { holidaysDto ->
-                parkDetailDao.replaceHolidays(
-                    parkKey = parkKey,
-                    holidays = holidaysDto.map {
-                        HolidayEntity(
-                            parkKey = parkKey,
-                            date = it.date,
-                            name = it.name
-                        )
-                    }
-                )
+            runCatching {
+                (holidayResult as? ApiResult.Success)?.data?.let { holidaysDto ->
+                    parkDetailDao.replaceHolidays(
+                        parkKey = parkKey,
+                        holidays = holidaysDto.toHolidayEntities(parkKey),
+                    )
+                }
             }
 
             val hasUsableCoreData = openingResult is ApiResult.Success ||
@@ -621,18 +593,11 @@ class DefaultWartezeitenRepository @Inject constructor(
     private suspend fun fetchQueueTimesWaitingTimes(queueTimesId: Int): ApiResult<List<WaitingTimeDto>> {
         return when (val result = safeApiCall { queueTimesApi.getQueueTimes(queueTimesId) }) {
             is ApiResult.Success -> {
-                val rides = result.data.rides + result.data.lands.flatMap { it.rides }
-                ApiResult.Success(
-                    rides.map { ride ->
-                        WaitingTimeDto(
-                            id = ride.id.toString(),
-                            name = ride.name,
-                            code = null,
-                            waitingTime = ride.wait_time,
-                            status = if (ride.is_open) "opened" else "closed",
-                        )
-                    }
-                )
+                runCatching { result.data.toWaitingTimeDtos() }
+                    .fold(
+                        onSuccess = { ApiResult.Success(it) },
+                        onFailure = { ApiResult.Error(NetworkError.Unknown, cause = it) },
+                    )
             }
             is ApiResult.Error -> result
         }
@@ -653,14 +618,15 @@ class DefaultWartezeitenRepository @Inject constructor(
         val cacheControl = if (forceRefresh) "no-cache" else null
         val markersResult = safeApiCall { publicAppDataApi.getGlobalMarkers(cacheControl) }
         (markersResult as? ApiResult.Success)?.let { result ->
-            val snapshots = result.data.markers
+            val snapshots = result.data.markers.orEmpty()
                 .filter { it.parkKey !in BlacklistedParkKeys }
                 .mapNotNull { marker ->
+                    val parkKey = marker.parkKey ?: return@mapNotNull null
                     val capturedAt = marker.capturedAtMillis.takeIf { it > 0L }
                     ?: result.data.generatedAtMillis
                     ?: return@mapNotNull null
                 ParkSnapshotEntity(
-                    parkKey = marker.parkKey,
+                    parkKey = parkKey,
                     capturedAtMillis = capturedAt,
                     apiCrowdLevel = null,
                     calculatedCrowdLevel = null,
@@ -681,9 +647,10 @@ class DefaultWartezeitenRepository @Inject constructor(
         when (val result = safeApiCall { publicAppDataApi.getLatestAppData(cacheControl) }) {
             is ApiResult.Success -> {
                 val now = System.currentTimeMillis()
-                val snapshots = result.data.parks
+                val snapshots = result.data.parks.orEmpty()
                     .filter { it.parkKey !in BlacklistedParkKeys }
                     .mapNotNull { snapshot ->
+                        val parkKey = snapshot.parkKey ?: return@mapNotNull null
                         val capturedAt = snapshot.capturedAtMillis.takeIf { it > 0L }
                         ?: result.data.generatedAtMillis
                         ?: return@mapNotNull null
@@ -694,7 +661,7 @@ class DefaultWartezeitenRepository @Inject constructor(
                         now = Instant.ofEpochMilli(now),
                     )
                     ParkSnapshotEntity(
-                        parkKey = snapshot.parkKey,
+                        parkKey = parkKey,
                         capturedAtMillis = capturedAt,
                         apiCrowdLevel = snapshot.apiCrowdLevel,
                         calculatedCrowdLevel = snapshot.calculatedCrowdLevel,
@@ -712,30 +679,35 @@ class DefaultWartezeitenRepository @Inject constructor(
                 if (snapshots.isNotEmpty()) {
                     parkSnapshotDao.insertAll(snapshots)
                 }
-                result.data.parks
+                result.data.parks.orEmpty()
                     .filter { it.parkKey !in BlacklistedParkKeys }
                     .forEach { snapshot ->
+                        val parkKey = snapshot.parkKey ?: return@forEach
                         val capturedAt = snapshot.capturedAtMillis.takeIf { it > 0L }
                         ?: result.data.generatedAtMillis
                         ?: 0L
-                    val canUseAttractions = snapshot.attractions.isNotEmpty() &&
+                    val attractions = snapshot.attractions.orEmpty()
+                    val canUseAttractions = attractions.isNotEmpty() &&
                             now - capturedAt <= RECOMMENDATION_CURRENT_MAX_AGE_MILLIS
                     if (canUseAttractions) {
                         parkDetailDao.replaceWaitingTimes(
-                            parkKey = snapshot.parkKey,
-                            waitingTimes = snapshot.attractions.map { attraction ->
+                            parkKey = parkKey,
+                            waitingTimes = attractions.mapIndexedNotNull { index, attraction ->
+                                val name = attraction.name ?: "Unbekannte Attraktion"
+                                val attractionId = attraction.id
+                                    ?: fallbackAttractionId(name, index)
                                 WaitingTimeEntity(
-                                    parkKey = snapshot.parkKey,
-                                    attractionId = attraction.id,
-                                    name = attraction.name,
+                                    parkKey = parkKey,
+                                    attractionId = attractionId,
+                                    name = name,
                                     waitingTime = attraction.value?.takeIf { (attraction.statusCode ?: 0) == 0 },
                                     status = attraction.status ?: statusCodeToApiStatus(attraction.statusCode),
                                     updatedAtMillis = capturedAt,
                                 )
-                            },
+                            }.distinctBy { it.attractionId },
                         )
-                    } else if (snapshot.attractions.isNotEmpty()) {
-                        parkDetailDao.deleteWaitingTimesForPark(snapshot.parkKey)
+                    } else if (attractions.isNotEmpty()) {
+                        parkDetailDao.deleteWaitingTimesForPark(parkKey)
                     }
                 }
                 ApiResult.Success(Unit)
@@ -881,12 +853,13 @@ class DefaultWartezeitenRepository @Inject constructor(
     override suspend fun refreshPublicTrendHistory(parkKey: String): ApiResult<Unit> = withContext(ioDispatcher) {
         when (val result = safeApiCall { publicAppDataApi.getTrendHistory(parkKey) }) {
             is ApiResult.Success -> {
-                val remoteParks = result.data.parks
+                val remoteParks = result.data.parks.orEmpty()
                     .filter { it.parkKey == parkKey }
                 if (remoteParks.isEmpty()) return@withContext ApiResult.Success(Unit)
 
                 val snapshots = remoteParks
-                    .flatMap { parkHistory ->
+                    .mapNotNull { parkHistory ->
+                        val parkKey = parkHistory.parkKey ?: return@mapNotNull null
                         parkHistory.snapshots.mapNotNull { snapshot ->
                             val currentlyOpen = isParkCurrentlyOpen(
                                 openedToday = snapshot.openedToday,
@@ -899,7 +872,7 @@ class DefaultWartezeitenRepository @Inject constructor(
                             }
                             if (displayLevel == null) return@mapNotNull null
                             ParkSnapshotEntity(
-                                parkKey = parkHistory.parkKey,
+                                parkKey = parkKey,
                                 capturedAtMillis = snapshot.capturedAtMillis,
                                 apiCrowdLevel = snapshot.apiCrowdLevel,
                                 calculatedCrowdLevel = snapshot.calculatedCrowdLevel,
@@ -913,6 +886,7 @@ class DefaultWartezeitenRepository @Inject constructor(
                             )
                         }
                     }
+                    .flatten()
                 if (snapshots.isNotEmpty()) {
                     parkSnapshotDao.insertAll(snapshots)
                 }
@@ -926,7 +900,7 @@ class DefaultWartezeitenRepository @Inject constructor(
         when (val result = safeApiCall { publicAppDataApi.getStatisticsIndex() }) {
             is ApiResult.Success -> {
                 val filtered = result.data.copy(
-                    parks = result.data.parks.filter { it.parkKey !in BlacklistedParkKeys }
+                    parks = result.data.parks.orEmpty().filter { it.parkKey !in BlacklistedParkKeys }
                 )
                 ApiResult.Success(filtered.toDomain())
             }
@@ -940,8 +914,90 @@ class DefaultWartezeitenRepository @Inject constructor(
     ): ApiResult<de.wartezeiten.app.domain.model.AttractionHistoryDay> = withContext(ioDispatcher) {
         if (parkKey in BlacklistedParkKeys) return@withContext ApiResult.Error(NetworkError.NotFound)
         when (val result = safeApiCall { publicAppDataApi.getAttractionHistoryDay(parkKey, date) }) {
-            is ApiResult.Success -> ApiResult.Success(result.data.toDomain())
+            is ApiResult.Success -> {
+                val day = result.data.toDomain()
+                if (day != null) ApiResult.Success(day) else ApiResult.Error(NetworkError.Unknown)
+            }
             is ApiResult.Error -> result
         }
+    }
+}
+
+/**
+ * Pure mapping of an Open-Meteo response to local entities. Returns null when the payload
+ * contains no usable weather data at all (e.g. an error body without `hourly`), so the
+ * optional weather source degrades gracefully instead of crashing on a null field.
+ */
+internal fun WeatherResponse.toWeatherEntities(
+    parkKey: String,
+    updatedAtMillis: Long,
+): Pair<WeatherEntity, List<WeatherForecastEntity>>? {
+    val temperature = current_weather?.temperature ?: hourly?.temperature_2m.orEmpty().firstOrNull()
+    val precipitationProbability = hourly?.precipitation_probability.orEmpty().firstOrNull()
+    val weatherCode = current_weather?.weathercode ?: hourly?.weather_code.orEmpty().firstOrNull()
+    val hasCurrentData = temperature != null || precipitationProbability != null || weatherCode != null
+    val hasDailyData = daily?.time.orEmpty().isNotEmpty() ||
+            daily?.temperature_2m_max.orEmpty().isNotEmpty() ||
+            daily?.temperature_2m_min.orEmpty().isNotEmpty()
+    if (!hasCurrentData && !hasDailyData) return null
+
+    val forecast = daily?.let { daily ->
+        daily.time.orEmpty().indices
+            .take(7)
+            .mapNotNull { index ->
+                val date = daily.time.orEmpty().getOrNull(index)
+                val minTemp = daily.temperature_2m_min.orEmpty().getOrNull(index)
+                val maxTemp = daily.temperature_2m_max.orEmpty().getOrNull(index)
+                val precip = daily.precipitation_probability_max.orEmpty().getOrNull(index)
+                val code = daily.weathercode.orEmpty().getOrNull(index)
+                if (date != null && minTemp != null && maxTemp != null && precip != null && code != null) {
+                    WeatherForecastEntity(
+                        parkKey = parkKey,
+                        date = date,
+                        minTemperature = minTemp,
+                        maxTemperature = maxTemp,
+                        precipitationProbability = precip,
+                        weatherCode = code,
+                        updatedAtMillis = updatedAtMillis,
+                    )
+                } else null
+            }
+    }.orEmpty()
+
+    return WeatherEntity(
+        parkKey = parkKey,
+        temperature = temperature ?: 0.0,
+        precipitationProbability = precipitationProbability ?: 0,
+        weatherCode = weatherCode ?: 0,
+        updatedAtMillis = updatedAtMillis,
+    ) to forecast
+}
+
+/** Pure mapping of a holiday response; entries without date or name are skipped. */
+internal fun List<HolidayDto>.toHolidayEntities(parkKey: String): List<HolidayEntity> {
+    return mapNotNull { dto ->
+        val date = dto.date ?: return@mapNotNull null
+        val name = dto.name ?: return@mapNotNull null
+        HolidayEntity(
+            parkKey = parkKey,
+            date = date,
+            name = name,
+        )
+    }
+}
+
+/** Pure mapping of a queue-times.com response; null rides/lands degrade to an empty list. */
+internal fun QueueTimesResponseDto.toWaitingTimeDtos(): List<WaitingTimeDto> {
+    val rides = rides.orEmpty() + lands.orEmpty().flatMap { it.rides.orEmpty() }
+    return rides.mapNotNull { ride ->
+        val id = ride.id ?: return@mapNotNull null
+        val name = ride.name ?: return@mapNotNull null
+        WaitingTimeDto(
+            id = id.toString(),
+            name = name,
+            code = null,
+            waitingTime = ride.wait_time,
+            status = if (ride.is_open == true) "opened" else "closed",
+        )
     }
 }
