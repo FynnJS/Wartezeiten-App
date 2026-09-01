@@ -21,13 +21,15 @@ import de.wartezeiten.app.domain.model.WeatherForecastDay
 import de.wartezeiten.app.domain.model.WaitingTime
 import de.wartezeiten.app.domain.model.WeatherInfo
 
-fun ParkDto.toEntity(updatedAtMillis: Long): ParkEntity {
+fun ParkDto.toEntity(updatedAtMillis: Long): ParkEntity? {
+    val id = id ?: return null
+    val name = name ?: return null
     val stableUuid = uuid?.takeIf { it.isNotBlank() } ?: id
     return ParkEntity(
         id = id,
         uuid = stableUuid,
         name = name,
-        country = country,
+        country = country ?: "",
         isFavorite = false, // Initial value, will be merged in repository if needed
         updatedAtMillis = updatedAtMillis,
     )
@@ -68,9 +70,9 @@ fun OpeningTimesEntity.toDomain(): OpeningTimes {
     )
 }
 
-fun WaitingTimeDto.toEntity(parkKey: String, updatedAtMillis: Long): WaitingTimeEntity {
+fun WaitingTimeDto.toEntity(parkKey: String, updatedAtMillis: Long, index: Int = 0): WaitingTimeEntity {
     val fallbackName = name ?: "Unbekannte Attraktion"
-    val stableId = id ?: code ?: fallbackName.trim().lowercase().replace(Regex("[^a-z0-9]+"), "-")
+    val stableId = id ?: code ?: fallbackAttractionId(fallbackName, index)
     return WaitingTimeEntity(
         parkKey = parkKey,
         attractionId = stableId,
@@ -79,6 +81,16 @@ fun WaitingTimeDto.toEntity(parkKey: String, updatedAtMillis: Long): WaitingTime
         status = status ?: "unknown",
         updatedAtMillis = updatedAtMillis,
     )
+}
+
+/**
+ * Builds a stable, per-row attraction id when the API provides neither an id nor a code.
+ * The index guarantees uniqueness: without it, all nameless attractions would collapse into
+ * a single shared id ("unbekannte-attraktion") and Room would dedupe them to one row.
+ */
+fun fallbackAttractionId(name: String, index: Int): String {
+    val base = name.trim().lowercase().replace(Regex("[^a-z0-9]+"), "-").trim('-').ifBlank { "attraktion" }
+    return "$base-${index.coerceAtLeast(0)}"
 }
 
 fun WaitingTimeEntity.toDomain(): WaitingTime {
