@@ -21,6 +21,7 @@ class ParkOpeningDisplayStateTest {
             crowdLevel = CrowdLevel(level = 42f, timestamp = "2026-05-28T12:00:00+02:00"),
             currentTimeMillis = millis("2026-05-28T12:00:00+02:00"),
             localTimeOffsetSeconds = 7200,
+            language = "de",
         )
 
         assertEquals(ParkOpeningTone.Open, state.tone)
@@ -47,6 +48,7 @@ class ParkOpeningDisplayStateTest {
             ),
             currentTimeMillis = millis("2026-05-28T12:00:00+02:00"),
             localTimeOffsetSeconds = 7200,
+            language = "de",
         )
 
         assertEquals(ParkOpeningTone.Open, state.tone)
@@ -64,6 +66,7 @@ class ParkOpeningDisplayStateTest {
             crowdLevel = CrowdLevel(level = 42f, timestamp = "2026-05-28T08:00:00+02:00"),
             currentTimeMillis = millis("2026-05-28T08:00:00+02:00"),
             localTimeOffsetSeconds = 7200,
+            language = "de",
         )
 
         assertEquals(ParkOpeningTone.OpenOtherTimeToday, state.tone)
@@ -82,6 +85,7 @@ class ParkOpeningDisplayStateTest {
             crowdLevel = CrowdLevel(level = 42f, timestamp = "2026-06-10T09:04:00+02:00"),
             currentTimeMillis = millis("2026-06-10T09:04:00+02:00"),
             localTimeOffsetSeconds = 7200,
+            language = "de",
         )
 
         assertEquals(ParkOpeningTone.Open, state.tone)
@@ -105,6 +109,7 @@ class ParkOpeningDisplayStateTest {
             ),
             currentTimeMillis = millis("2026-05-28T09:00:00+02:00"),
             localTimeOffsetSeconds = 7200,
+            language = "de",
         )
 
         assertEquals(ParkOpeningTone.Open, state.tone)
@@ -123,6 +128,7 @@ class ParkOpeningDisplayStateTest {
             crowdLevel = CrowdLevel(level = 42f, timestamp = "2026-05-28T19:00:00+02:00"),
             currentTimeMillis = millis("2026-05-28T19:00:00+02:00"),
             localTimeOffsetSeconds = 7200,
+            language = "de",
         )
 
         assertEquals(ParkOpeningTone.OpenOtherTimeToday, state.tone)
@@ -141,6 +147,7 @@ class ParkOpeningDisplayStateTest {
             crowdLevel = CrowdLevel(level = 42f, timestamp = "2026-05-28T12:00:00+02:00"),
             currentTimeMillis = millis("2026-05-28T12:00:00+02:00"),
             localTimeOffsetSeconds = 7200,
+            language = "de",
         )
 
         assertEquals(ParkOpeningTone.ClosedToday, state.tone)
@@ -159,6 +166,7 @@ class ParkOpeningDisplayStateTest {
             crowdLevel = CrowdLevel(level = 42f, timestamp = "2026-05-28T12:00:00+02:00"),
             currentTimeMillis = millis("2026-05-28T12:00:00+02:00"),
             localTimeOffsetSeconds = 7200,
+            language = "de",
         )
 
         assertEquals(ParkOpeningTone.Open, state.tone)
@@ -177,11 +185,73 @@ class ParkOpeningDisplayStateTest {
             crowdLevel = CrowdLevel(level = 42f, timestamp = "2026-05-28T12:00:00+02:00"),
             currentTimeMillis = millis("2026-05-28T12:00:00+02:00"),
             localTimeOffsetSeconds = 7200,
+            language = "de",
         )
 
         assertEquals(ParkOpeningTone.Open, state.tone)
         assertEquals("Heute ge\u00f6ffnet", state.statusText)
         assertEquals("Auslastung: ca. 40% (Normal)", state.crowdText)
+    }
+
+    @Test
+    fun openingTextsAreLocalized() {
+        val state = parkOpeningDisplayState(
+            openingTimes = OpeningTimes(
+                opened = true,
+                from = "2026-05-28T09:00:00+02:00",
+                to = "2026-05-28T18:00:00+02:00",
+            ),
+            crowdLevel = CrowdLevel(level = 42f, timestamp = "2026-05-28T12:00:00+02:00"),
+            currentTimeMillis = millis("2026-05-28T12:00:00+02:00"),
+            localTimeOffsetSeconds = 7200,
+            language = "en",
+        )
+
+        assertEquals(ParkOpeningTone.Open, state.tone)
+        assertEquals("Open today from 09:00 to 18:00", state.statusText)
+        assertEquals("Occupancy: about 40% (Normal)", state.crowdText)
+    }
+
+    @Test
+    fun closedTodayTextIsLocalized() {
+        val de = parkOpeningDisplayState(
+            openingTimes = OpeningTimes(opened = false, from = null, to = null),
+            crowdLevel = null,
+            currentTimeMillis = millis("2026-05-28T12:00:00+02:00"),
+            localTimeOffsetSeconds = 7200,
+            language = "de",
+        )
+        val fr = parkOpeningDisplayState(
+            openingTimes = OpeningTimes(opened = false, from = null, to = null),
+            crowdLevel = null,
+            currentTimeMillis = millis("2026-05-28T12:00:00+02:00"),
+            localTimeOffsetSeconds = 7200,
+            language = "fr",
+        )
+        val nl = parkOpeningDisplayState(
+            openingTimes = OpeningTimes(opened = false, from = null, to = null),
+            crowdLevel = null,
+            currentTimeMillis = millis("2026-05-28T12:00:00+02:00"),
+            localTimeOffsetSeconds = 7200,
+            language = "nl",
+        )
+
+        assertEquals("Heute geschlossen", de.statusText)
+        assertEquals("Fermé aujourd'hui", fr.statusText)
+        assertEquals("Vandaag gesloten", nl.statusText)
+    }
+
+    @Test
+    fun unknownOpeningTimesTextIsLocalized() {
+        val en = parkOpeningDisplayState(
+            openingTimes = null,
+            crowdLevel = null,
+            currentTimeMillis = millis("2026-05-28T12:00:00+02:00"),
+            localTimeOffsetSeconds = 7200,
+            language = "en",
+        )
+        assertEquals(ParkOpeningTone.Unknown, en.tone)
+        assertEquals("Opening times not available", en.statusText)
     }
 
     private fun millis(value: String): Long {

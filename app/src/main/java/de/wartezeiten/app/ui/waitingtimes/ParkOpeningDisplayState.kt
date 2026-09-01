@@ -1,5 +1,6 @@
 package de.wartezeiten.app.ui.waitingtimes
 
+import de.wartezeiten.app.core.i18n.localized
 import de.wartezeiten.app.domain.model.CrowdLevel
 import de.wartezeiten.app.domain.model.AttractionStatus
 import de.wartezeiten.app.domain.model.OpeningTimes
@@ -32,18 +33,31 @@ internal fun parkOpeningDisplayState(
     waitingTimes: List<WaitingTime> = emptyList(),
     currentTimeMillis: Long,
     localTimeOffsetSeconds: Int?,
+    language: String,
 ): ParkOpeningDisplayState {
     if (openingTimes == null) {
         return ParkOpeningDisplayState(
             tone = ParkOpeningTone.Unknown,
-            statusText = "\u00d6ffnungszeiten nicht verf\u00fcgbar",
+            statusText = localized(
+                language,
+                de = "Öffnungszeiten nicht verfügbar",
+                en = "Opening times not available",
+                fr = "Horaires non disponibles",
+                nl = "Openingstijden niet beschikbaar",
+            ),
         )
     }
 
     if (!openingTimes.opened) {
         return ParkOpeningDisplayState(
             tone = ParkOpeningTone.ClosedToday,
-            statusText = "Heute geschlossen",
+            statusText = localized(
+                language,
+                de = "Heute geschlossen",
+                en = "Closed today",
+                fr = "Fermé aujourd'hui",
+                nl = "Vandaag gesloten",
+            ),
         )
     }
 
@@ -78,13 +92,13 @@ internal fun parkOpeningDisplayState(
             } else {
                 ParkOpeningTone.OpenOtherTimeToday
             },
-            statusText = buildOpeningWindowStatusText(openTime, closeTime),
-            crowdText = buildCrowdText(level = estimate.level),
+            statusText = buildOpeningWindowStatusText(openTime, closeTime, language),
+            crowdText = buildCrowdText(level = estimate.level, language = language),
         )
     } else {
         ParkOpeningDisplayState(
             tone = ParkOpeningTone.OpenOtherTimeToday,
-            statusText = buildOpeningWindowStatusText(openTime, closeTime),
+            statusText = buildOpeningWindowStatusText(openTime, closeTime, language),
         )
     }
 }
@@ -101,26 +115,55 @@ private fun isWithinOpeningHours(
     }
 }
 
-private fun buildOpeningWindowStatusText(openTime: LocalTime?, closeTime: LocalTime?): String {
+private fun buildOpeningWindowStatusText(openTime: LocalTime?, closeTime: LocalTime?, language: String): String {
     return when {
-        openTime != null && closeTime != null ->
-            "Heute ge\u00f6ffnet von ${openTime.format(displayTimeFormatter)} Uhr bis ${closeTime.format(displayTimeFormatter)} Uhr"
-        openTime != null -> "Heute ge\u00f6ffnet ab: ${openTime.format(displayTimeFormatter)} Uhr"
-        closeTime != null -> "Heute ge\u00f6ffnet bis: ${closeTime.format(displayTimeFormatter)} Uhr"
-        else -> "Heute ge\u00f6ffnet"
+        openTime != null && closeTime != null -> localized(
+            language,
+            de = "Heute geöffnet von ${openTime.format(displayTimeFormatter)} Uhr bis ${closeTime.format(displayTimeFormatter)} Uhr",
+            en = "Open today from ${openTime.format(displayTimeFormatter)} to ${closeTime.format(displayTimeFormatter)}",
+            fr = "Ouvert aujourd'hui de ${openTime.format(displayTimeFormatter)} à ${closeTime.format(displayTimeFormatter)}",
+            nl = "Vandaag geopend van ${openTime.format(displayTimeFormatter)} tot ${closeTime.format(displayTimeFormatter)}",
+        )
+        openTime != null -> localized(
+            language,
+            de = "Heute geöffnet ab: ${openTime.format(displayTimeFormatter)} Uhr",
+            en = "Opens today at: ${openTime.format(displayTimeFormatter)}",
+            fr = "Ouvert aujourd'hui dès ${openTime.format(displayTimeFormatter)}",
+            nl = "Vandaag geopend vanaf: ${openTime.format(displayTimeFormatter)}",
+        )
+        closeTime != null -> localized(
+            language,
+            de = "Heute geöffnet bis: ${closeTime.format(displayTimeFormatter)} Uhr",
+            en = "Open today until: ${closeTime.format(displayTimeFormatter)}",
+            fr = "Ouvert aujourd'hui jusqu'à ${closeTime.format(displayTimeFormatter)}",
+            nl = "Vandaag geopend tot: ${closeTime.format(displayTimeFormatter)}",
+        )
+        else -> localized(
+            language,
+            de = "Heute geöffnet",
+            en = "Open today",
+            fr = "Ouvert aujourd'hui",
+            nl = "Vandaag geopend",
+        )
     }
 }
 
-private fun buildCrowdText(level: Float?): String? {
+private fun buildCrowdText(level: Float?, language: String): String? {
     if (level == null) return null
     val formattedLevel = String.format(Locale.GERMAN, "%.0f%%", level)
     val description = when {
-        level < 30 -> "Wenig los"
-        level < 60 -> "Normal"
-        level < 80 -> "Voll"
-        else -> "Sehr voll"
+        level < 30 -> localized(language, de = "Wenig los", en = "Quiet", fr = "Peu de monde", nl = "Weinig drukte")
+        level < 60 -> localized(language, de = "Normal", en = "Normal", fr = "Normal", nl = "Normaal")
+        level < 80 -> localized(language, de = "Voll", en = "Crowded", fr = "Plein", nl = "Druk")
+        else -> localized(language, de = "Sehr voll", en = "Very crowded", fr = "Très plein", nl = "Heel druk")
     }
-    return "Auslastung: ca. $formattedLevel ($description)"
+    return localized(
+        language,
+        de = "Auslastung: ca. $formattedLevel ($description)",
+        en = "Occupancy: about $formattedLevel ($description)",
+        fr = "Affluence : environ $formattedLevel ($description)",
+        nl = "Bezetting: ongeveer $formattedLevel ($description)",
+    )
 }
 
 private val displayTimeFormatter: DateTimeFormatter = DateTimeFormatter.ofPattern("HH:mm")

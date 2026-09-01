@@ -1289,6 +1289,7 @@ private fun ParkHeaderSection(
         waitingTimes = waitingTimes,
         currentTimeMillis = currentTime,
         localTimeOffsetSeconds = localTimeOffsetSeconds,
+        language = language,
     )
 
     val containerColor = when (displayState.tone) {
@@ -1926,6 +1927,7 @@ private fun emptyAttractionMessage(state: WaitingTimesUiState): String {
         waitingTimes = state.allWaitingTimes,
         currentTimeMillis = state.currentLocalTime,
         localTimeOffsetSeconds = state.localTimeOffsetSeconds,
+        language = language,
     )
 
     return when (displayState.tone) {
