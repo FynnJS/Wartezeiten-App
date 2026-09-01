@@ -1,5 +1,17 @@
 # Changelog
 
+## v1.2.7 - 2026-09-01
+
+- Hardened all API data models against null responses to prevent crashes on incomplete server payloads.
+- Attractions without an API ID or name now receive a stable, unique per-row ID to prevent hidden duplicates.
+- Localized crowd level labels and opening time texts in all four supported languages (DE/EN/FR/NL).
+- Fixed "today" detection in statistics and wait times to use the park's local timezone instead of the device timezone.
+- Optimized forecast and history computation in WaitingTimesViewModel with a dedicated flow to avoid redundant work on filter/sort changes.
+- Deduplicated attractions in the statistics selector and list to prevent duplicate entries.
+- Removed unnecessary search query clear when refreshing public park snapshots.
+- Updated Android Gradle Plugin to 9.3.2 and KSP to 2.3.6.
+- Bumped Android release metadata to `versionCode 10207` / `versionName 1.2.7`.
+
 ## v1.2.6 - 2026-07-20
 
 - Optimized date selection in statistics with a new month-based grid selector.

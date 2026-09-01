@@ -25,6 +25,38 @@ data class WhatsNewRelease(
 
 val WHATS_NEW_RELEASES = listOf(
     WhatsNewRelease(
+        versionCode = 10207,
+        versionName = "1.2.7",
+        highlightsDe = listOf(
+            "Stabilitätsupdate: Alle API-Datenmodelle sind jetzt null-sicher, um Abstürze bei unvollständigen Serverantworten zu vermeiden.",
+            "Attraktionen ohne API-ID oder -Name erhalten jetzt eine stabile, eindeutige ID pro Zeile – keine versteckten Duplikate mehr.",
+            "Die App zeigt Auslastungs- und Öffnungstexte jetzt korrekt in der gewählten Sprache an (DE/EN/FR/NL).",
+            "'Heute' in Statistiken und Wartezeiten bezieht sich jetzt auf die Ortszeit des Parks, nicht mehr auf die Gerätezeit.",
+            "Aktualisierte Build-Tools: Android Gradle Plugin 9.3.2 und KSP 2.3.6.",
+        ),
+        highlightsEn = listOf(
+            "Stability update: All API data models are now null-safe to prevent crashes on incomplete server responses.",
+            "Attractions without an API ID or name now get a stable, unique per-row ID — no more hidden duplicates.",
+            "The app now displays crowd level and opening time texts in the selected language (DE/EN/FR/NL).",
+            "'Today' in statistics and wait times now refers to the park's local time, not the device time.",
+            "Updated build tools: Android Gradle Plugin 9.3.2 and KSP 2.3.6.",
+        ),
+        highlightsFr = listOf(
+            "Mise à jour de stabilité : tous les modèles de données API sont désormais null-safe pour éviter les plantages sur des réponses serveur incomplètes.",
+            "Les attractions sans ID ou nom API reçoivent désormais un ID stable et unique par ligne — plus de doublons cachés.",
+            "L'application affiche désormais les textes de niveau d'affluence et d'horaires d'ouverture dans la langue sélectionnée (DE/EN/FR/NL).",
+            "« Aujourd'hui » dans les statistiques et les temps d'attente fait désormais référence à l'heure locale du parc, et non à l'heure de l'appareil.",
+            "Outils de build mis à jour : Android Gradle Plugin 9.3.2 et KSP 2.3.6.",
+        ),
+        highlightsNl = listOf(
+            "Stabiliteitsupdate: alle API-gegevensmodellen zijn nu null-safe om crashes bij onvolledige serverantwoorden te voorkomen.",
+            "Attracties zonder API-ID of -naam krijgen nu een stabiele, unieke ID per rij — geen verborgen duplicaten meer.",
+            "De app toont nu drukte- en openingsteksten in de geselecteerde taal (DE/EN/FR/NL).",
+            "'Vandaag' in statistieken en wachttijden verwijst nu naar de lokale tijd van het park, niet naar de apparaatijd.",
+            "Bijgewerkt buildtools: Android Gradle Plugin 9.3.2 en KSP 2.3.6.",
+        ),
+    ),
+    WhatsNewRelease(
         versionCode = 10206,
         versionName = "1.2.6",
         highlightsDe = listOf(
