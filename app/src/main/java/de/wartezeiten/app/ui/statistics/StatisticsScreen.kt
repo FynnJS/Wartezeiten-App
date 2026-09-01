@@ -88,6 +88,7 @@ import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import de.wartezeiten.app.core.utils.countryToFlag
+import de.wartezeiten.app.core.utils.parkLocalToday
 import de.wartezeiten.app.domain.model.AttractionHistorySummary
 import de.wartezeiten.app.domain.model.Park
 import kotlinx.coroutines.launch
@@ -235,9 +236,9 @@ fun StatisticsScreen(
                     )
                 }
 
-                val deviceToday = LocalDate.now().toString()
-                val isTodaySelected = state.selectedDate == deviceToday || state.selectedDate == "Heute" || state.selectedDate == "Today"
-                val isFallback = state.isDataFallbackToPreviousDay || (state.day != null && state.day.date != deviceToday && isTodaySelected)
+                val parkToday = parkLocalToday(state.day?.openFrom)
+                val isTodaySelected = state.selectedDate == parkToday || state.selectedDate == "Heute" || state.selectedDate == "Today"
+                val isFallback = state.isDataFallbackToPreviousDay || (state.day != null && state.day.date != parkToday && isTodaySelected)
                 if (isFallback) {
                     item {
                         Surface(
@@ -361,6 +362,7 @@ fun StatisticsScreen(
                         }
 
                         val filteredAttractions = state.day.attractions
+                            .distinctBy { it.id }
                             .filter { it.name.contains(state.attractionListQuery, ignoreCase = true) }
                             .sortedByDescending { it.averageWaitMinutes }
 
@@ -1327,7 +1329,7 @@ private fun SearchableSelectorSheet(
     val sheetState = rememberModalBottomSheetState()
     var query by remember { mutableStateOf("") }
     val filteredItems = remember(query, items) {
-        items.filter { it.name.contains(query, ignoreCase = true) }
+        items.distinctBy { it.id }.filter { it.name.contains(query, ignoreCase = true) }
     }
 
     ModalBottomSheet(

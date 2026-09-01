@@ -94,6 +94,41 @@ class StatisticsUiStateTest {
         assertEquals(20f, state.parkStatistics?.averageWaitMinutes ?: -1f, 0.001f)
     }
 
+    @Test
+    fun attractionOptionsDeduplicatesDuplicateIds() {
+        val state = StatisticsUiState(
+            selectedParkKey = "europapark",
+            day = AttractionHistoryDay(
+                generatedAtMillis = 1L,
+                parkKey = "europapark",
+                date = "2026-06-05",
+                snapshots = emptyList(),
+                attractions = listOf(
+                    summary(id = "a", name = "A"),
+                    summary(id = "a", name = "A Duplicate"),
+                    summary(id = "b", name = "B"),
+                ),
+            ),
+        )
+
+        assertEquals(listOf("a", "b"), state.attractionOptions.map { it.id })
+    }
+
+    private fun summary(id: String, name: String): de.wartezeiten.app.domain.model.AttractionHistorySummary {
+        return de.wartezeiten.app.domain.model.AttractionHistorySummary(
+            id = id,
+            name = name,
+            sampleCount = 1,
+            openSampleCount = 0,
+            closedSampleCount = 1,
+            averageWaitMinutes = null,
+            minWaitMinutes = null,
+            maxWaitMinutes = null,
+            lastValue = -1,
+            lastStatusCode = -1,
+        )
+    }
+
     private fun parkIndex(
         dates: List<String>,
         latestDate: String?,
