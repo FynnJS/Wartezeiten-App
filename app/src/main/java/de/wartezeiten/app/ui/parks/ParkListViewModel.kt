@@ -459,7 +459,6 @@ class ParkListViewModel @Inject constructor(
 
     private fun refreshPublicOpenSnapshots() {
         viewModelScope.launch {
-            preferences.setParkSearchQuery("")
             beginOpenParkDataLoad()
             try {
                 repository.refreshParkRecommendationSnapshots(

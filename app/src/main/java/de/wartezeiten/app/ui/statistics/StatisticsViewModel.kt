@@ -7,6 +7,8 @@ import dagger.hilt.android.lifecycle.HiltViewModel
 import de.wartezeiten.app.core.network.ApiResult
 import de.wartezeiten.app.core.network.NetworkError
 import de.wartezeiten.app.core.network.toUserMessage
+import de.wartezeiten.app.core.utils.parkLocalToday
+import de.wartezeiten.app.core.utils.readStringArgument
 import de.wartezeiten.app.data.local.PreferencesDataSource
 import de.wartezeiten.app.domain.model.AttractionHistoryPoint
 import de.wartezeiten.app.domain.model.AttractionHistoryDay
@@ -40,6 +42,7 @@ data class StatisticsUiState(
     val language: String = PreferencesDataSource.DEFAULT_LANGUAGE,
     val isLoading: Boolean = false,
     val isDataFallbackToPreviousDay: Boolean = false,
+    val parkToday: String? = null,
     val errorMessage: String? = null,
     val refreshTrigger: Int = 0,
     val refreshError: String? = null,
@@ -49,11 +52,7 @@ data class StatisticsUiState(
         get() {
             val indexedDates = index.parks.firstOrNull { it.parkKey == selectedParkKey }?.dates.orEmpty()
             val deviceToday = LocalDate.now().toString()
-            val parkIdx = index.parks.firstOrNull { it.parkKey == selectedParkKey }
-            val parkToday = if (parkIdx != null) {
-                val cands = listOf(deviceToday, LocalDate.now().minusDays(1).toString(), LocalDate.now().plusDays(1).toString())
-                cands.firstOrNull { it in parkIdx.dates } ?: parkIdx.latestDate ?: deviceToday
-            } else deviceToday
+            val parkToday = this.parkToday ?: deviceToday
             return (indexedDates + selectedDate + deviceToday + parkToday)
                 .filter { it.isNotBlank() }
                 .distinct()
@@ -187,8 +186,8 @@ class StatisticsViewModel @Inject constructor(
     private val preferences: PreferencesDataSource,
     savedStateHandle: SavedStateHandle,
 ) : ViewModel() {
-    private val initialParkKey: String? = savedStateHandle.get<String>("parkKey")?.toString()
-    private val initialAttractionId: String? = savedStateHandle.get<String>("attractionId")?.toString()
+    private val initialParkKey: String? = savedStateHandle.readStringArgument("parkKey")
+    private val initialAttractionId: String? = savedStateHandle.readStringArgument("attractionId")
     private val parks = repository.observeParks(null)
     private val currentAttractions = repository.observeCurrentAttractions()
         .stateIn(
@@ -230,6 +229,8 @@ class StatisticsViewModel @Inject constructor(
                         ?: initialParkKey
                         ?: indexResult.data.parks.firstOrNull()?.parkKey
                     val resolvedParkKey = selectedParkKey.resolveIndexedParkKey(indexResult.data, parkList)
+                    val parkOpenFrom = resolvedParkKey
+                        ?.let { key -> repository.observeParkDetail(key).first().openingTimes?.from }
                     val selectedDate = selectedParkKey
                         ?.let { resolvedParkKey }
                         ?.let { key ->
@@ -240,6 +241,7 @@ class StatisticsViewModel @Inject constructor(
                                 latestDate = parkIndex?.latestDate,
                                 currentDate = current.selectedDate,
                                 currentAttractions = currentAttractions.value,
+                                openFrom = parkOpenFrom,
                             )
                         }
                         ?: LocalDate.now().toString()
@@ -298,22 +300,26 @@ class StatisticsViewModel @Inject constructor(
         val state = mutableState.value
         val resolvedParkKey = parkKey.resolveIndexedParkKey(state.index, state.parks) ?: parkKey
         val parkIndex = state.index.parks.firstOrNull { it.parkKey == resolvedParkKey }
-        mutableState.update {
-            it.copy(
-                selectedParkKey = resolvedParkKey,
-                selectedDate = chooseInitialDate(
-                    parkKey = resolvedParkKey,
-                    parkIndexDates = parkIndex?.dates.orEmpty(),
-                    latestDate = parkIndex?.latestDate,
-                    currentDate = null,
-                    currentAttractions = currentAttractions.value,
-                ),
-                selectedAttractionId = null,
-                day = null,
-                errorMessage = null,
-            )
+        viewModelScope.launch {
+            val parkOpenFrom = repository.observeParkDetail(resolvedParkKey).first().openingTimes?.from
+            mutableState.update {
+                it.copy(
+                    selectedParkKey = resolvedParkKey,
+                    selectedDate = chooseInitialDate(
+                        parkKey = resolvedParkKey,
+                        parkIndexDates = parkIndex?.dates.orEmpty(),
+                        latestDate = parkIndex?.latestDate,
+                        currentDate = null,
+                        currentAttractions = currentAttractions.value,
+                        openFrom = parkOpenFrom,
+                    ),
+                    selectedAttractionId = null,
+                    day = null,
+                    errorMessage = null,
+                )
+            }
+            loadSelectedDay()
         }
-        loadSelectedDay()
     }
 
     fun selectDate(date: String) {
@@ -362,12 +368,13 @@ class StatisticsViewModel @Inject constructor(
                             else -> currentDay
                         }
 
-                        val deviceToday = LocalDate.now().toString()
-                        val isTodaySelected = date == deviceToday || date == "Heute" || date == "Today"
-                        val isFallback = day != null && day.date != deviceToday && isTodaySelected
+                        val parkToday = parkLocalToday(day?.openFrom)
+                        val isTodaySelected = date == parkToday || date == "Heute" || date == "Today"
+                        val isFallback = day != null && day.date != parkToday && isTodaySelected
                         
                         state.copy(
                             day = day,
+                            parkToday = parkToday.takeIf { day != null },
                             selectedAttractionId = selectKnownAttractionId(
                                 parkKey = parkKey,
                                 preferredId = state.selectedAttractionId,
@@ -383,10 +390,10 @@ class StatisticsViewModel @Inject constructor(
                     }
                 }
                 is ApiResult.Error -> {
-                    val deviceToday = LocalDate.now().toString()
-                    val isTodaySelected = date == deviceToday || date == "Heute" || date == "Today"
+                    val parkToday = mutableState.value.parkToday ?: parkLocalToday(null)
+                    val isTodaySelected = date == parkToday || date == "Heute" || date == "Today"
                     val isMissingToday = result.type == NetworkError.NotFound &&
-                        (date == deviceToday || isTodaySelected)
+                        (date == parkToday || isTodaySelected)
                     val language = preferences.language.first()
                     mutableState.update { state ->
                         if (isMissingToday) {
@@ -396,9 +403,10 @@ class StatisticsViewModel @Inject constructor(
                                 parks = state.parks,
                                 currentAttractions = currentAttractions.value,
                             )
-                            val isFallback = day != null && day.date != deviceToday && isTodaySelected
+                            val isFallback = day != null && day.date != parkToday && isTodaySelected
                             state.copy(
                                 day = day,
+                                parkToday = parkToday.takeIf { day != null },
                                 isLoading = false,
                                 errorMessage = null,
                                 isDataFallbackToPreviousDay = isFallback,
@@ -470,15 +478,15 @@ class StatisticsViewModel @Inject constructor(
     }
 }
 
-private fun parkCurrentDateFromIndex(dates: List<String>, latestDate: String?): String {
-    val now = LocalDate.now()
+private fun parkCurrentDateFromIndex(dates: List<String>, latestDate: String?, openFrom: String? = null): String {
+    val parkToday = parkLocalToday(openFrom)
     val candidates = listOf(
-        now.toString(),
-        now.minusDays(1).toString(),
-        now.plusDays(1).toString()
+        parkToday,
+        LocalDate.parse(parkToday).minusDays(1).toString(),
+        LocalDate.parse(parkToday).plusDays(1).toString()
     )
     val datesSet = dates.toSet()
-    return candidates.firstOrNull { it in datesSet } ?: latestDate ?: now.toString()
+    return candidates.firstOrNull { it in datesSet } ?: latestDate ?: parkToday
 }
 
 private fun chooseInitialDate(
@@ -487,17 +495,18 @@ private fun chooseInitialDate(
     latestDate: String?,
     currentDate: String?,
     currentAttractions: List<CurrentAttractionSearchEntry>,
+    openFrom: String? = null,
 ): String {
-    val deviceToday = LocalDate.now().toString()
+    val parkToday = parkLocalToday(openFrom)
     val hasCurrentAttractions = currentAttractions.any { it.matchesParkKey(parkKey) }
-    val parkToday = parkCurrentDateFromIndex(parkIndexDates, latestDate)
+    val indexedParkToday = parkCurrentDateFromIndex(parkIndexDates, latestDate, openFrom)
     
     return when {
-        currentDate != null && (currentDate in parkIndexDates || (currentDate == deviceToday && hasCurrentAttractions)) -> currentDate
-        hasCurrentAttractions -> deviceToday
-        parkToday in parkIndexDates -> parkToday
+        currentDate != null && (currentDate in parkIndexDates || (currentDate == parkToday && hasCurrentAttractions)) -> currentDate
+        hasCurrentAttractions -> parkToday
+        indexedParkToday in parkIndexDates -> indexedParkToday
         latestDate != null -> latestDate
-        else -> deviceToday
+        else -> parkToday
     }
 }
 
