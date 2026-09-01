@@ -18,7 +18,7 @@ interface WeatherApiService {
 
 data class WeatherResponse(
     val current_weather: CurrentWeather?,
-    val hourly: HourlyData,
+    val hourly: HourlyData?,
     val daily: DailyData?
 )
 
@@ -28,16 +28,16 @@ data class CurrentWeather(
 )
 
 data class HourlyData(
-    val time: List<String>,
-    val temperature_2m: List<Double>,
-    val precipitation_probability: List<Int>,
-    val weather_code: List<Int>
+    val time: List<String>?,
+    val temperature_2m: List<Double>?,
+    val precipitation_probability: List<Int>?,
+    val weather_code: List<Int>?
 )
 
 data class DailyData(
-    val time: List<String>,
-    val temperature_2m_max: List<Double>,
-    val temperature_2m_min: List<Double>,
-    val precipitation_probability_max: List<Int>,
-    val weathercode: List<Int>
+    val time: List<String>?,
+    val temperature_2m_max: List<Double>?,
+    val temperature_2m_min: List<Double>?,
+    val precipitation_probability_max: List<Int>?,
+    val weathercode: List<Int>?
 )

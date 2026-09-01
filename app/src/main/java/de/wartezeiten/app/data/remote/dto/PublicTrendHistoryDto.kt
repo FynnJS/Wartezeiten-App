@@ -13,14 +13,14 @@ data class PublicLatestAppDataDto(
     @SerializedName("generatedAtMillis")
     val generatedAtMillis: Long?,
     @SerializedName("parks")
-    val parks: List<PublicLatestParkSnapshotDto> = emptyList(),
+    val parks: List<PublicLatestParkSnapshotDto>? = null,
     @SerializedName("recommendations")
-    val recommendations: List<PublicParkRecommendationDto> = emptyList(),
+    val recommendations: List<PublicParkRecommendationDto>? = null,
 )
 
 data class PublicLatestParkSnapshotDto(
     @SerializedName("parkKey")
-    val parkKey: String,
+    val parkKey: String?,
     @SerializedName("capturedAtMillis")
     val capturedAtMillis: Long,
     @SerializedName("apiCrowdLevel")
@@ -40,14 +40,14 @@ data class PublicLatestParkSnapshotDto(
     @SerializedName("totalAttractions")
     val totalAttractions: Int,
     @SerializedName("attractions")
-    val attractions: List<PublicLatestAttractionDto> = emptyList(),
+    val attractions: List<PublicLatestAttractionDto>? = null,
 )
 
 data class PublicLatestAttractionDto(
     @SerializedName("id")
-    val id: String,
+    val id: String?,
     @SerializedName("name")
-    val name: String,
+    val name: String?,
     @SerializedName("value")
     val value: Int?,
     @SerializedName("statusCode")
@@ -77,12 +77,12 @@ data class PublicGlobalMarkersDto(
     @SerializedName("date")
     val date: String?,
     @SerializedName("markers")
-    val markers: List<PublicGlobalMarkerDto> = emptyList(),
+    val markers: List<PublicGlobalMarkerDto>? = null,
 )
 
 data class PublicGlobalMarkerDto(
     @SerializedName("parkKey")
-    val parkKey: String,
+    val parkKey: String?,
     @SerializedName("capturedAtMillis")
     val capturedAtMillis: Long,
     @SerializedName("openedToday")
@@ -103,12 +103,12 @@ data class PublicTrendHistoryDto(
     @SerializedName("generatedAtMillis")
     val generatedAtMillis: Long?,
     @SerializedName("parks")
-    val parks: List<PublicParkTrendHistoryDto> = emptyList(),
+    val parks: List<PublicParkTrendHistoryDto>? = null,
 )
 
 data class PublicParkTrendHistoryDto(
     @SerializedName("parkKey")
-    val parkKey: String,
+    val parkKey: String?,
     @SerializedName("snapshots")
     val snapshots: List<PublicParkTrendSnapshotDto> = emptyList(),
 )
@@ -138,14 +138,14 @@ data class PublicStatisticsIndexDto(
     @SerializedName("generatedAtMillis")
     val generatedAtMillis: Long?,
     @SerializedName("parks")
-    val parks: List<PublicStatisticsParkIndexDto> = emptyList(),
+    val parks: List<PublicStatisticsParkIndexDto>? = null,
 )
 
 data class PublicStatisticsParkIndexDto(
     @SerializedName("parkKey")
-    val parkKey: String,
+    val parkKey: String?,
     @SerializedName("dates")
-    val dates: List<String> = emptyList(),
+    val dates: List<String>? = null,
     @SerializedName("latestDate")
     val latestDate: String?,
     @SerializedName("attractionCount")
@@ -155,14 +155,14 @@ data class PublicStatisticsParkIndexDto(
     @SerializedName("updatedAtMillis")
     val updatedAtMillis: Long?,
     @SerializedName("attractions")
-    val attractions: List<PublicStatisticsAttractionIndexDto> = emptyList(),
+    val attractions: List<PublicStatisticsAttractionIndexDto>? = null,
 )
 
 data class PublicStatisticsAttractionIndexDto(
     @SerializedName("id")
-    val id: String,
+    val id: String?,
     @SerializedName("name")
-    val name: String,
+    val name: String?,
     @SerializedName("latestDate")
     val latestDate: String?,
     @SerializedName("sampleCount")
@@ -179,31 +179,31 @@ data class PublicAttractionHistoryDayDto(
     @SerializedName("generatedAtMillis")
     val generatedAtMillis: Long?,
     @SerializedName("parkKey")
-    val parkKey: String,
+    val parkKey: String?,
     @SerializedName("date")
-    val date: String,
+    val date: String?,
     @SerializedName("openFrom")
     val openFrom: String?,
     @SerializedName("closedFrom")
     val closedFrom: String?,
     @SerializedName("snapshots")
-    val snapshots: List<PublicAttractionHistorySnapshotDto> = emptyList(),
+    val snapshots: List<PublicAttractionHistorySnapshotDto>? = null,
     @SerializedName("attractions")
-    val attractions: List<PublicAttractionHistorySummaryDto> = emptyList(),
+    val attractions: List<PublicAttractionHistorySummaryDto>? = null,
 )
 
 data class PublicAttractionHistorySnapshotDto(
     @SerializedName("capturedAtMillis")
     val capturedAtMillis: Long,
     @SerializedName("attractions")
-    val attractions: List<PublicAttractionHistoryPointDto> = emptyList(),
+    val attractions: List<PublicAttractionHistoryPointDto>? = null,
 )
 
 data class PublicAttractionHistoryPointDto(
     @SerializedName("id")
-    val id: String,
+    val id: String?,
     @SerializedName("name")
-    val name: String,
+    val name: String?,
     @SerializedName("value")
     val value: Int,
     @SerializedName("statusCode")
@@ -214,9 +214,9 @@ data class PublicAttractionHistoryPointDto(
 
 data class PublicAttractionHistorySummaryDto(
     @SerializedName("id")
-    val id: String,
+    val id: String?,
     @SerializedName("name")
-    val name: String,
+    val name: String?,
     @SerializedName("sampleCount")
     val sampleCount: Int?,
     @SerializedName("openSampleCount")
@@ -238,26 +238,28 @@ data class PublicAttractionHistorySummaryDto(
 fun PublicStatisticsIndexDto.toDomain(): StatisticsIndex {
     return StatisticsIndex(
         generatedAtMillis = generatedAtMillis ?: 0L,
-        parks = parks.map { it.toDomain() },
+        parks = parks.orEmpty().mapNotNull { it.toDomain() },
     )
 }
 
-fun PublicStatisticsParkIndexDto.toDomain(): StatisticsParkIndex {
+fun PublicStatisticsParkIndexDto.toDomain(): StatisticsParkIndex? {
+    val parkKey = parkKey ?: return null
     return StatisticsParkIndex(
         parkKey = parkKey,
-        dates = dates.sorted(),
+        dates = dates.orEmpty().sorted(),
         latestDate = latestDate,
         attractionCount = attractionCount ?: 0,
         sampleCount = sampleCount ?: 0,
         updatedAtMillis = updatedAtMillis ?: 0L,
-        attractions = attractions.map { it.toDomain() },
+        attractions = attractions.orEmpty().mapNotNull { it.toDomain() },
     )
 }
 
-fun PublicStatisticsAttractionIndexDto.toDomain(): StatisticsAttractionIndex {
+fun PublicStatisticsAttractionIndexDto.toDomain(): StatisticsAttractionIndex? {
+    val id = id ?: return null
     return StatisticsAttractionIndex(
         id = id,
-        name = name,
+        name = name ?: id,
         latestDate = latestDate,
         sampleCount = sampleCount ?: 0,
         averageWaitMinutes = averageWaitMinutes,
@@ -266,39 +268,45 @@ fun PublicStatisticsAttractionIndexDto.toDomain(): StatisticsAttractionIndex {
     )
 }
 
-fun PublicAttractionHistoryDayDto.toDomain(): AttractionHistoryDay {
+fun PublicAttractionHistoryDayDto.toDomain(): AttractionHistoryDay? {
+    val parkKey = parkKey ?: return null
+    val date = date ?: return null
     return AttractionHistoryDay(
         generatedAtMillis = generatedAtMillis ?: 0L,
         parkKey = parkKey,
         date = date,
         openFrom = openFrom,
         closedFrom = closedFrom,
-        snapshots = snapshots.map { it.toDomain() },
-        attractions = attractions.map { it.toDomain() },
+        snapshots = snapshots.orEmpty().mapNotNull { it.toDomain() },
+        attractions = attractions.orEmpty().mapNotNull { it.toDomain() },
     )
 }
 
-fun PublicAttractionHistorySnapshotDto.toDomain(): AttractionHistorySnapshot {
+fun PublicAttractionHistorySnapshotDto.toDomain(): AttractionHistorySnapshot? {
+    val points = attractions.orEmpty().mapNotNull { it.toDomain() }
+    if (points.isEmpty()) return null
     return AttractionHistorySnapshot(
         capturedAtMillis = capturedAtMillis,
-        attractions = attractions.map { it.toDomain() },
+        attractions = points,
     )
 }
 
-fun PublicAttractionHistoryPointDto.toDomain(): AttractionHistoryPoint {
+fun PublicAttractionHistoryPointDto.toDomain(): AttractionHistoryPoint? {
+    val id = id ?: return null
     return AttractionHistoryPoint(
         id = id,
-        name = name,
+        name = name ?: id,
         value = value,
         statusCode = statusCode,
         status = status ?: "unknown",
     )
 }
 
-fun PublicAttractionHistorySummaryDto.toDomain(): AttractionHistorySummary {
+fun PublicAttractionHistorySummaryDto.toDomain(): AttractionHistorySummary? {
+    val id = id ?: return null
     return AttractionHistorySummary(
         id = id,
-        name = name,
+        name = name ?: id,
         sampleCount = sampleCount ?: 0,
         openSampleCount = openSampleCount ?: 0,
         closedSampleCount = closedSampleCount ?: 0,

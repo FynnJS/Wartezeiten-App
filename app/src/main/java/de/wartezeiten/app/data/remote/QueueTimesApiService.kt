@@ -15,17 +15,17 @@ interface QueueTimesApiService {
 }
 
 data class QueueTimesResponseDto(
-    val lands: List<QueueTimesLandDto> = emptyList(),
-    val rides: List<QueueTimesRideDto> = emptyList(),
+    val lands: List<QueueTimesLandDto>? = null,
+    val rides: List<QueueTimesRideDto>? = null,
 )
 
 data class QueueTimesLandDto(
-    val rides: List<QueueTimesRideDto> = emptyList(),
+    val rides: List<QueueTimesRideDto>? = null,
 )
 
 data class QueueTimesRideDto(
-    val id: Long,
-    val name: String,
-    val is_open: Boolean,
+    val id: Long?,
+    val name: String?,
+    val is_open: Boolean?,
     val wait_time: Int?,
 )

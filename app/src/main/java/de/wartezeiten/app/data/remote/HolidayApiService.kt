@@ -10,7 +10,7 @@ interface HolidayApiService {
 }
 
 data class HolidayDto(
-    val date: String,
-    val name: String,
-    val localName: String
+    val date: String?,
+    val name: String?,
+    val localName: String?
 )
