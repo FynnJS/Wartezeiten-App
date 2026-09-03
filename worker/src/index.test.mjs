@@ -16,10 +16,91 @@ import {
   mergeStatisticsIndexes,
   normalizeApiLanguage,
   pruneAttractionHistoryD1,
+  readGlobalMarkersD1,
+  readStatisticsIndexD1,
   selectCronParkShard,
   toAttractionSnapshotRow,
+  writeAttractionSnapshotsD1,
 } from "./index.js";
 import { FALLBACK_PARKS } from "./fallbackParks.js";
+
+const DAY_BASE_COLUMNS = [
+  "park_key",
+  "date",
+  "generated_at_millis",
+  "open_from",
+  "closed_from",
+  "schema_version",
+];
+const DAY_AGGREGATE_COLUMNS = [
+  "sample_count",
+  "latest_captured_at_millis",
+  "latest_opened_today",
+  "latest_attractions_json",
+];
+
+function pragmaRows(columns) {
+  return columns.map((name, index) => ({
+    cid: index,
+    name,
+    type: "INTEGER",
+    notnull: 0,
+    dflt_value: null,
+    pk: 0,
+  }));
+}
+
+function fullDayColumnsRows() {
+  return pragmaRows([...DAY_BASE_COLUMNS, ...DAY_AGGREGATE_COLUMNS]);
+}
+
+// D1-Mock: liefert je nach SQL-Fragment konfigurierte .all()/.first()-Antworten und zeichnet
+// alle .bind()-Aufrufe (calls) sowie batch-Ausfuehrungen (batches) mit ihren SQL-Strings auf.
+function createD1DbMock(handlers = []) {
+  const calls = [];
+  const batches = [];
+  const preparedSql = [];
+  function respond(sql, method) {
+    const handler = handlers.find((entry) => sql.includes(entry.match)) ?? null;
+    const value = handler ? handler[method] : undefined;
+    if (typeof value === "function") return value(sql);
+    if (value !== undefined) return value;
+    return method === "first" ? null : { results: [] };
+  }
+  const db = {
+    calls,
+    batches,
+    preparedSql,
+    prepare(sql) {
+      preparedSql.push(sql);
+      const statement = {
+        sql,
+        bind(...values) {
+          calls.push({ sql, values });
+          return {
+            sql,
+            run: async () => ({ success: true, meta: { changes: 1 } }),
+            all: async () => respond(sql, "all"),
+            first: async () => respond(sql, "first"),
+          };
+        },
+        run: async () => ({ success: true }),
+        all: async () => respond(sql, "all"),
+        first: async () => respond(sql, "first"),
+      };
+      return statement;
+    },
+    batch: async (statements) => {
+      batches.push(statements.map((statement) => statement.sql));
+      await Promise.all(
+        statements.map((statement) =>
+          (typeof statement.run === "function" ? statement.run() : Promise.resolve({ success: true }))),
+      );
+      return statements.map(() => ({ success: true }));
+    },
+  };
+  return db;
+}
 
 function openParkSnapshot() {
   return {
@@ -87,30 +168,63 @@ test("manual D1 refresh defaults to one small app-data shard", () => {
   assert.equal(options.includeCrowd, false);
 });
 
-test("D1 attraction history schema is created lazily for worker updates", async () => {
-  const preparedSql = [];
-  const batches = [];
-  const db = {
-    prepare(sql) {
-      preparedSql.push(sql);
-      return {
-        sql,
-        run: async () => ({ success: true }),
-      };
+test("D1 attraction history schema is created lazily with aggregate day columns", async () => {
+  const db = createD1DbMock([
+    {
+      match: "PRAGMA table_info(attraction_history_days)",
+      all: { results: fullDayColumnsRows() },
     },
-    batch: async (statements) => {
-      batches.push(statements.map((statement) => statement.sql));
-      return statements.map(() => ({ success: true }));
-    },
-  };
+  ]);
 
   await ensureAttractionHistoryD1({ APP_DATA_DB: db });
   await ensureAttractionHistoryD1({ APP_DATA_DB: db });
 
-  assert.equal(batches.length, 1);
-  assert.equal(preparedSql.filter((sql) => sql.includes("CREATE TABLE IF NOT EXISTS attraction_history_days")).length, 1);
-  assert.equal(preparedSql.filter((sql) => sql.includes("CREATE TABLE IF NOT EXISTS attraction_history_snapshots")).length, 1);
-  assert.equal(preparedSql.filter((sql) => sql.includes("idx_attraction_history_snapshots_date_park_captured")).length, 1);
+  assert.equal(db.batches.length, 1); // DDL laeuft nur einmal pro Binding
+  const ddl = db.batches[0].join("\n");
+  assert.ok(ddl.includes("CREATE TABLE IF NOT EXISTS attraction_history_days"));
+  assert.ok(ddl.includes("sample_count INTEGER NOT NULL DEFAULT 0"));
+  assert.ok(ddl.includes("latest_captured_at_millis INTEGER"));
+  assert.ok(ddl.includes("latest_opened_today INTEGER NOT NULL DEFAULT 0"));
+  assert.ok(ddl.includes("latest_attractions_json TEXT"));
+  assert.ok(ddl.includes("CREATE TABLE IF NOT EXISTS attraction_history_snapshots"));
+  assert.ok(ddl.includes("CREATE INDEX IF NOT EXISTS idx_attraction_history_snapshots_date_park_captured"));
+  assert.ok(ddl.includes("CREATE INDEX IF NOT EXISTS idx_attraction_history_days_date"));
+  assert.equal(db.preparedSql.filter((sql) => sql.includes("ALTER TABLE")).length, 0);
+  assert.equal(db.preparedSql.filter((sql) => sql.includes("UPDATE attraction_history_days")).length, 0);
+});
+
+test("existing attraction_history_days tables are migrated with aggregate columns and backfilled", async () => {
+  const db = createD1DbMock([
+    {
+      match: "PRAGMA table_info(attraction_history_days)",
+      all: { results: pragmaRows(DAY_BASE_COLUMNS) },
+    },
+    {
+      // Es existieren Tageszeilen ohne latest_attractions_json -> Backfill ausfuehren.
+      match: "latest_attractions_json IS NULL",
+      first: { "1": 1 },
+    },
+  ]);
+
+  await ensureAttractionHistoryD1({ APP_DATA_DB: db });
+
+  const alterBatch = db.batches.find((batch) =>
+    batch.some((sql) => sql.includes("ALTER TABLE attraction_history_days ADD COLUMN")));
+  assert.ok(alterBatch);
+  assert.equal(alterBatch.length, 4);
+  const alterSql = alterBatch.join("\n");
+  assert.ok(alterSql.includes("sample_count INTEGER NOT NULL DEFAULT 0"));
+  assert.ok(alterSql.includes("latest_captured_at_millis INTEGER"));
+  assert.ok(alterSql.includes("latest_opened_today INTEGER NOT NULL DEFAULT 0"));
+  assert.ok(alterSql.includes("latest_attractions_json TEXT"));
+
+  const backfillBatch = db.batches.find((batch) =>
+    batch.some((sql) => sql.includes("UPDATE attraction_history_days")));
+  assert.ok(backfillBatch);
+  const backfillSql = backfillBatch[0];
+  assert.ok(backfillSql.includes("sample_count = ("));
+  assert.ok(backfillSql.includes("attractions_json != '[]'"));
+  assert.ok(backfillSql.includes("WHERE attraction_history_days.latest_attractions_json IS NULL"));
 });
 
 test("cron sharding keeps representative parks assigned to multiple real cron shards", () => {
@@ -183,25 +297,13 @@ test("cron park selection balances the current park list across four deployable 
   assert.deepEqual(shardSizes, [13, 9, 9, 14]);
 });
 
-test("D1 attraction history pruning removes old dates and orphaned day rows", async () => {
-  const calls = [];
-  const db = {
-    prepare(sql) {
-      return {
-        bind(...values) {
-          calls.push({ sql, values });
-          return {
-            run: async () => ({ success: true }),
-          };
-        },
-        run: async () => ({ success: true }),
-      };
+test("D1 attraction history pruning removes old snapshots/days via date-bounded deletes", async () => {
+  const db = createD1DbMock([
+    {
+      match: "PRAGMA table_info(attraction_history_days)",
+      all: { results: fullDayColumnsRows() },
     },
-    batch: async (statements) => {
-      await Promise.all(statements.map((statement) => statement.run()));
-      return statements.map(() => ({ success: true }));
-    },
-  };
+  ]);
 
   await pruneAttractionHistoryD1(
     {
@@ -211,13 +313,161 @@ test("D1 attraction history pruning removes old dates and orphaned day rows", as
     Date.parse("2026-06-28T12:00:00Z"),
   );
 
-  const deleteSnapshots = calls.find((call) => call.sql.includes("DELETE FROM attraction_history_snapshots"));
-  const deleteDays = calls.find((call) => call.sql.includes("DELETE FROM attraction_history_days"));
+  const deleteCalls = db.calls.filter((call) => call.sql.includes("DELETE FROM"));
+  const deleteSnapshots = deleteCalls.find((call) => call.sql.includes("DELETE FROM attraction_history_snapshots"));
+  const deleteDaysByDate = deleteCalls.find((call) =>
+    call.sql.includes("DELETE FROM attraction_history_days") && call.sql.includes("WHERE date < ?"));
+  const orphanCleanup = deleteCalls.find((call) =>
+    call.sql.includes("DELETE FROM attraction_history_days") && call.sql.includes("NOT EXISTS"));
 
   assert.ok(deleteSnapshots);
-  assert.ok(deleteDays);
   assert.equal(deleteSnapshots.values[0], "2026-06-14");
-  assert.equal(deleteDays.values[0], "2026-06-14");
+  assert.ok(!deleteSnapshots.sql.includes("OR"));
+  assert.ok(deleteDaysByDate);
+  assert.equal(deleteDaysByDate.values[0], "2026-06-14");
+  assert.ok(orphanCleanup);
+  assert.equal(orphanCleanup.values[0], "2026-06-14");
+  assert.ok(orphanCleanup.sql.includes("date >= ?"));
+});
+
+test("D1 pruning runs only once per retention day per database binding", async () => {
+  const db = createD1DbMock([
+    {
+      match: "PRAGMA table_info(attraction_history_days)",
+      all: { results: fullDayColumnsRows() },
+    },
+  ]);
+  const env = { APP_DATA_DB: db, APP_DATA_D1_RETENTION_DAYS: "14" };
+  const now = Date.parse("2026-06-28T12:00:00Z");
+
+  await pruneAttractionHistoryD1(env, now);
+  assert.equal(db.calls.filter((call) => call.sql.includes("DELETE FROM")).length, 3);
+
+  await pruneAttractionHistoryD1(env, now);
+  assert.equal(db.calls.filter((call) => call.sql.includes("DELETE FROM")).length, 3);
+
+  // Anderer Retentionstag -> Prune laeuft erneut.
+  await pruneAttractionHistoryD1(env, Date.parse("2026-06-29T12:00:00Z"));
+  assert.equal(db.calls.filter((call) => call.sql.includes("DELETE FROM")).length, 6);
+});
+
+test("D1 snapshot writes maintain per-day aggregate columns on attraction_history_days", async () => {
+  const db = createD1DbMock([
+    {
+      match: "PRAGMA table_info(attraction_history_days)",
+      all: { results: fullDayColumnsRows() },
+    },
+  ]);
+
+  const snapshot = {
+    parkKey: "europapark",
+    date: "2026-06-22",
+    generatedAtMillis: 42,
+    capturedAtMillis: 41,
+    openedToday: true,
+    openFrom: "2026-06-22T09:00:00+02:00",
+    closedFrom: "2026-06-22T18:00:00+02:00",
+    attractions: [
+      { id: "ride-1", name: "Silver Star", value: 10, statusCode: 0, status: "opened" },
+    ],
+  };
+  await writeAttractionSnapshotsD1({ APP_DATA_DB: db }, [snapshot]);
+
+  const daysCall = db.calls.find((call) => call.sql.includes("INSERT INTO attraction_history_days"));
+  assert.ok(daysCall);
+  assert.ok(daysCall.sql.includes("sample_count"));
+  assert.ok(daysCall.sql.includes("latest_captured_at_millis"));
+  assert.ok(daysCall.sql.includes("latest_opened_today"));
+  assert.ok(daysCall.sql.includes("latest_attractions_json"));
+  assert.ok(daysCall.sql.includes("VALUES (?, ?, ?, ?, ?, ?, 1, ?, ?, ?)"));
+  assert.ok(daysCall.sql.includes("sample_count = attraction_history_days.sample_count + 1"));
+  assert.ok(daysCall.sql.includes("latest_captured_at_millis = excluded.captured_at_millis"));
+  assert.ok(daysCall.sql.includes("latest_attractions_json = excluded.attractions_json"));
+  assert.deepEqual(daysCall.values.slice(6), [41, 1, JSON.stringify(snapshot.attractions)]);
+});
+
+test("D1 statistics index reads only the aggregated days table", async () => {
+  const attractionsJson = JSON.stringify([
+    { id: "ride-1", name: "Silver Star", value: 10, statusCode: 0, status: "opened" },
+  ]);
+  const db = createD1DbMock([
+    {
+      match: "PRAGMA table_info(attraction_history_days)",
+      all: { results: fullDayColumnsRows() },
+    },
+    {
+      match: "sample_count AS deliverableSampleCount",
+      all: {
+        results: [
+          { parkKey: "europapark", date: "2026-06-21", generatedAtMillis: 10, deliverableSampleCount: 100, latestAttractionsJson: attractionsJson },
+          { parkKey: "europapark", date: "2026-06-22", generatedAtMillis: 42, deliverableSampleCount: 120, latestAttractionsJson: attractionsJson },
+          { parkKey: "toverland", date: "2026-06-22", generatedAtMillis: 7, deliverableSampleCount: 0, latestAttractionsJson: null },
+        ],
+      },
+    },
+  ]);
+
+  const index = await readStatisticsIndexD1({ APP_DATA_DB: db });
+
+  const readStatement = db.preparedSql.find((sql) => sql.includes("sample_count AS deliverableSampleCount"));
+  assert.ok(readStatement);
+  assert.ok(!readStatement.includes("attraction_history_snapshots"));
+
+  assert.equal(index.parks.length, 1); // toverland hat keine deliverable samples
+  const europapark = index.parks[0];
+  assert.equal(europapark.parkKey, "europapark");
+  assert.deepEqual(europapark.dates, ["2026-06-21", "2026-06-22"]);
+  assert.equal(europapark.latestDate, "2026-06-22");
+  assert.equal(europapark.attractionCount, 1);
+  assert.equal(europapark.updatedAtMillis, 42);
+});
+
+test("D1 global markers read only the aggregated days table for the requested date", async () => {
+  const attractionsJson = JSON.stringify([
+    { id: "ride-1", name: "Silver Star", value: 10, statusCode: 0, status: "opened" },
+    { id: "ride-2", name: "Euro-Mir", value: 25, statusCode: 0, status: "opened" },
+    { id: "ride-3", name: "Wodan", statusCode: 2, status: "closed" },
+  ]);
+  const db = createD1DbMock([
+    {
+      match: "PRAGMA table_info(attraction_history_days)",
+      all: { results: fullDayColumnsRows() },
+    },
+    {
+      match: "WHERE date = ?",
+      all: {
+        results: [
+          {
+            park_key: "europapark",
+            date: "2026-06-22",
+            generated_at_millis: 42,
+            open_from: "2026-06-22T09:00:00+02:00",
+            closed_from: "2026-06-22T18:00:00+02:00",
+            latest_captured_at_millis: 41,
+            latest_opened_today: 1,
+            latest_attractions_json: attractionsJson,
+          },
+        ],
+      },
+    },
+  ]);
+
+  const markers = await readGlobalMarkersD1({ APP_DATA_DB: db }, "2026-06-22");
+
+  const readStatement = db.preparedSql.find((sql) =>
+    sql.includes("WHERE date = ?") && sql.includes("latest_opened_today"));
+  assert.ok(readStatement);
+  assert.ok(!readStatement.includes("attraction_history_snapshots"));
+
+  assert.equal(markers.date, "2026-06-22");
+  assert.equal(markers.markers.length, 1);
+  const marker = markers.markers[0];
+  assert.equal(marker.parkKey, "europapark");
+  assert.equal(marker.capturedAtMillis, 41);
+  assert.equal(marker.openedToday, true);
+  assert.equal(marker.openAttractions, 2);
+  assert.equal(marker.totalAttractions, 3);
+  assert.equal(marker.attractionCount, 3);
 });
 
 test("stale previous-day waiting times are not eligible for history writes", () => {

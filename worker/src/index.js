@@ -21,6 +21,61 @@ const SUPPORTED_PUSH_LANGUAGES = new Set(["de", "en", "fr", "nl"]);
 const D1_SCHEMA_VERSION = 1;
 let cachedFcmAccessToken = null;
 const ensuredAttractionHistoryD1Bindings = new WeakSet();
+const prunedAttractionHistoryDates = new WeakMap();
+
+// Aggregierte Tages-Spalten auf attraction_history_days: sample_count und der jeweils neueste
+// Snapshot des Tages werden beim Schreiben mitgepflegt, damit die Hot-Paths (Statistik-Index,
+// Global-Markers) nicht mehr die komplette attraction_history_snapshots-Tabelle scannen muessen
+// (siehe D1 rows_read-Pitfall in AGENTS.md).
+const ATTRACTION_HISTORY_DAY_AGGREGATE_COLUMNS = [
+  "sample_count INTEGER NOT NULL DEFAULT 0",
+  "latest_captured_at_millis INTEGER",
+  "latest_opened_today INTEGER NOT NULL DEFAULT 0",
+  "latest_attractions_json TEXT",
+];
+
+// Einmaliger Backfill fuer Datenbanken, die vor der Aggregat-Spalten-Migration angelegt wurden.
+// Befuellt nur Zeilen, deren latest_attractions_json noch NULL ist; der neueste Snapshot mit
+// nicht-leeren Attraktionen bestimmt die latest_*-Werte (wie bisher der Index-Filter).
+const ATTRACTION_HISTORY_DAY_AGGREGATE_BACKFILL_SQL = `
+  UPDATE attraction_history_days
+  SET
+    sample_count = (
+      SELECT COUNT(*)
+      FROM attraction_history_snapshots s
+      WHERE s.park_key = attraction_history_days.park_key
+        AND s.date = attraction_history_days.date
+        AND s.attractions_json IS NOT NULL AND s.attractions_json != '[]'
+    ),
+    latest_captured_at_millis = (
+      SELECT s.captured_at_millis
+      FROM attraction_history_snapshots s
+      WHERE s.park_key = attraction_history_days.park_key
+        AND s.date = attraction_history_days.date
+        AND s.attractions_json IS NOT NULL AND s.attractions_json != '[]'
+      ORDER BY s.captured_at_millis DESC
+      LIMIT 1
+    ),
+    latest_opened_today = COALESCE((
+      SELECT s.opened_today
+      FROM attraction_history_snapshots s
+      WHERE s.park_key = attraction_history_days.park_key
+        AND s.date = attraction_history_days.date
+        AND s.attractions_json IS NOT NULL AND s.attractions_json != '[]'
+      ORDER BY s.captured_at_millis DESC
+      LIMIT 1
+    ), 0),
+    latest_attractions_json = (
+      SELECT s.attractions_json
+      FROM attraction_history_snapshots s
+      WHERE s.park_key = attraction_history_days.park_key
+        AND s.date = attraction_history_days.date
+        AND s.attractions_json IS NOT NULL AND s.attractions_json != '[]'
+      ORDER BY s.captured_at_millis DESC
+      LIMIT 1
+    )
+  WHERE attraction_history_days.latest_attractions_json IS NULL
+`;
 
 const DEFAULT_PARK_KEYS = [
   "europapark",
@@ -1637,6 +1692,8 @@ async function writeAttractionSnapshotsD1(env, snapshots) {
   const statements = [];
   for (const snapshot of snapshots) {
     statements.push(
+      // Aggregierte Tageswerte direkt mitpflegen: Schreibzeitpunkte pro (park_key, date) sind
+      // monoton, daher ist der aktuell geschriebene Snapshot immer der neueste des Tages.
       db.prepare(`
         INSERT INTO attraction_history_days (
           park_key,
@@ -1644,14 +1701,22 @@ async function writeAttractionSnapshotsD1(env, snapshots) {
           generated_at_millis,
           open_from,
           closed_from,
-          schema_version
+          schema_version,
+          sample_count,
+          latest_captured_at_millis,
+          latest_opened_today,
+          latest_attractions_json
         )
-        VALUES (?, ?, ?, ?, ?, ?)
+        VALUES (?, ?, ?, ?, ?, ?, 1, ?, ?, ?)
         ON CONFLICT(park_key, date) DO UPDATE SET
           generated_at_millis = max(attraction_history_days.generated_at_millis, excluded.generated_at_millis),
           open_from = coalesce(excluded.open_from, attraction_history_days.open_from),
           closed_from = coalesce(excluded.closed_from, attraction_history_days.closed_from),
-          schema_version = excluded.schema_version
+          schema_version = excluded.schema_version,
+          sample_count = attraction_history_days.sample_count + 1,
+          latest_captured_at_millis = excluded.captured_at_millis,
+          latest_opened_today = excluded.opened_today,
+          latest_attractions_json = excluded.attractions_json
       `).bind(
         snapshot.parkKey,
         snapshot.date,
@@ -1659,6 +1724,9 @@ async function writeAttractionSnapshotsD1(env, snapshots) {
         snapshot.openFrom,
         snapshot.closedFrom,
         D1_SCHEMA_VERSION,
+        snapshot.capturedAtMillis,
+        snapshot.openedToday ? 1 : 0,
+        JSON.stringify(snapshot.attractions),
       ),
       db.prepare(`
         INSERT OR REPLACE INTO attraction_history_snapshots (
@@ -1715,15 +1783,30 @@ async function pruneAttractionHistoryD1(env, now = Date.now()) {
   const retentionDays = parsePositiveInt(env.APP_DATA_D1_RETENTION_DAYS) ?? DEFAULT_D1_HISTORY_RETENTION_DAYS;
   const cutoffMillis = now - (retentionDays * 24 * 60 * 60 * 1000);
   const cutoffDate = isoDate(cutoffMillis);
+
+  // Die Retention rueckt nur ~1x/Tag vor: gleiches cutoffDate pro DB-Binding ueberspringen.
+  // Frueher liefen diese DELETEs bei jedem Cron-Minutenlauf; die OR-Bedingung (date < ? OR
+  // captured_at_millis < ?) konnte keinen Index nutzen und erzwang einen Voll-Scan der
+  // Snapshots-Tabelle (~100k+ Zeilen pro Minute) - der Haupttreiber fuer das ueberschrittene
+  // D1 rows_read-Tageslimit.
+  if (prunedAttractionHistoryDates.get(db) === cutoffDate) return;
+
+  // Datumsgebundene DELETEs mit Indexnutzung statt OR-Voll-Scan. Das captured_at_millis-
+  // Sicherheitsnetz entfaellt: date leitet sich immer aus Capture- bzw. Park-Oeffnungszeit ab.
   const statements = [
     db.prepare(`
       DELETE FROM attraction_history_snapshots
-      WHERE date < ? OR captured_at_millis < ?
-    `).bind(cutoffDate, cutoffMillis),
+      WHERE date < ?
+    `).bind(cutoffDate),
     db.prepare(`
       DELETE FROM attraction_history_days
       WHERE date < ?
-        OR NOT EXISTS (
+    `).bind(cutoffDate),
+    // Verwaiste Tageszeilen (ohne Snapshots) nur fuer aktuelle Tage entfernen.
+    db.prepare(`
+      DELETE FROM attraction_history_days
+      WHERE date >= ?
+        AND NOT EXISTS (
           SELECT 1
           FROM attraction_history_snapshots s
           WHERE s.park_key = attraction_history_days.park_key
@@ -1739,6 +1822,7 @@ async function pruneAttractionHistoryD1(env, now = Date.now()) {
       await statement.run();
     }
   }
+  prunedAttractionHistoryDates.set(db, cutoffDate);
 }
 
 async function buildUpdatedAttractionHistory(env, snapshot, now) {
@@ -1843,63 +1927,40 @@ async function readStatisticsIndex(env) {
 
 async function readStatisticsIndexD1(env) {
   await ensureAttractionHistoryD1(env);
-  const [indexResult, latestResult] = await Promise.all([
-    env.APP_DATA_DB.prepare(`
-      SELECT
-        d.park_key AS parkKey,
-        d.date AS date,
-        d.generated_at_millis AS generatedAtMillis,
-        COUNT(
-          CASE
-            WHEN s.captured_at_millis IS NOT NULL
-              AND s.attractions_json IS NOT NULL
-              AND s.attractions_json != '[]'
-              AND (
-                COALESCE(s.open_from, d.open_from) IS NULL
-                OR s.captured_at_millis >= unixepoch(COALESCE(s.open_from, d.open_from)) * 1000
-              )
-              AND (
-                COALESCE(s.closed_from, d.closed_from) IS NULL
-                OR s.captured_at_millis <= unixepoch(COALESCE(s.closed_from, d.closed_from)) * 1000
-              )
-            THEN 1
-          END
-        ) AS deliverableSampleCount
-      FROM attraction_history_days d
-      LEFT JOIN attraction_history_snapshots s
-        ON s.park_key = d.park_key AND s.date = d.date
-      GROUP BY d.park_key, d.date
-      ORDER BY d.park_key, d.date
-    `).all(),
-    env.APP_DATA_DB.prepare(`
-      SELECT
-        s.park_key AS parkKey,
-        s.date,
-        s.generated_at_millis AS generatedAtMillis,
-        s.attractions_json AS attractionsJson
-      FROM attraction_history_snapshots s
-      INNER JOIN (
-        SELECT park_key, MAX(captured_at_millis) AS max_cap
-        FROM attraction_history_snapshots
-        WHERE attractions_json IS NOT NULL AND attractions_json != '[]'
-        GROUP BY park_key
-      ) latest ON latest.park_key = s.park_key AND latest.max_cap = s.captured_at_millis
-      ORDER BY s.park_key
-    `).all(),
-  ]);
+  // Nur die kleine attraction_history_days-Tabelle lesen (~Hunderte Zeilen statt ~100-260k):
+  // sample_count und der neueste Snapshot des Tages werden beim Schreiben aggregiert gepflegt.
+  const indexResult = await env.APP_DATA_DB.prepare(`
+    SELECT
+      park_key AS parkKey,
+      date AS date,
+      generated_at_millis AS generatedAtMillis,
+      sample_count AS deliverableSampleCount,
+      latest_captured_at_millis AS latestCapturedAtMillis,
+      latest_opened_today AS latestOpenedToday,
+      latest_attractions_json AS latestAttractionsJson
+    FROM attraction_history_days
+    ORDER BY park_key, date
+  `).all();
 
-  const latestByPark = new Map(
-    (latestResult.results ?? []).map((row) => [
-      String(row.parkKey ?? ""),
-      {
-        date: String(row.date ?? ""),
-        generatedAtMillis: Number(row.generatedAtMillis ?? 0),
-        attractions: parseJsonArray(row.attractionsJson),
-      },
-    ]),
-  );
+  const rows = indexResult.results ?? [];
+  const latestByPark = new Map();
+  for (const row of rows) {
+    const parkKey = String(row.parkKey ?? "");
+    if (!parkKey) continue;
+    const attractions = parseJsonArray(row.latestAttractionsJson);
+    if (attractions.length === 0) continue;
+    const candidate = {
+      date: String(row.date ?? ""),
+      generatedAtMillis: Number(row.generatedAtMillis ?? 0),
+      attractions,
+    };
+    const existing = latestByPark.get(parkKey);
+    if (!existing || candidate.date > existing.date) {
+      latestByPark.set(parkKey, candidate);
+    }
+  }
 
-  return buildStatisticsIndexFromD1Rows(indexResult.results ?? [], null, latestByPark);
+  return buildStatisticsIndexFromD1Rows(rows, null, latestByPark);
 }
 
 async function buildStatisticsIndexFromD1Rows(rows, readDay = null, latestByPark = null) {
@@ -2369,28 +2430,32 @@ async function readGlobalMarkersKv(env, date) {
 
 async function readGlobalMarkersD1(env, date) {
   await ensureAttractionHistoryD1(env);
+  // Nur die kleine attraction_history_days-Tabelle lesen: der letzte Snapshot des Tages wird
+  // beim Schreiben aggregiert gepflegt (frueher: Subquery + Self-Join ueber alle Snapshots
+  // des Tages). capturedAtMillis faellt auf generated_at_millis zurueck, wenn noch kein
+  // aggregierter Wert existiert (z.B. direkt nach der Migration).
   const result = await env.APP_DATA_DB.prepare(`
-    SELECT s.*
-    FROM attraction_history_snapshots s
-    INNER JOIN (
-      SELECT park_key, max(captured_at_millis) AS captured_at_millis
-      FROM attraction_history_snapshots
-      WHERE date = ?
-      GROUP BY park_key
-    ) latest
-      ON latest.park_key = s.park_key
-      AND latest.captured_at_millis = s.captured_at_millis
-    WHERE s.date = ?
-    ORDER BY s.park_key
-  `).bind(date, date).all();
+    SELECT
+      park_key,
+      date,
+      generated_at_millis,
+      open_from,
+      closed_from,
+      latest_captured_at_millis,
+      latest_opened_today,
+      latest_attractions_json
+    FROM attraction_history_days
+    WHERE date = ?
+    ORDER BY park_key
+  `).bind(date).all();
 
   const markers = (result.results ?? []).map((row) => {
-    const attractions = parseJsonArray(row.attractions_json);
+    const attractions = parseJsonArray(row.latest_attractions_json);
     const openAttractions = attractions.filter((attraction) => Number(attraction.statusCode) === 0).length;
     return {
       parkKey: String(row.park_key ?? ""),
-      capturedAtMillis: Number(row.captured_at_millis ?? 0),
-      openedToday: Number(row.opened_today ?? 0) === 1,
+      capturedAtMillis: Number(row.latest_captured_at_millis ?? row.generated_at_millis ?? 0),
+      openedToday: Number(row.latest_opened_today ?? 0) === 1,
       openFrom: row.open_from ?? null,
       closedFrom: row.closed_from ?? null,
       openAttractions,
@@ -2490,11 +2555,24 @@ function hasD1(env) {
   return Boolean(env.APP_DATA_DB);
 }
 
+async function runD1Batch(db, statements) {
+  if (!statements || statements.length === 0) return;
+  if (typeof db.batch === "function") {
+    await db.batch(statements);
+  } else {
+    for (const statement of statements) {
+      await statement.run();
+    }
+  }
+}
+
 async function ensureAttractionHistoryD1(env) {
   const db = env.APP_DATA_DB;
   if (!db || ensuredAttractionHistoryD1Bindings.has(db)) return;
 
-  const statements = [
+  // Basis-DDL: frische Datenbanken erhalten die Aggregat-Spalten direkt; bestehende
+  // Datenbanken werden unten idempotent per ALTER TABLE nachgezogen.
+  const baseStatements = [
     db.prepare(`
       CREATE TABLE IF NOT EXISTS attraction_history_days (
         park_key TEXT NOT NULL,
@@ -2503,6 +2581,10 @@ async function ensureAttractionHistoryD1(env) {
         open_from TEXT,
         closed_from TEXT,
         schema_version INTEGER NOT NULL DEFAULT 1,
+        sample_count INTEGER NOT NULL DEFAULT 0,
+        latest_captured_at_millis INTEGER,
+        latest_opened_today INTEGER NOT NULL DEFAULT 0,
+        latest_attractions_json TEXT,
         PRIMARY KEY (park_key, date)
       )
     `),
@@ -2530,15 +2612,41 @@ async function ensureAttractionHistoryD1(env) {
       CREATE INDEX IF NOT EXISTS idx_attraction_history_days_park_date
         ON attraction_history_days (park_key, date)
     `),
+    db.prepare(`
+      CREATE INDEX IF NOT EXISTS idx_attraction_history_days_date
+        ON attraction_history_days (date)
+    `),
   ];
+  await runD1Batch(db, baseStatements);
 
-  if (typeof db.batch === "function") {
-    await db.batch(statements);
-  } else {
-    for (const statement of statements) {
-      await statement.run();
-    }
+  // Fehlende Aggregat-Spalten auf bestehenden Datenbanken nachziehen und einmalig befuellen.
+  const infoResult = await db.prepare("PRAGMA table_info(attraction_history_days)").all();
+  const existingColumns = new Set(
+    (infoResult.results ?? []).map((column) => String(column.name ?? "")),
+  );
+  const missingColumns = ATTRACTION_HISTORY_DAY_AGGREGATE_COLUMNS.filter(
+    (definition) => !existingColumns.has(definition.split(" ")[0]),
+  );
+  if (missingColumns.length > 0) {
+    // ALTERs zuerst ausfuehren, da die Backfill-Pruefung die neuen Spalten referenziert.
+    await runD1Batch(
+      db,
+      missingColumns.map((definition) =>
+        db.prepare(`ALTER TABLE attraction_history_days ADD COLUMN ${definition}`)),
+    );
   }
+  // Selbstheilender Backfill: fuellt nur Zeilen, deren latest_attractions_json noch NULL ist
+  // (z.B. direkt nach der Migration oder nach einem abgebrochenen frueheren Backfill).
+  const needsBackfill = await db.prepare(`
+    SELECT 1
+    FROM attraction_history_days
+    WHERE latest_attractions_json IS NULL
+    LIMIT 1
+  `).first();
+  if (needsBackfill) {
+    await runD1Batch(db, [db.prepare(ATTRACTION_HISTORY_DAY_AGGREGATE_BACKFILL_SQL)]);
+  }
+
   ensuredAttractionHistoryD1Bindings.add(db);
 }
 
@@ -2608,8 +2716,11 @@ export {
   mergeStatisticsIndexes,
   normalizeApiLanguage,
   pruneAttractionHistoryD1,
+  readGlobalMarkersD1,
+  readStatisticsIndexD1,
   selectCronParkShard,
   scheduledHistoryShardIndex,
   scheduledShardIndex,
   toAttractionSnapshotRow,
+  writeAttractionSnapshotsD1,
 };

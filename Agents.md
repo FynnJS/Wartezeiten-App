@@ -95,15 +95,18 @@
 - Worker collects via cron in **staggered 5-minute shards** (4 park shards in parallel)
 - D1: `attraction_history_snapshots` (park/time/attractions) + `attraction_history_days` (metadata)
 - Legacy KV fallback for old daily statistics
+- **rows_read (Free-Plan):** Hot read paths (statistics index, global markers) read ONLY the small `attraction_history_days` table (~hundreds of rows). Its per-day aggregates `sample_count`, `latest_captured_at_millis`, `latest_opened_today`, `latest_attractions_json` are maintained on every snapshot write and backfilled once from `attraction_history_snapshots` during the idempotent schema upgrade
 
 **⚠️ D1 Pitfalls:**
 | Pitfall | Solution |
 |-----------|--------|
 | **Write Order** | Write snapshots *per park* early, not at the end → Timeout → empty statistics |
-| **Schema Guard** | `ensureAttractionHistoryD1` idempotent before reads/writes |
+| **Schema Guard** | `ensureAttractionHistoryD1` idempotent before reads/writes (CREATE TABLE IF NOT EXISTS + PRAGMA-guided `ALTER TABLE` + self-healing backfill) |
 | **Cron Subrequests** | Shards too large → "Too many subrequests"; use hashing for stable distribution and adjust `DEFAULT_CRON_SHARDS` |
 | **D1 Batching** | Batch D1 writes (e.g. 50-100 items per statement) to significantly improve write performance and avoid timeouts |
-| **Retention** | `APP_DATA_D1_RETENTION_DAYS` (Default 14), delete old snapshots before writes |
+| **Rows Read Limit (Free)** | Free plan: 5 Mio. rows_read/day. Never put `OR` between two columns in `WHERE`/`DELETE` unless *both* branches can use an index (SQLite falls back to a full table scan, e.g. old prune ~100k rows every cron minute). Keep DELETEs date-bounded on the `date` index |
+| **Retention** | `APP_DATA_D1_RETENTION_DAYS` (Default 14); prune runs only ~1×/day per binding (WeakMap on `cutoffDate`), NOT on every cron-minute run. Deleting on the `date` column is equivalent to the old `captured_at_millis` rule, because `date` derives from capture/park-opening time |
+| **Aggregated Day Columns** | `attraction_history_days` carries `sample_count` (deliverable snapshots/day), `latest_captured_at_millis`, `latest_opened_today`, `latest_attractions_json`. Written snapshots are always inside the operating window, so `sample_count` = COUNT(*) of the day's snapshots. Read functions must never scan `attraction_history_snapshots` for index/marker endpoints |
 | **Timestamp** | `captured_at_millis` = Worker time (`Date.now()`), not API `datetime` |
 | **Parallel Queries** | GROUP-BY + JOIN both parallel, not N sequential reads per park |
 

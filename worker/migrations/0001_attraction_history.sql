@@ -5,6 +5,10 @@ CREATE TABLE IF NOT EXISTS attraction_history_days (
   open_from TEXT,
   closed_from TEXT,
   schema_version INTEGER NOT NULL DEFAULT 1,
+  sample_count INTEGER NOT NULL DEFAULT 0,
+  latest_captured_at_millis INTEGER,
+  latest_opened_today INTEGER NOT NULL DEFAULT 0,
+  latest_attractions_json TEXT,
   PRIMARY KEY (park_key, date)
 );
 
@@ -28,3 +32,6 @@ CREATE INDEX IF NOT EXISTS idx_attraction_history_snapshots_date_park_captured
 
 CREATE INDEX IF NOT EXISTS idx_attraction_history_days_park_date
   ON attraction_history_days (park_key, date);
+
+CREATE INDEX IF NOT EXISTS idx_attraction_history_days_date
+  ON attraction_history_days (date);
